@@ -1,0 +1,204 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+// Wombat Official Docs: https://docs.wombat.exchange/docs/
+// Wombat GitHub: https://github.com/wombat-exchange
+
+/**
+ * @title Handler for the Wombat's staking protocol
+ * @author Velvet.Capital
+ * @notice This contract is used to stake tokens
+ *      to/from the Wombat protocol.
+ * @dev This contract includes functionalities:
+ *      1. Stake tokens to the Wombat protocol
+ *      2. Redeem staked tokens from the Wombat protocol
+ *      3. Get underlying asset address
+ *      4. Get protocol token balance
+ *      5. Get underlying asset balance
+ */
+
+pragma solidity 0.8.16;
+
+import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+
+import { IAsset } from "./interfaces/IAsset.sol";
+import { IPool } from "./interfaces/IPool.sol";
+import { IWombat, StructLib } from "./interfaces/IWombat.sol";
+import { IWombatRouter } from "./interfaces/IWombatRouter.sol";
+
+import { IHandler } from "../IHandler.sol";
+import { ErrorLibrary } from "./../../library/ErrorLibrary.sol";
+import { SlippageControl } from "../SlippageControl.sol";
+import { FunctionParameters } from "contracts/FunctionParameters.sol";
+
+contract WombatHandler is IHandler, SlippageControl {
+  using SafeMathUpgradeable for uint256;
+
+  address public constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
+  IWombat MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
+
+  address public constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
+
+  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Redeem(
+    uint256 time,
+    address indexed user,
+    address indexed token,
+    uint256 amount,
+    address indexed to,
+    bool isWETH
+  );
+
+  /**
+   * @notice This function stakes to the Wombat protocol
+   * @param _lpAsset Address of the protocol asset to be staked
+   * @param _amount Amount that is to be deposited
+   * @param _lpSlippage LP slippage value passed to the function
+   * @param _to Address that would receive the cTokens in return
+   */
+  function deposit(
+    address _lpAsset,
+    uint256[] calldata _amount,
+    uint256 _lpSlippage,
+    address _to
+  ) public payable override {
+    if (_lpAsset == address(0) || _to == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    IAsset asset = IAsset(_lpAsset);
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_lpAsset)[0]);
+
+    if (msg.value == 0) {
+      TransferHelper.safeApprove(address(underlyingToken), address(IPool(asset.pool())), 0);
+      TransferHelper.safeApprove(address(underlyingToken), address(IPool(asset.pool())), _amount[0]);
+      IPool(asset.pool()).deposit(
+        address(underlyingToken),
+        _amount[0],
+        getSlippage(_amount[0], _lpSlippage),
+        _to,
+        block.timestamp,
+        true
+      );
+    } else {
+      if (msg.value < _amount[0]) {
+        revert ErrorLibrary.MintAmountNotEqualToPassedValue();
+      }
+
+      IWombatRouter(WOMBAT_ROUTER).addLiquidityNative{value: _amount[0]}(
+        IPool(asset.pool()),
+        getSlippage(_amount[0], _lpSlippage),
+        _to,
+        block.timestamp,
+        true
+      );
+    }
+    emit Deposit(block.timestamp, msg.sender, _lpAsset, _amount, _to);
+  }
+
+  /**
+   * @notice This function redeems the staked tokens from the Wombat protocol
+   */
+  function redeem(FunctionParameters.RedeemData calldata inputData) public override {
+    if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    IAsset token = IAsset(inputData._yieldAsset);
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
+    if (inputData._amount > token.balanceOf(address(this))) {
+      revert ErrorLibrary.NotEnoughBalanceInWombatProtocol();
+    }
+
+    if (!inputData.isWETH) {
+      TransferHelper.safeApprove(address(token), address(IPool(token.pool())), 0);
+      TransferHelper.safeApprove(address(token), address(IPool(token.pool())), inputData._amount);
+
+      IPool(token.pool()).withdraw(
+        address(underlyingToken),
+        inputData._amount,
+        getSlippage(inputData._amount, inputData._lpSlippage),
+        inputData._to,
+        block.timestamp
+      );
+    } else {
+      TransferHelper.safeApprove(address(token), address(WOMBAT_ROUTER), 0);
+      TransferHelper.safeApprove(address(token), address(WOMBAT_ROUTER), inputData._amount);
+
+      IWombatRouter(WOMBAT_ROUTER).removeLiquidityNative(
+        IPool(token.pool()),
+        inputData._amount,
+        getSlippage(inputData._amount, inputData._lpSlippage),
+        inputData._to,
+        block.timestamp
+      );
+    }
+    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+  }
+
+  /**
+   * @notice This function returns address of the underlying asset
+   * @param _lpToken Address of the protocol token whose underlying asset is needed
+   * @return underlying Address of the underlying asset
+   */
+  function getUnderlying(address _lpToken) public view override returns (address[] memory) {
+    if (_lpToken == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    address[] memory underlying = new address[](1);
+    IAsset token = IAsset(_lpToken);
+    underlying[0] = token.underlyingToken();
+    return underlying;
+  }
+
+  /**
+   * @notice This function returns the protocol token balance of the passed address
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   * @return tokenBalance t token balance of the holder
+   */
+  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
+    if (_tokenHolder == address(0) || t == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    IAsset asset = IAsset(t);
+    StructLib.UserInfo memory _amountStaked = MasterWombat.userInfo(
+      MasterWombat.getAssetPid(address(asset)),
+      _tokenHolder
+    );
+    tokenBalance = _amountStaked.amount;
+  }
+
+  /**
+   * @notice This function returns the underlying asset balance of the passed address
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   * @return tokenBalance t token's underlying asset balance of the holder
+   */
+  function getUnderlyingBalance(address _tokenHolder, address t) public override returns (uint256[] memory) {
+    if (_tokenHolder == address(0) || t == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint256[] memory tokenBalance = new uint256[](1);
+    uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, t);
+    if (yieldTokenBalance != 0) {
+      (tokenBalance[0], ) = IPool(IAsset(t).pool()).quotePotentialWithdraw(getUnderlying(t)[0], yieldTokenBalance);
+    }
+    return tokenBalance;
+  }
+
+  function encodeData(address t, uint256 _amount) public view returns (bytes memory) {
+    IAsset asset = IAsset(t);
+    return abi.encodeWithSelector(IWombat.withdraw.selector, MasterWombat.getAssetPid(address(asset)), _amount);
+  }
+
+  function getRouterAddress() public pure returns (address) {
+    return WOMBAT_OPTIMIZED_PROXY;
+  }
+
+  function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
+    uint256 pid = MasterWombat.getAssetPid(address(_token));
+    return (abi.encodeWithSelector(IWombat.deposit.selector, pid, 0), address(MasterWombat));
+  }
+
+  receive() external payable {}
+}

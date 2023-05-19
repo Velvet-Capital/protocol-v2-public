@@ -1,0 +1,264 @@
+[
+  {
+    "inputs": [],
+    "name": "CallerNotHavingGivenTokenAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LowBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OffHandlerNotValid",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ProtocolIsPaused",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SwapHandlerNotEnabled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TokenAlreadyRedeemed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TokenNotWhitelisted",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "minInvestment",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxInvestment",
+        "type": "uint256"
+      }
+    ],
+    "name": "WrongInvestmentAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "contract IAssetManagerConfig",
+        "name": "_assetManagerConfig",
+        "type": "IAssetManagerConfig"
+      }
+    ],
+    "name": "_checkInvestmentValue",
+    "outputs": [],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_oracle",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "t",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getTokenAmountInUSD",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "amountInUSD",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IPriceOracle",
+        "name": "oracle",
+        "type": "IPriceOracle"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getTokenPriceETHUSD",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "amountInBNB",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IPriceOracle",
+        "name": "oracle",
+        "type": "IPriceOracle"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "_getTokenPriceUSDETH",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "amountInBNB",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sumPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_indexTokenSupply",
+        "type": "uint256"
+      }
+    ],
+    "name": "_mintShareAmount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IIndexSwap",
+        "name": "_index",
+        "type": "IIndexSwap"
+      },
+      {
+        "internalType": "address[]",
+        "name": "_rewardTokens",
+        "type": "address[]"
+      }
+    ],
+    "name": "getRewardBalancesAfter",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IIndexSwap",
+        "name": "_index",
+        "type": "IIndexSwap"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "t",
+        "type": "address"
+      },
+      {
+        "internalType": "address[]",
+        "name": "_rewardTokens",
+        "type": "address[]"
+      }
+    ],
+    "name": "getRewardBalancesBefore",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IIndexSwap",
+        "name": "_index",
+        "type": "IIndexSwap"
+      },
+      {
+        "internalType": "address",
+        "name": "t",
+        "type": "address"
+      }
+    ],
+    "name": "getTokenBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenBalance",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

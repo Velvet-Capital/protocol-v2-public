@@ -1,0 +1,158 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_token",
+        "type": "address"
+      }
+    ],
+    "name": "getTokenAmounts",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "indexSwap",
+        "type": "address"
+      }
+    ],
+    "name": "init",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "sellTokenAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "address[]",
+            "name": "_buyToken",
+            "type": "address[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "buyAmount",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "address",
+            "name": "swapHandler",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "protocolFee",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "_buySwapData",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "address",
+            "name": "_offChainHandler",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct ExchangeData.ZeroExData",
+        "name": "inputData",
+        "type": "tuple"
+      }
+    ],
+    "name": "offChainInvestment",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "balanceInUSD",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_token",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_swapHandler",
+        "type": "address"
+      }
+    ],
+    "name": "redeemTokens",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address[]",
+            "name": "sellTokenAddress",
+            "type": "address[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "sellAmount",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "protocolFee",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "bytes[]",
+            "name": "buySwapData",
+            "type": "bytes[]"
+          },
+          {
+            "internalType": "address",
+            "name": "offChainHandler",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct ExchangeData.ZeroExWithdraw",
+        "name": "inputData",
+        "type": "tuple"
+      }
+    ],
+    "name": "withdrawOffChain",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
