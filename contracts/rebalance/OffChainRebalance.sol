@@ -90,7 +90,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is 1st transaction of ZeroEx Update Weight,called to pull and redeem tokens 
+   * @notice The function is 1st transaction of ZeroEx Update Weight,called to pull and redeem tokens
    * @param inputData NewWeights and LpSlippage in struct
    */
   function enableRebalance(FunctionParameters.EnableRebalanceData memory inputData) external virtual onlyAssetManager {
@@ -103,7 +103,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is 1st transaction of ZeroEx Update Tokens,called to pull and redeem tokens 
+   * @notice The function is 1st transaction of ZeroEx Update Tokens,called to pull and redeem tokens
    * @param _newTokens Array of new tokens
    * @param _newWeights Array of new newights
    * @param _lpSlippage array os lpSlippage
@@ -129,7 +129,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is internal function of update Tokens,called to pull,redeem and sell tokens 
+   * @notice The function is internal function of update Tokens,called to pull,redeem and sell tokens
    * @param _newTokens Array of new tokens
    * @param _newWeights Array of new newights
    * @param _lpSlippage array os lpSlippage
@@ -157,7 +157,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is internal function of update Weights,called to pull and redeem  tokens 
+   * @notice The function is internal function of update Weights,called to pull and redeem  tokens
    * @param _lpSlippage array os lpSlippage
    */
   function pullAndRedeemForUpdateWeights(uint256[] memory _lpSlippage) public virtual onlyAssetManager {
@@ -171,12 +171,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
     for (uint256 i = 0; i < tokens.length; i++) {
       newWeights[i] = uint256(index.getRecord(tokens[i]).denorm);
       if (newWeights[i] < oldWeights[i]) {
-        uint256 swapAmount = RebalanceLibrary.getAmountToSwap(
-          index,
-          tokens[i],
-          newWeights[i],
-          oldWeights[i]
-        );
+        uint256 swapAmount = RebalanceLibrary.getAmountToSwap(index, tokens[i], newWeights[i], oldWeights[i]);
         _pullAndRedeem(swapAmount, _lpSlippage[i], tokens[i]);
         sellTokens[i] = tokens[i];
       } else if (newWeights[i] > oldWeights[i]) {
@@ -192,13 +187,13 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is internal function to Pull from Vault 
+   * @notice The function is internal function to Pull from Vault
    * @param swapAmount Amount to Pull From Vault
    * @param token Token to Pull From Vault
    * @param _lpSlippage array os lpSlippage
    */
   function _pullAndRedeem(uint256 swapAmount, uint256 _lpSlippage, address token) internal virtual onlyAssetManager {
-    RebalanceLibrary.beforePullAndRedeem(index,assetManagerConfig,token);
+    RebalanceLibrary.beforePullAndRedeem(index, assetManagerConfig, token);
     exchange._pullFromVault(token, swapAmount, address(this));
     if (!tokenRegistry.getTokenInformation(token).primary) {
       IHandler handler = IHandler(tokenRegistry.getTokenInformation(token).handler);
@@ -222,12 +217,12 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is 3rd transaction of update tokens and update weights, used to stake and deposit tokens 
+   * @notice The function is 3rd transaction of update tokens and update weights, used to stake and deposit tokens
    * @param inputData array of buyToken,swapData,buyAmount,tokens,protocolFee and address of offChainHandler
    * @param _lpSlippage array of lpSlippage
    */
   function externalRebalance(FunctionParameters.ZeroExData calldata inputData, uint256[] calldata _lpSlippage) public {
-    RebalanceLibrary.beforeExternalRebalance(index,tokenRegistry);
+    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry);
     if (lastRebalanced > lastPaused || block.timestamp >= (lastPaused + 10 minutes)) {
       _externalRebalance(inputData, _lpSlippage);
     } else {
@@ -240,7 +235,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is internal fucntion of external rebalance, used to stake and deposit tokens 
+   * @notice The function is internal fucntion of external rebalance, used to stake and deposit tokens
    * @param inputData array of buyToken,swapData,buyAmount,tokens,protocolFee and address of offChainHandler
    * @param _lpSlippage array of lpSlippage
    */
@@ -257,7 +252,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is 2nd Transaction of update token and update weights,used to sell redeemed tokens using api 
+   * @notice The function is 2nd Transaction of update token and update weights,used to sell redeemed tokens using api
    * @param _sellToken array of tokens to sell
    * @param _sellSwapData array of callData for sellTokens
    * @param _offChainHandler address of offChainHandler, use to swap tokens
@@ -267,7 +262,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
     bytes[] calldata _sellSwapData,
     address _offChainHandler
   ) public virtual onlyAssetManager {
-    RebalanceLibrary.beforeExternalSell(index,tokenRegistry,_offChainHandler);
+    RebalanceLibrary.beforeExternalSell(index, tokenRegistry, _offChainHandler);
     for (uint256 i = 0; i < _sellToken.length; i++) {
       uint256 _balance = IERC20Upgradeable(_sellToken[i]).balanceOf(address(this));
       IndexSwapLibrary._transferAndSwapUsingOffChainHandler(
@@ -331,7 +326,7 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   }
 
   /**
-   * @notice The function is 1st transaction of ZeroEx Update Weight For Only Base Token Portfolio,called to pull,redeem and sell tokens 
+   * @notice The function is 1st transaction of ZeroEx Update Weight For Only Base Token Portfolio,called to pull,redeem and sell tokens
    * @param newWeights array of newWeights
    * @param swapData array of calldata
    * @param offChainHandler address of offchainHandler use to swap Tokens
@@ -345,16 +340,16 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
   ) external virtual {
     address[] memory tokens = index.getTokens();
     index.setPaused(true);
-    IndexSwapLibrary.checkPrimary(index,tokens);
+    IndexSwapLibrary.checkPrimary(index, tokens);
     address[] memory sellTokens;
     index.updateRecords(tokens, newWeights);
     pullAndRedeemForUpdateWeights(lpSlippage);
     (sellTokens, , , ) = abi.decode(updateWeightStateData, (address[], address[], uint256[], uint256));
-    _swap(sellTokens,offChainHandler,swapData,0);
+    _swap(sellTokens, offChainHandler, swapData, 0);
   }
 
   /**
-   * @notice The function is 1st transaction of ZeroEx Update Tokens For Only Base Token Portfolio,called to pull,redeem, sell and update tokens 
+   * @notice The function is 1st transaction of ZeroEx Update Tokens For Only Base Token Portfolio,called to pull,redeem, sell and update tokens
    * @param _newTokens array of newTokens
    * @param _newWeights array of newWeights
    * @param _lpSlippage array of lpSlippage
@@ -369,17 +364,22 @@ contract OffChainRebalance is Initializable, OwnableUpgradeable, ReentrancyGuard
     address offChainHandler
   ) external virtual {
     index.setPaused(true);
-    IndexSwapLibrary.checkPrimary(index,index.getTokens());
+    IndexSwapLibrary.checkPrimary(index, index.getTokens());
     address[] memory sellTokens;
     enableRebalanceAndUpdateRecord(_newTokens, _newWeights, _lpSlippage);
     (sellTokens, , , ) = abi.decode(updateWeightStateData, (address[], address[], uint256[], uint256));
     uint256 _index = 0;
-    _index = _swap(sellTokens,offChainHandler,swapData,_index);
+    _index = _swap(sellTokens, offChainHandler, swapData, _index);
     (sellTokens) = abi.decode(updateTokenStateData, (address[]));
-    _index = _swap(sellTokens,offChainHandler,swapData,_index);
+    _index = _swap(sellTokens, offChainHandler, swapData, _index);
   }
 
-  function _swap(address[] memory sellTokens,address offChainHandler,bytes[] calldata swapData,uint256 _index) internal returns(uint256){
+  function _swap(
+    address[] memory sellTokens,
+    address offChainHandler,
+    bytes[] calldata swapData,
+    uint256 _index
+  ) internal returns (uint256) {
     for (uint256 i = 0; i < sellTokens.length; i++) {
       if (sellTokens[i] != address(0) && sellTokens[i] != tokenRegistry.getETH()) {
         uint256 _balance = IERC20Upgradeable(sellTokens[i]).balanceOf(address(this));

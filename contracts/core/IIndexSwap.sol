@@ -11,7 +11,7 @@
 
 pragma solidity 0.8.16;
 
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
 
 interface IIndexSwap {
   function vault() external view returns (address);

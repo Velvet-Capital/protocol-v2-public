@@ -49,7 +49,6 @@ import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@g
 import EthersAdapter from "@gnosis.pm/safe-ethers-lib";
 import { SafeTransactionDataPartial, GnosisSafeContract, SafeVersion } from "@gnosis.pm/safe-core-sdk-types";
 
-
 var chai = require("chai");
 //use default BigNumber
 chai.use(require("chai-bignumber")());
@@ -94,7 +93,7 @@ describe.only("Tests for Handler", () => {
   let tokenIteration = new Array();
   let rewardTokenIteration = new Array();
 
-  let newSafeAddress:any;
+  let newSafeAddress: any;
 
   // console.log(
   //   "\n<----------------------------------------------------------------------->"
@@ -226,9 +225,19 @@ describe.only("Tests for Handler", () => {
       const executeTxResponse = await safeSdk.executeTransaction(safeTransaction);
       await executeTxResponse.transactionResponse?.wait();
 
-      await exchange.init(accessController.address, velvetSafeModule.address, priceOracle.address, tokenRegistry.address);
+      await exchange.init(
+        accessController.address,
+        velvetSafeModule.address,
+        priceOracle.address,
+        tokenRegistry.address,
+      );
       const abiEncoder = ethers.utils.defaultAbiCoder;
-      await velvetSafeModule.setUp(abiEncoder.encode(["address","address","address"],[newSafeAddress,exchange.address,addresses.gnosisMultisendLibrary]));
+      await velvetSafeModule.setUp(
+        abiEncoder.encode(
+          ["address", "address", "address"],
+          [newSafeAddress, exchange.address, addresses.gnosisMultisendLibrary],
+        ),
+      );
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -571,9 +580,7 @@ describe.only("Tests for Handler", () => {
 
       it("non owner should not be able to pull from vault", async () => {
         await expect(
-          exchange
-            .connect(nonOwner)
-            ._pullFromVault(tokenObject[1].tokenAddress, "10000", nonOwner.address),
+          exchange.connect(nonOwner)._pullFromVault(tokenObject[1].tokenAddress, "10000", nonOwner.address),
         ).to.be.revertedWithCustomError(exchange, "CallerNotIndexManager");
       });
 
@@ -581,9 +588,7 @@ describe.only("Tests for Handler", () => {
         const token = await ethers.getContractAt("VBep20Interface", tokenObject[0].tokenAddress);
         const balanceBefore = await token.balanceOf(nonOwner.address);
         // console.log(balanceBefore);
-        await exchange
-          .connect(owner)
-          ._pullFromVault(tokenObject[0].tokenAddress, "10000", nonOwner.address);
+        await exchange.connect(owner)._pullFromVault(tokenObject[0].tokenAddress, "10000", nonOwner.address);
 
         const balanceAfter = await token.balanceOf(nonOwner.address);
         // console.log(balance);

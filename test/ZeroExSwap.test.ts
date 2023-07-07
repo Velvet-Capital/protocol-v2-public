@@ -372,9 +372,9 @@ describe.only("Tests for ZeroExSwap", () => {
             _feeModuleImplementationAddress: feeModule.address,
             _baseVelvetGnosisSafeModuleAddress: velvetSafeModule.address,
             _gnosisSingleton: addresses.gnosisSingleton,
-            _gnosisFallbackLibrary : addresses.gnosisFallbackLibrary,
-            _gnosisMultisendLibrary : addresses.gnosisMultisendLibrary,
-            _gnosisSafeProxyFactory : addresses.gnosisSafeProxyFactory,
+            _gnosisFallbackLibrary: addresses.gnosisFallbackLibrary,
+            _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
+            _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
@@ -557,21 +557,25 @@ describe.only("Tests for ZeroExSwap", () => {
       // Step 2 -  External Sell(Selling the Redeemed Tokens)
       // Step 3 -  External Rebalance(Buying amd Staking Tokens to Vault)
 
-      it("update weights should fail if any one weight is zero",async () => {
+      it("update weights should fail if any one weight is zero", async () => {
         const newWeights = [1000, 9000, 0];
-        await expect(offChainRebalance1.connect(nonOwner).enableRebalance({
-          _newWeights: newWeights,
-          _lpSlippage: ["200", "200"]
-        })).to.be.revertedWithCustomError(indexSwap,"ZeroDenormValue");
-      })
+        await expect(
+          offChainRebalance1.connect(nonOwner).enableRebalance({
+            _newWeights: newWeights,
+            _lpSlippage: ["200", "200"],
+          }),
+        ).to.be.revertedWithCustomError(indexSwap, "ZeroDenormValue");
+      });
 
-      it("update weights should fail if sum of weight is not 10000",async () => {
+      it("update weights should fail if sum of weight is not 10000", async () => {
         const newWeights = [1000, 7000, 1000];
-        await expect(offChainRebalance1.connect(nonOwner).enableRebalance({
-          _newWeights: newWeights,
-          _lpSlippage: ["200", "200"]
-        })).to.be.revertedWithCustomError(indexSwap,"InvalidWeights");
-      })
+        await expect(
+          offChainRebalance1.connect(nonOwner).enableRebalance({
+            _newWeights: newWeights,
+            _lpSlippage: ["200", "200"],
+          }),
+        ).to.be.revertedWithCustomError(indexSwap, "InvalidWeights");
+      });
 
       it("Update Weights", async () => {
         await tokenRegistry.enableExternalSwapHandler(zeroExHandler.address);
@@ -645,7 +649,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  });
                   sellTokensContract.push(getUnderlyingTokens[j]);
                   sellTokenSwapData.push(response.data.data.toString());
                   sellTokenAmountContract.push(bal.toString());
@@ -686,7 +692,9 @@ describe.only("Tests for ZeroExSwap", () => {
                   slippagePercentage: 0.02,
                 };
 
-                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                  "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                });
 
                 buyTokenSwapData.push(response.data.data.toString());
               } else {
@@ -775,7 +783,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 sellAmount: swapAmounts[i].toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
               sellTokenSwapData.push(response.data.data.toString());
             }
           }
@@ -801,7 +811,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 slippagePercentage: 0.02,
               };
 
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
 
               buyTokenSwapData.push(response.data.data.toString());
             } else {
@@ -893,69 +905,61 @@ describe.only("Tests for ZeroExSwap", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Should not update tokens if tokens is not approved",async () => {
+      it("Should not update tokens if tokens is not approved", async () => {
         const newTokens = [
           "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
           "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
           addresses.qBNB,
         ];
         const newWeights = [3000, 1000, 6000];
-        await expect( offChainRebalance1
-          .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(
-            newTokens,
-            newWeights,
-            ["200", "200", "200"]
-          )).to.be.reverted;
-      })
+        await expect(
+          offChainRebalance1
+            .connect(nonOwner)
+            .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]),
+        ).to.be.reverted;
+      });
 
-      it("Should not update tokens if tokens is not whitelisted",async () => {
+      it("Should not update tokens if tokens is not whitelisted", async () => {
         const newTokens = [
           "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
           "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
           iaddress.daiAddress,
         ];
         const newWeights = [3000, 1000, 6000];
-        await expect( offChainRebalance1
-          .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(
-            newTokens,
-            newWeights,
-            ["200", "200", "200"]
-          )).to.be.reverted;
-      })
-      
-      it("Should not update if any one weight is zero",async () => {
+        await expect(
+          offChainRebalance1
+            .connect(nonOwner)
+            .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]),
+        ).to.be.reverted;
+      });
+
+      it("Should not update if any one weight is zero", async () => {
         const newTokens = [
           "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
           "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
           "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
         ];
         const newWeights = [3000, 7000, 0];
-        await expect( offChainRebalance1
-          .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(
-            newTokens,
-            newWeights,
-            ["200", "200", "200"]
-          )).to.be.reverted;
-      })
+        await expect(
+          offChainRebalance1
+            .connect(nonOwner)
+            .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]),
+        ).to.be.reverted;
+      });
 
-      it("Should not update if weight is not equal to 10000",async () => {
+      it("Should not update if weight is not equal to 10000", async () => {
         const newTokens = [
           "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
           "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
           "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
         ];
         const newWeights = [3000, 6000, 500];
-        await expect( offChainRebalance1
-          .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(
-            newTokens,
-            newWeights,
-            ["200", "200", "200"]
-          )).to.be.reverted;
-      })
+        await expect(
+          offChainRebalance1
+            .connect(nonOwner)
+            .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]),
+        ).to.be.reverted;
+      });
 
       it("Should Update Tokens", async () => {
         var tokens = await indexSwap1.getTokens();
@@ -1034,7 +1038,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   tokenSellContract.push(getUnderlyingTokens[j]);
                   tokenSellSwapData.push(response.data.data.toString());
                   tokenSellAmountContract.push(bal.toString());
@@ -1071,7 +1077,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   sellTokensContract.push(getUnderlyingTokens[j]);
                   sellTokenSwapData.push(response.data.data.toString());
                   sellTokenAmountContract.push(bal.toString());
@@ -1117,7 +1125,9 @@ describe.only("Tests for ZeroExSwap", () => {
                   sellAmount: BigNumber.from(buyVal).toString(),
                   slippagePercentage: 0.02,
                 };
-                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                  "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                });
 
                 buyTokenSwapData.push(response.data.data.toString());
               } else {
@@ -1174,7 +1184,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
       });
 
-      it("should update portfolio to new tokens",async () => {
+      it("should update portfolio to new tokens", async () => {
         const newTokens = [iaddress.wbnbAddress];
         const newWeights = [10000];
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
@@ -1190,7 +1200,7 @@ describe.only("Tests for ZeroExSwap", () => {
         var buyUnderlyingTokensContract = [];
         var buyTokenAmountContract = [];
         var sumWeight;
-        
+
         const data: [string[], string[], string[], string[]] = await offChainRebalance.callStatic.getUpdateTokenData(
           newTokens,
           newWeights,
@@ -1210,7 +1220,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 slippagePercentage: 0.02,
               };
 
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
               tokenSellSwapData.push(response.data.data.toString());
             }
           }
@@ -1226,7 +1238,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 slippagePercentage: 0.02,
               };
 
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
               tokenSellSwapData.push(response.data.data.toString());
             }
           }
@@ -1239,7 +1253,7 @@ describe.only("Tests for ZeroExSwap", () => {
           tokenSellSwapData,
           zeroExHandler.address,
         );
-        
+
         const abiCoder = ethers.utils.defaultAbiCoder;
         var stateData = abiCoder.decode(
           ["address[]", "address[]", "uint[]", "uint"],
@@ -1252,7 +1266,7 @@ describe.only("Tests for ZeroExSwap", () => {
 
         const buyAmount = await ERC20.attach(wbnb).balanceOf(offChainRebalance.address);
 
-        for(let i = 0 ; i < buyTokens.length; i++){
+        for (let i = 0; i < buyTokens.length; i++) {
           var buyVal = BigNumber.from(buyAmount).mul(buyWeights[i]).div(sumWeight);
           if (buyTokens[i] != "0x0000000000000000000000000000000000000000") {
             if (buyTokens[i] != wbnb) {
@@ -1262,10 +1276,12 @@ describe.only("Tests for ZeroExSwap", () => {
                 sellAmount: BigNumber.from(buyVal).toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
 
               buyTokenSwapData.push(response.data.data.toString());
-            }else{
+            } else {
               buyTokenSwapData.push("0x");
             }
             buyUnderlyingTokensContract.push(buyTokens[i]);
@@ -1287,18 +1303,18 @@ describe.only("Tests for ZeroExSwap", () => {
             _tokens: buyUnderlyingTokensContract,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: [0,0,0,0,0,0],
+            _protocolFee: [0, 0, 0, 0, 0, 0],
             _buySwapData: buyTokenSwapData,
           },
-          ["200","200","200"],
+          ["200", "200", "200"],
         );
         var balanceAfterToken = [];
         for (let i = 0; i < tokens.length; i++) {
           const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
-            balanceAfterToken.push(await token2.balanceOf(v));
+          balanceAfterToken.push(await token2.balanceOf(v));
           expect(Number(balanceAfterToken[i])).to.be.greaterThanOrEqual(Number(balanceBeforeToken[i]));
         }
-      })
+      });
 
       it("should update tokens", async () => {
         const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress, iaddress.busdAddress];
@@ -1316,7 +1332,7 @@ describe.only("Tests for ZeroExSwap", () => {
         var buyUnderlyingTokensContract = [];
         var buyTokenAmountContract = [];
         var sumWeight;
-        
+
         const data: [string[], string[], string[], string[]] = await offChainRebalance.callStatic.getUpdateTokenData(
           newTokens,
           newWeights,
@@ -1336,7 +1352,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 slippagePercentage: 0.02,
               };
 
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
               tokenSellSwapData.push(response.data.data.toString());
             }
           }
@@ -1352,7 +1370,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 slippagePercentage: 0.02,
               };
 
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
               tokenSellSwapData.push(response.data.data.toString());
             }
           }
@@ -1365,7 +1385,7 @@ describe.only("Tests for ZeroExSwap", () => {
           tokenSellSwapData,
           zeroExHandler.address,
         );
-        
+
         const abiCoder = ethers.utils.defaultAbiCoder;
         var stateData = abiCoder.decode(
           ["address[]", "address[]", "uint[]", "uint"],
@@ -1378,7 +1398,7 @@ describe.only("Tests for ZeroExSwap", () => {
 
         const buyAmount = await ERC20.attach(wbnb).balanceOf(offChainRebalance.address);
 
-        for(let i = 0 ; i < buyTokens.length; i++){
+        for (let i = 0; i < buyTokens.length; i++) {
           var buyVal = BigNumber.from(buyAmount).mul(buyWeights[i]).div(sumWeight);
           if (buyTokens[i] != "0x0000000000000000000000000000000000000000") {
             if (buyTokens[i] != wbnb) {
@@ -1388,10 +1408,12 @@ describe.only("Tests for ZeroExSwap", () => {
                 sellAmount: BigNumber.from(buyVal).toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+              });
 
               buyTokenSwapData.push(response.data.data.toString());
-            }else{
+            } else {
               buyTokenSwapData.push("0x");
             }
             buyUnderlyingTokensContract.push(buyTokens[i]);
@@ -1413,19 +1435,18 @@ describe.only("Tests for ZeroExSwap", () => {
             _tokens: buyUnderlyingTokensContract,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: [0,0,0,0,0,0],
+            _protocolFee: [0, 0, 0, 0, 0, 0],
             _buySwapData: buyTokenSwapData,
           },
-          ["200","200","200"],
+          ["200", "200", "200"],
         );
         var balanceAfterToken = [];
         for (let i = 0; i < tokens.length; i++) {
           const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
-            balanceAfterToken.push(await token2.balanceOf(v));
+          balanceAfterToken.push(await token2.balanceOf(v));
           expect(Number(balanceAfterToken[i])).to.be.greaterThanOrEqual(Number(balanceBeforeToken[i]));
         }
       });
-
 
       it("Invest 1 BNB into Top10 fund", async () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
@@ -1573,7 +1594,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   sellTokensContract.push(getUnderlyingTokens[j]);
                   sellTokenSwapData.push(response.data.data.toString());
                   sellTokenAmountContract.push(bal.toString());
@@ -1617,7 +1640,9 @@ describe.only("Tests for ZeroExSwap", () => {
                   sellAmount: BigNumber.from(buyVal).toString(),
                   slippagePercentage: 0.02,
                 };
-                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                  "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                });
                 buyTokenSwapData.push(response.data.data.toString());
               } else {
                 buyTokenSwapData.push("0x");
@@ -1770,7 +1795,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   tokenSellContract.push(getUnderlyingTokens[j]);
                   tokenSellSwapData.push(response.data.data.toString());
                   tokenSellAmountContract.push(bal.toString());
@@ -1809,7 +1836,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   sellTokensContract.push(getUnderlyingTokens[j]);
                   sellTokenSwapData.push(response.data.data.toString());
                   sellTokenAmountContract.push(bal.toString());
@@ -1856,7 +1885,9 @@ describe.only("Tests for ZeroExSwap", () => {
                   sellAmount: buyVal.toString(),
                   slippagePercentage: 0.02,
                 };
-                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                  "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                });
                 buyTokenSwapData.push(response.data.data.toString());
               } else {
                 buyTokenSwapData.push("0x");
@@ -1894,7 +1925,7 @@ describe.only("Tests for ZeroExSwap", () => {
             _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
-          ["200","200"],
+          ["200", "200"],
         );
         var balanceAfterToken = [];
         for (let i = 0; i < tokens.length; i++) {
@@ -2021,7 +2052,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   tokenSellContract.push(getUnderlyingTokens[j]);
                   tokenSellSwapData.push(response.data.data.toString());
                   tokenSellAmountContract.push(bal.toString());
@@ -2059,7 +2092,9 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.02,
                   };
-                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                  const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                    "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                  });
                   sellTokensContract.push(getUnderlyingTokens[j]);
                   sellTokenSwapData.push(response.data.data.toString());
                   sellTokenAmountContract.push(bal.toString());
@@ -2103,7 +2138,9 @@ describe.only("Tests for ZeroExSwap", () => {
                   sellAmount: buyVal.toString(),
                   slippagePercentage: 0.02,
                 };
-                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': '5119a117-b203-461d-8c1a-de9f5c06b3e0'});
+                const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                  "0x-api-key": "5119a117-b203-461d-8c1a-de9f5c06b3e0",
+                });
                 buyTokenSwapData.push(response.data.data.toString());
               } else {
                 buyTokenSwapData.push("0x");

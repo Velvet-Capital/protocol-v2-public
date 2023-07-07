@@ -11,17 +11,14 @@
 pragma solidity 0.8.16;
 
 interface IVault {
+  function executeWallet(address handlerAddresses, bytes calldata encodedCalls) external returns (bool isSuccess);
 
-    function executeWallet(
-        address handlerAddresses,
-        bytes calldata encodedCalls
-    ) external returns (bool isSuccess);
+  function executeDeposit(
+    address _lpToken,
+    uint256 _amount,
+    address handlerAddresses,
+    bytes calldata encodedCalls
+  ) external returns (bool isSuccess);
 
-    function executeDeposit(
-        address _lpToken,
-        uint256 _amount,
-        address handlerAddresses,
-        bytes calldata encodedCalls
-    ) external returns (bool isSuccess);
-    function executeWalletDelegate(bytes calldata encodedCalls)external returns (bool isSuccess);
+  function executeWalletDelegate(bytes calldata encodedCalls) external returns (bool isSuccess);
 }

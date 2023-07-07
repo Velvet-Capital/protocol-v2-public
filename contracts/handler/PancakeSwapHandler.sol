@@ -14,161 +14,133 @@
 
 pragma solidity 0.8.16;
 
-import { IUniswapV2Router02 } from "../interfaces/IUniswapV2Router02.sol";
+import {IUniswapV2Router02} from "../interfaces/IUniswapV2Router02.sol";
 
-import { Initializable } from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/Initializable.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/Initializable.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
-import { IPriceOracle } from "../oracle/IPriceOracle.sol";
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
+import {IPriceOracle} from "../oracle/IPriceOracle.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 contract PancakeSwapHandler is Initializable {
-    IUniswapV2Router02 internal pancakeSwapRouter;
-    IPriceOracle internal oracle;
+  IUniswapV2Router02 internal pancakeSwapRouter;
+  IPriceOracle internal oracle;
 
-    uint256 public constant divisor_int = 10_000;
+  uint256 public constant divisor_int = 10_000;
 
-    using SafeMathUpgradeable for uint256;
+  using SafeMathUpgradeable for uint256;
 
-    constructor() {}
+  constructor() {}
 
-    function init(address _router, address _oracle) external initializer {
-        pancakeSwapRouter = IUniswapV2Router02(_router);
-        oracle = IPriceOracle(_oracle);
+  function init(address _router, address _oracle) external initializer {
+    pancakeSwapRouter = IUniswapV2Router02(_router);
+    oracle = IPriceOracle(_oracle);
+  }
+
+  function getETH() public view returns (address) {
+    return pancakeSwapRouter.WETH();
+  }
+
+  function getSwapAddress(uint256 _swapAmount, address _t) public view returns (address) {
+    return address(pancakeSwapRouter);
+  }
+
+  function swapTokensToETH(
+    uint256 _swapAmount,
+    uint256 _slippage,
+    address _t,
+    address _to
+  ) public returns (uint256 swapResult) {
+    TransferHelper.safeApprove(_t, address(pancakeSwapRouter), _swapAmount);
+    swapResult = pancakeSwapRouter.swapExactTokensForETH(
+      _swapAmount,
+      getSlippage(_swapAmount, _slippage, getPathForToken(_t)),
+      getPathForToken(_t),
+      _to,
+      block.timestamp
+    )[1];
+  }
+
+  function swapTokenToTokens(
+    uint256 _swapAmount,
+    uint256 _slippage,
+    address _tokenIn,
+    address _tokenOut,
+    address _to
+  ) public returns (uint256 swapResult) {
+    TransferHelper.safeApprove(_tokenIn, address(pancakeSwapRouter), _swapAmount);
+    swapResult = pancakeSwapRouter.swapExactTokensForTokens(
+      _swapAmount,
+      getSlippage(_swapAmount, _slippage, getPathForMultiToken(_tokenIn, _tokenOut)),
+      getPathForMultiToken(_tokenIn, _tokenOut),
+      _to,
+      block.timestamp
+    )[1];
+  }
+
+  function swapETHToTokens(uint256 _slippage, address _t, address _to) public payable returns (uint256 swapResult) {
+    swapResult = pancakeSwapRouter.swapExactETHForTokens{value: msg.value}(
+      getSlippage(msg.value, _slippage, getPathForETH(_t)),
+      getPathForETH(_t),
+      _to,
+      block.timestamp
+    )[1];
+  }
+
+  /**
+   * @notice The function sets the path (ETH, token) for a token
+   * @return Path for (ETH, token)
+   */
+  function getPathForETH(address crypto) public view returns (address[] memory) {
+    address[] memory path = new address[](2);
+    path[0] = getETH();
+    path[1] = crypto;
+
+    return path;
+  }
+
+  /**
+   * @notice The function sets the path (token, ETH) for a token
+   * @return Path for (token, ETH)
+   */
+  function getPathForToken(address token) public view returns (address[] memory) {
+    address[] memory path = new address[](2);
+    path[0] = token;
+    path[1] = getETH();
+
+    return path;
+  }
+
+  /**
+   * @notice The function sets the path (token, token) for a token
+   * @return Path for (token, token)
+   */
+  function getPathForMultiToken(address _tokenIn, address _tokenOut) public pure returns (address[] memory) {
+    address[] memory path = new address[](2);
+    path[0] = _tokenIn;
+    path[1] = _tokenOut;
+
+    return path;
+  }
+
+  function getSlippage(
+    uint256 _amount,
+    uint256 _slippage,
+    address[] memory path
+  ) internal view returns (uint256 minAmount) {
+    if (!(_slippage < divisor_int)) {
+      revert ErrorLibrary.SlippageCannotBeGreaterThan100();
     }
-
-    function getETH() public view returns (address) {
-        return pancakeSwapRouter.WETH();
+    uint256 currentAmount;
+    if (path[0] == getETH()) {
+      currentAmount = oracle.getPriceForAmount(path[1], _amount, false);
+    } else if (path[1] != getETH()) {
+      currentAmount = oracle.getPriceForTokenAmount(path[0], path[1], _amount);
+    } else {
+      currentAmount = oracle.getPriceForAmount(path[0], _amount, true);
     }
-
-    function getSwapAddress(
-        uint256 _swapAmount,
-        address _t
-    ) public view returns (address) {
-        return address(pancakeSwapRouter);
-    }
-
-    function swapTokensToETH(
-        uint256 _swapAmount,
-        uint256 _slippage,
-        address _t,
-        address _to
-    ) public returns (uint256 swapResult) {
-        TransferHelper.safeApprove(_t, address(pancakeSwapRouter), _swapAmount);
-        swapResult = pancakeSwapRouter.swapExactTokensForETH(
-            _swapAmount,
-            getSlippage(_swapAmount, _slippage, getPathForToken(_t)),
-            getPathForToken(_t),
-            _to,
-            block.timestamp
-        )[1];
-    }
-
-    function swapTokenToTokens(
-        uint256 _swapAmount,
-        uint256 _slippage,
-        address _tokenIn,
-        address _tokenOut,
-        address _to
-    ) public returns (uint256 swapResult) {
-        TransferHelper.safeApprove(
-            _tokenIn,
-            address(pancakeSwapRouter),
-            _swapAmount
-        );
-        swapResult = pancakeSwapRouter.swapExactTokensForTokens(
-            _swapAmount,
-            getSlippage(
-                _swapAmount,
-                _slippage,
-                getPathForMultiToken(_tokenIn, _tokenOut)
-            ),
-            getPathForMultiToken(_tokenIn, _tokenOut),
-            _to,
-            block.timestamp
-        )[1];
-    }
-
-    function swapETHToTokens(
-        uint256 _slippage,
-        address _t,
-        address _to
-    ) public payable returns (uint256 swapResult) {
-        swapResult = pancakeSwapRouter.swapExactETHForTokens{value: msg.value}(
-            getSlippage(msg.value, _slippage, getPathForETH(_t)),
-            getPathForETH(_t),
-            _to,
-            block.timestamp
-        )[1];
-    }
-
-    /**
-     * @notice The function sets the path (ETH, token) for a token
-     * @return Path for (ETH, token)
-     */
-    function getPathForETH(
-        address crypto
-    ) public view returns (address[] memory) {
-        address[] memory path = new address[](2);
-        path[0] = getETH();
-        path[1] = crypto;
-
-        return path;
-    }
-
-    /**
-     * @notice The function sets the path (token, ETH) for a token
-     * @return Path for (token, ETH)
-     */
-    function getPathForToken(
-        address token
-    ) public view returns (address[] memory) {
-        address[] memory path = new address[](2);
-        path[0] = token;
-        path[1] = getETH();
-
-        return path;
-    }
-
-    /**
-     * @notice The function sets the path (token, token) for a token
-     * @return Path for (token, token)
-     */
-    function getPathForMultiToken(
-        address _tokenIn,
-        address _tokenOut
-    ) public pure returns (address[] memory) {
-        address[] memory path = new address[](2);
-        path[0] = _tokenIn;
-        path[1] = _tokenOut;
-
-        return path;
-    }
-
-    function getSlippage(
-        uint256 _amount,
-        uint256 _slippage,
-        address[] memory path
-    ) internal view returns (uint256 minAmount) {
-        if (!(_slippage < divisor_int)) {
-            revert ErrorLibrary.SlippageCannotBeGreaterThan100();
-        }
-        uint256 currentAmount;
-        if (path[0] == getETH()) {
-            currentAmount = oracle.getPriceForAmount(path[1], _amount, false);
-        } else if (path[1] != getETH()) {
-            currentAmount = oracle.getPriceForTokenAmount(
-                path[0],
-                path[1],
-                _amount
-            );
-        } else {
-            currentAmount = oracle.getPriceForAmount(path[0], _amount, true);
-        }
-        minAmount = currentAmount.mul(divisor_int.sub(_slippage)).div(
-            divisor_int
-        );
-    }
+    minAmount = currentAmount.mul(divisor_int.sub(_slippage)).div(divisor_int);
+  }
 }

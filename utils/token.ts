@@ -1,12 +1,7 @@
 import { network, ethers } from "hardhat";
 import { ERC20Mock } from "../typechain";
 
-export const getErc20Balance = async (
-  contract: ERC20Mock,
-  address: string,
-  name: string,
-  decimals: number
-) => {
+export const getErc20Balance = async (contract: ERC20Mock, address: string, name: string, decimals: number) => {
   const [balance] = await Promise.all([contract.balanceOf(address)]);
 
   console.log(name, ethers.utils.formatUnits(balance, decimals));
@@ -17,7 +12,7 @@ export const fundErc20 = async (
   sender: string,
   recepient: string,
   amount: string,
-  decimals: number
+  decimals: number,
 ) => {
   const FUND_AMOUNT = ethers.utils.parseUnits(amount, decimals);
 
@@ -33,7 +28,7 @@ export const impersonateFundErc20 = async (
   sender: string,
   recepient: string,
   amount: string,
-  decimals: number = 18
+  decimals: number = 18,
 ) => {
   await network.provider.request({
     method: "hardhat_impersonateAccount",

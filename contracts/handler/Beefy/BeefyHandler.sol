@@ -18,26 +18,20 @@
 
 pragma solidity 0.8.16;
 
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
-import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
-import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
-import { IHandler } from "../IHandler.sol";
-import { IVaultBeefy } from "./interfaces/IVaultBeefy.sol";
-import { ErrorLibrary } from "./../../library/ErrorLibrary.sol";
-import { FunctionParameters } from "../../FunctionParameters.sol";
+import {IHandler} from "../IHandler.sol";
+import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
+import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
+import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract BeefyHandler is IHandler {
   using SafeMathUpgradeable for uint256;
-  event Deposit(
-    uint256 time,
-    address indexed user,
-    address indexed token,
-    uint256[] amounts,
-    address indexed to
-  );
+  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
     uint256 time,
     address indexed user,
@@ -66,25 +60,13 @@ contract BeefyHandler is IHandler {
       revert ErrorLibrary.InvalidAddress();
     }
     IVaultBeefy asset = IVaultBeefy(_mooAsset);
-    IERC20Upgradeable underlyingToken = IERC20Upgradeable(
-      getUnderlying(_mooAsset)[0]
-    );
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_mooAsset)[0]);
     if (msg.value == 0) {
-      TransferHelper.safeApprove(
-        address(underlyingToken),
-        address(_mooAsset),
-        0
-      );
-      TransferHelper.safeApprove(
-        address(underlyingToken),
-        address(_mooAsset),
-        _amount[0]
-      );
+      TransferHelper.safeApprove(address(underlyingToken), address(_mooAsset), 0);
+      TransferHelper.safeApprove(address(underlyingToken), address(_mooAsset), _amount[0]);
       asset.deposit(_amount[0]);
       if (_to != address(this)) {
-        uint256 assetBalance = IERC20Upgradeable(_mooAsset).balanceOf(
-          address(this)
-        );
+        uint256 assetBalance = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
         TransferHelper.safeTransfer(_mooAsset, _to, assetBalance);
       }
     } else {
@@ -92,11 +74,9 @@ contract BeefyHandler is IHandler {
         revert ErrorLibrary.PleaseDepositUnderlyingToken();
       }
 
-      asset.depositBNB{ value: msg.value }();
+      asset.depositBNB{value: msg.value}();
       if (_to != address(this)) {
-        uint256 assetBalance = IERC20Upgradeable(_mooAsset).balanceOf(
-          address(this)
-        );
+        uint256 assetBalance = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
         TransferHelper.safeTransfer(_mooAsset, _to, assetBalance);
       }
     }
@@ -106,30 +86,17 @@ contract BeefyHandler is IHandler {
   /**
    * @notice This function redeems assets from the Beefy protocol
    */
-  function redeem(FunctionParameters.RedeemData calldata inputData)
-    public
-    override
-  {
+  function redeem(FunctionParameters.RedeemData calldata inputData) public override {
     if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     IVaultBeefy asset = IVaultBeefy(inputData._yieldAsset);
-    IERC20Upgradeable underlyingToken = IERC20Upgradeable(
-      getUnderlying(inputData._yieldAsset)[0]
-    );
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
     if (inputData._amount > asset.balanceOf(address(this))) {
       revert ErrorLibrary.NotEnoughBalanceInBeefyProtocol();
     }
-    TransferHelper.safeApprove(
-      address(asset),
-      address(inputData._yieldAsset),
-      0
-    );
-    TransferHelper.safeApprove(
-      address(asset),
-      address(inputData._yieldAsset),
-      inputData._amount
-    );
+    TransferHelper.safeApprove(address(asset), address(inputData._yieldAsset), 0);
+    TransferHelper.safeApprove(address(asset), address(inputData._yieldAsset), inputData._amount);
     if (inputData.isWETH) {
       asset.withdrawBNB(inputData._amount);
     } else {
@@ -137,27 +104,14 @@ contract BeefyHandler is IHandler {
     }
     if (inputData._to != address(this)) {
       if (inputData.isWETH) {
-        (bool success, ) = payable(inputData._to).call{
-          value: address(this).balance
-        }("");
+        (bool success, ) = payable(inputData._to).call{value: address(this).balance}("");
         require(success, "Transfer failed.");
       } else {
         uint256 tokenAmount = underlyingToken.balanceOf(address(this));
-        TransferHelper.safeTransfer(
-          address(underlyingToken),
-          inputData._to,
-          tokenAmount
-        );
+        TransferHelper.safeTransfer(address(underlyingToken), inputData._to, tokenAmount);
       }
     }
-    emit Redeem(
-      block.timestamp,
-      msg.sender,
-      inputData._yieldAsset,
-      inputData._amount,
-      inputData._to,
-      inputData.isWETH
-    );
+    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**
@@ -165,12 +119,7 @@ contract BeefyHandler is IHandler {
    * @param _mooAsset Address of the protocol token whose underlying asset is needed
    * @return underlying Address of the underlying asset
    */
-  function getUnderlying(address _mooAsset)
-    public
-    view
-    override
-    returns (address[] memory)
-  {
+  function getUnderlying(address _mooAsset) public view override returns (address[] memory) {
     require(address(_mooAsset) != address(0), "zero address passed");
     if (_mooAsset == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -191,12 +140,7 @@ contract BeefyHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256 tokenBalance)
-  {
+  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
     if (_tokenHolder == address(0) || t == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -210,35 +154,21 @@ contract BeefyHandler is IHandler {
    * @param _t Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address _t)
-    public
-    view
-    override
-    returns (uint256[] memory)
-  {
+  function getUnderlyingBalance(address _tokenHolder, address _t) public view override returns (uint256[] memory) {
     if (_t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
     uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, _t);
-    tokenBalance[0] = yieldTokenBalance.mul(IVaultBeefy(_t).balance()).div(
-      IVaultBeefy(_t).totalSupply()
-    );
+    tokenBalance[0] = yieldTokenBalance.mul(IVaultBeefy(_t).balance()).div(IVaultBeefy(_t).totalSupply());
     return tokenBalance;
   }
 
-  function encodeData(address t, uint256 _amount)
-    public
-    returns (bytes memory)
-  {}
+  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address)
-    public
-    pure
-    returns (bytes memory, address)
-  {
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
     return ("", address(0));
   }
 

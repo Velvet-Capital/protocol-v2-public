@@ -23,7 +23,6 @@ import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@g
 import EthersAdapter from "@gnosis.pm/safe-ethers-lib";
 import { SafeTransactionDataPartial, GnosisSafeContract, SafeVersion } from "@gnosis.pm/safe-core-sdk-types";
 
-
 var chai = require("chai");
 //use default BigNumber
 chai.use(require("chai-bignumber")());
@@ -47,7 +46,7 @@ describe.only("Tests for AssetManagerConfig", () => {
   let addr2: SignerWithAddress;
   let addr1: SignerWithAddress;
   let addrs: SignerWithAddress[];
-  let newSafeAddress:any;
+  let newSafeAddress: any;
   const forkChainId: any = process.env.FORK_CHAINID;
   const provider = ethers.provider;
   const chainId: any = forkChainId ? forkChainId : 56;
@@ -163,14 +162,23 @@ describe.only("Tests for AssetManagerConfig", () => {
       const executeTxResponse = await safeSdk.executeTransaction(safeTransaction);
       await executeTxResponse.transactionResponse?.wait();
 
-
       const AccessController = await ethers.getContractFactory("AccessController");
       accessController = await AccessController.deploy();
       await accessController.deployed();
 
-      await exchange.init(accessController.address, velvetSafeModule.address, priceOracle.address, tokenRegistry.address);
+      await exchange.init(
+        accessController.address,
+        velvetSafeModule.address,
+        priceOracle.address,
+        tokenRegistry.address,
+      );
       const abiEncoder = ethers.utils.defaultAbiCoder;
-      await velvetSafeModule.setUp(abiEncoder.encode(["address","address","address"],[newSafeAddress,exchange.address,addresses.gnosisMultisendLibrary]));
+      await velvetSafeModule.setUp(
+        abiEncoder.encode(
+          ["address", "address", "address"],
+          [newSafeAddress, exchange.address, addresses.gnosisMultisendLibrary],
+        ),
+      );
 
       await accessController.grantRole(
         "0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819",

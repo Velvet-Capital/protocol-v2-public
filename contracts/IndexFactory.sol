@@ -16,10 +16,10 @@ import {FunctionParameters} from "./FunctionParameters.sol";
 import {ErrorLibrary} from "./library/ErrorLibrary.sol";
 import {ITokenRegistry} from "./registry/ITokenRegistry.sol";
 import {IFeeModule} from "./fee/IFeeModule.sol";
-import { IVelvetSafeModule } from "./vault/IVelvetSafeModule.sol";
-import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
-import { VelvetSafeModule } from "./vault/VelvetSafeModule.sol";
-import { GnosisDeployer } from "contracts/library/GnosisDeployer.sol";
+import {IVelvetSafeModule} from "./vault/IVelvetSafeModule.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {VelvetSafeModule} from "./vault/VelvetSafeModule.sol";
+import {GnosisDeployer} from "contracts/library/GnosisDeployer.sol";
 
 contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   address public indexSwapLibrary;
@@ -47,7 +47,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   uint256 public velvetProtocolFee;
 
-
   mapping(address => uint256) internal indexSwapToId;
 
   struct IndexSwaplInfo {
@@ -65,12 +64,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   }
 
   IndexSwaplInfo[] public IndexSwapInfolList;
-  event IndexInfo(
-    uint256 time,
-    IndexSwaplInfo indexData,
-    uint256 indexed indexId,
-    address _owner
-  );
+  event IndexInfo(uint256 time, IndexSwaplInfo indexData, uint256 indexed indexId, address _owner);
   event IndexCreationState(bool state);
 
   function initialize(FunctionParameters.IndexFactoryInitData memory initData) external initializer {
@@ -96,7 +90,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
     indexSwapLibrary = initData._indexSwapLibrary;
     priceOracle = initData._priceOracle;
-    _setBaseIndexSwapAddress(initData._baseIndexSwapAddress); 
+    _setBaseIndexSwapAddress(initData._baseIndexSwapAddress);
     _setBaseRebalancingAddress(initData._baseRebalancingAddres);
     _setBaseOffChainRebalancingAddress(initData._baseOffChainRebalancingAddress);
     _setRebalanceAggregatorAddress(initData._baseRebalanceAggregatorAddress);
@@ -124,7 +118,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function createIndexNonCustodial(FunctionParameters.IndexCreationInitData memory initData) public virtual {
     address[] memory _owner = new address[](1);
     _owner[0] = address(0x0000000000000000000000000000000000000000);
-    _createIndex(initData, false,_owner,1) ;
+    _createIndex(initData, false, _owner, 1);
   }
 
   /**
@@ -133,11 +127,15 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _owners Array list of owners for gnosis safe
    * @param _threshold Threshold for the gnosis safe(min number of transaction required)
    */
-  function createIndexCustodial(FunctionParameters.IndexCreationInitData memory initData, address[] memory _owners, uint256 _threshold) public virtual {
-    if(_owners.length == 0){
+  function createIndexCustodial(
+    FunctionParameters.IndexCreationInitData memory initData,
+    address[] memory _owners,
+    uint256 _threshold
+  ) public virtual {
+    if (_owners.length == 0) {
       revert ErrorLibrary.NoOwnerPassed();
     }
-    if(_threshold > _owners.length || _threshold == 0){
+    if (_threshold > _owners.length || _threshold == 0) {
       revert ErrorLibrary.InvalidThresholdLength();
     }
     _createIndex(initData, true, _owners, _threshold);
@@ -146,7 +144,12 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   /**
    * @notice This internal function enables to create a new portfolio according to given inputs
    */
-  function _createIndex(FunctionParameters.IndexCreationInitData memory initData, bool _custodial, address[] memory _owner, uint256 _threshold) internal virtual {
+  function _createIndex(
+    FunctionParameters.IndexCreationInitData memory initData,
+    bool _custodial,
+    address[] memory _owner,
+    uint256 _threshold
+  ) internal virtual {
     if (initData.minIndexInvestmentAmount < minInvestmentAmount) {
       revert ErrorLibrary.InvalidMinInvestmentAmount();
     }
@@ -162,7 +165,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     if (ITokenRegistry(tokenRegistry).getProtocolState() == true) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
-    
+
     //Exchange Handler
     ERC1967Proxy _exchangeHandler = new ERC1967Proxy(baseExchangeHandlerAddress, bytes(""));
 
@@ -199,8 +202,18 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       _threshold = 1;
     }
 
-    (vaultAddress,module) = GnosisDeployer.deployGnosisSafeAndModule(gnosisSingleton,  gnosisSafeProxyFactory, gnosisMultisendLibrary, gnosisFallbackLibrary, baseVelvetGnosisSafeModuleAddress, _owner,_threshold);
-    IVelvetSafeModule(address(module)).setUp(abi.encode(vaultAddress,address(_exchangeHandler),address(gnosisMultisendLibrary)));
+    (vaultAddress, module) = GnosisDeployer.deployGnosisSafeAndModule(
+      gnosisSingleton,
+      gnosisSafeProxyFactory,
+      gnosisMultisendLibrary,
+      gnosisFallbackLibrary,
+      baseVelvetGnosisSafeModuleAddress,
+      _owner,
+      _threshold
+    );
+    IVelvetSafeModule(address(module)).setUp(
+      abi.encode(vaultAddress, address(_exchangeHandler), address(gnosisMultisendLibrary))
+    );
 
     ERC1967Proxy indexSwap = new ERC1967Proxy(
       baseIndexSwapAddress,
@@ -244,11 +257,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     ERC1967Proxy rebalanceAggregator = new ERC1967Proxy(
       baseRebalanceAggregatorAddress,
-      abi.encodeWithSelector(
-        IRebalanceAggregator.init.selector,
-        address(indexSwap),
-        address(accessController)
-      )
+      abi.encodeWithSelector(IRebalanceAggregator.init.selector, address(indexSwap), address(accessController))
     );
 
     IndexSwapInfolList.push(
@@ -288,7 +297,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       address(accessController)
     );
 
-    emit IndexInfo(block.timestamp, IndexSwapInfolList[indexId], indexId,msg.sender);
+    emit IndexInfo(block.timestamp, IndexSwapInfolList[indexId], indexId, msg.sender);
     indexId = indexId + 1;
   }
 
@@ -388,28 +397,28 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   function _setBaseIndexSwapAddress(address _indexSwap) internal {
     baseIndexSwapAddress = _indexSwap;
-  }  
+  }
 
   function _setBaseExchangeHandlerAddress(address _exchange) internal {
     baseExchangeHandlerAddress = _exchange;
-  }  
+  }
 
   function _setBaseAssetManagerConfigAddress(address _config) internal {
     baseAssetManagerConfigAddress = _config;
-  }  
+  }
 
   function _setBaseOffChainRebalancingAddress(address _offchainRebalance) internal {
     baseOffChainRebalancingAddress = _offchainRebalance;
-  }  
+  }
 
   function _setBaseOffChainIndexSwapAddress(address _offchainIndexSwap) internal {
     baseOffChainIndexSwapAddress = _offchainIndexSwap;
-  }  
+  }
 
   function _setFeeModuleImplementationAddress(address _feeModule) internal {
     feeModuleImplementationAddress = _feeModule;
-  }  
-  
+  }
+
   function _setRebalanceAggregatorAddress(address _rebalanceAggregator) internal {
     baseRebalanceAggregatorAddress = _rebalanceAggregator;
   }
@@ -425,7 +434,12 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _newGnosisMultisendLibrary New address of GnosisMultisendLibrary
    * @param _newGnosisSafeProxyFactory New address of GnosisSafeProxyFactory
    */
-  function updateGnosisAddresses(address _newGnosisSingleton, address _newGnosisFallbackLibrary, address _newGnosisMultisendLibrary, address _newGnosisSafeProxyFactory) external virtual onlyOwner{
+  function updateGnosisAddresses(
+    address _newGnosisSingleton,
+    address _newGnosisFallbackLibrary,
+    address _newGnosisMultisendLibrary,
+    address _newGnosisSafeProxyFactory
+  ) external virtual onlyOwner {
     gnosisSingleton = _newGnosisSingleton;
     gnosisFallbackLibrary = _newGnosisFallbackLibrary;
     gnosisMultisendLibrary = _newGnosisMultisendLibrary;

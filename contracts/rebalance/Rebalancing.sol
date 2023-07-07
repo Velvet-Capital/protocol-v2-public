@@ -12,30 +12,30 @@
 
 pragma solidity 0.8.16;
 
-import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable, Initializable } from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
-import { IndexSwapLibrary } from "../core/IndexSwapLibrary.sol";
-import { IExchange } from "../core/IExchange.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
+import {IndexSwapLibrary} from "../core/IndexSwapLibrary.sol";
+import {IExchange} from "../core/IExchange.sol";
 
-import { IWETH } from "../interfaces/IWETH.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
 
-import { IIndexSwap } from "../core/IIndexSwap.sol";
-import { AccessController } from "../access/AccessController.sol";
+import {IIndexSwap} from "../core/IIndexSwap.sol";
+import {AccessController} from "../access/AccessController.sol";
 
-import { IPriceOracle } from "../oracle/IPriceOracle.sol";
+import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 
-import { ITokenRegistry } from "../registry/ITokenRegistry.sol";
-import { IAssetManagerConfig } from "../registry/IAssetManagerConfig.sol";
+import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
+import {IAssetManagerConfig} from "../registry/IAssetManagerConfig.sol";
 
-import { IExternalSwapHandler } from "../handler/IExternalSwapHandler.sol";
-import { ExchangeData } from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
+import {IExternalSwapHandler} from "../handler/IExternalSwapHandler.sol";
+import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
 
-import { RebalanceLibrary } from "./RebalanceLibrary.sol";
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {RebalanceLibrary} from "./RebalanceLibrary.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
 
 contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
   IIndexSwap public index;
@@ -161,13 +161,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
         }
         uint256 swapAmount = totalBNBAmount.mul(weightToSwap).div(sumWeightsToSwap);
         exchange._swapETHToToken{value: swapAmount}(
-          FunctionParameters.SwapETHToTokenData(
-            tokens[i],
-            index.vault(),
-            _swapHandler,
-            _slippage[i],
-            _lpSlippage[i]
-          )
+          FunctionParameters.SwapETHToTokenData(tokens[i], index.vault(), _swapHandler, _slippage[i], _lpSlippage[i])
         );
       }
     }
@@ -323,7 +317,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
   ) internal virtual {
     exchange._pullFromVault(_token, _amount, address(exchange));
     exchange._swapTokenToETH(
-      FunctionParameters.SwapTokenToETHData(_token, _to,_swapHandler,_amount, _slippage, _lpSlippage)
+      FunctionParameters.SwapTokenToETHData(_token, _to, _swapHandler, _amount, _slippage, _lpSlippage)
     );
   }
 

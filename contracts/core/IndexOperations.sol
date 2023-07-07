@@ -1,30 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
 
-import { IHandler } from "../handler/IHandler.sol";
+import {IHandler} from "../handler/IHandler.sol";
 
-import { IExchange } from "./IExchange.sol";
-import { IIndexSwap } from "./IIndexSwap.sol";
-import { ITokenRegistry } from "../registry/ITokenRegistry.sol";
-import { IndexSwapLibrary } from "./IndexSwapLibrary.sol";
-import { IOffChainIndexSwap } from "./IOffChainIndexSwap.sol";
-import { IWETH } from "../interfaces/IWETH.sol";
+import {IExchange} from "./IExchange.sol";
+import {IIndexSwap} from "./IIndexSwap.sol";
+import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
+import {IndexSwapLibrary} from "./IndexSwapLibrary.sol";
+import {IOffChainIndexSwap} from "./IOffChainIndexSwap.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
 
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
-import { ExchangeData } from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
-import { IndexSwapLibrary } from "./IndexSwapLibrary.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
+import {IndexSwapLibrary} from "./IndexSwapLibrary.sol";
 
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
-import { Ownable } from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
-import { SafeMath } from "@openzeppelin/contracts-4.8.2/utils/math/SafeMath.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
+import {SafeMath} from "@openzeppelin/contracts-4.8.2/utils/math/SafeMath.sol";
 
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
 contract IndexOperations is Ownable {
   using SafeMath for uint256;
@@ -62,7 +62,7 @@ contract IndexOperations is Ownable {
         inputData.amount[i],
         uint256(_index.getRecord(_tokens[i]).denorm)
       );
-      
+
       IHandler handler = IHandler(ITokenRegistry(_index.tokenRegistry()).getTokenInformation(_tokens[i]).handler);
       address[] memory underlying = handler.getUnderlying(_tokens[i]);
       uint256[] memory swapResult = new uint256[](underlying.length);

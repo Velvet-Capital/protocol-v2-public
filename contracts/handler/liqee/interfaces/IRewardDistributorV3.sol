@@ -10,6 +10,5 @@ interface IRewardDistributorV3 {
     address[] memory _borrowediTokens
   ) external;
 
-  function claimReward(address[] memory _holders, address[] memory _iTokens)
-    external;
+  function claimReward(address[] memory _holders, address[] memory _iTokens) external;
 }

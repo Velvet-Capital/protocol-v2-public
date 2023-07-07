@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity 0.8.16;
-import { IIndexSwap } from "../core/IIndexSwap.sol";
-import { IExchange } from "../core/IExchange.sol";
-import { IndexSwapLibrary, IAssetManagerConfig, ITokenRegistry, ErrorLibrary } from "../core/IndexSwapLibrary.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {IIndexSwap} from "../core/IIndexSwap.sol";
+import {IExchange} from "../core/IExchange.sol";
+import {IndexSwapLibrary, IAssetManagerConfig, ITokenRegistry, ErrorLibrary} from "../core/IndexSwapLibrary.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
 library RebalanceLibrary {
   using SafeMathUpgradeable for uint256;
@@ -81,7 +81,7 @@ library RebalanceLibrary {
     uint256[] calldata newWeights,
     IIndexSwap index
   ) external returns (address[] memory, uint256[] memory) {
-    address[] memory tokens =  index.getTokens();
+    address[] memory tokens = index.getTokens();
     address[] memory sellTokens = new address[](tokens.length);
     uint256[] memory swapAmounts = new uint256[](tokens.length);
     uint256 vaultBalance = 0;
@@ -90,9 +90,9 @@ library RebalanceLibrary {
 
     (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, tokens);
     for (uint256 i = 0; i < tokens.length; i++) {
-      uint256 oldWeight = (vaultBalance == 0)? vaultBalance : tokenBalanceInBNB[i].mul(index.TOTAL_WEIGHT()).div(
-        vaultBalance
-      );
+      uint256 oldWeight = (vaultBalance == 0)
+        ? vaultBalance
+        : tokenBalanceInBNB[i].mul(index.TOTAL_WEIGHT()).div(vaultBalance);
       if (newWeights[i] < oldWeight) {
         uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, tokens[i]);
         uint256 weightDiff = oldWeight.sub(newWeights[i]);
@@ -125,8 +125,8 @@ library RebalanceLibrary {
     IIndexSwap index,
     address[] calldata newTokens,
     uint96[] calldata newWeights
-  ) external returns (address[] memory, uint256[] memory){
-    address[] memory sellTokens  = new address[](newTokens.length);
+  ) external returns (address[] memory, uint256[] memory) {
+    address[] memory sellTokens = new address[](newTokens.length);
     uint256[] memory sellAmount = new uint256[](newTokens.length);
     uint256 vaultBalance = 0;
     uint256[] memory tokenBalanceInUSD = new uint256[](newTokens.length);
@@ -142,13 +142,13 @@ library RebalanceLibrary {
         sellTokens[i] = newTokens[i];
       }
     }
-    return (sellTokens,sellAmount);
+    return (sellTokens, sellAmount);
   }
 
-  function getNewTokens(address[] calldata tokens,address portfolioToken) external pure returns(address[] memory){
+  function getNewTokens(address[] calldata tokens, address portfolioToken) external pure returns (address[] memory) {
     address[] memory newTokens = new address[]((tokens.length).add(1));
-    for(uint i = 0 ; i < tokens.length; i++){
-      if(tokens[i] == portfolioToken){
+    for (uint i = 0; i < tokens.length; i++) {
+      if (tokens[i] == portfolioToken) {
         return tokens;
       }
       newTokens[i] = tokens[i];
@@ -164,7 +164,6 @@ library RebalanceLibrary {
    * @param portfolioToken The portfolio token which needs to be updated
    */
   function setRecord(IIndexSwap index, address[] memory _tokens, address portfolioToken) external {
-    
     uint96[] memory oldWeights = new uint96[](_tokens.length);
 
     uint256[] memory tokenBalanceInUSD = new uint256[](_tokens.length);
@@ -255,16 +254,16 @@ library RebalanceLibrary {
       revert ErrorLibrary.SwapHandlerNotEnabled();
     }
   }
-  
-  function checkPrimary(IIndexSwap index ,address[] calldata tokens) external view{
-    for(uint i = 0 ; i < tokens.length; i++){
-      if(ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary == false){
+
+  function checkPrimary(IIndexSwap index, address[] calldata tokens) external view {
+    for (uint i = 0; i < tokens.length; i++) {
+      if (ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary == false) {
         revert ErrorLibrary.NotPrimaryToken();
       }
     }
   }
 
-  function beforeExternalRebalance(IIndexSwap index,ITokenRegistry tokenRegistry) external {
+  function beforeExternalRebalance(IIndexSwap index, ITokenRegistry tokenRegistry) external {
     if (!(index.paused())) {
       revert ErrorLibrary.ContractNotPaused();
     }
@@ -276,7 +275,7 @@ library RebalanceLibrary {
     }
   }
 
-  function beforeExternalSell(IIndexSwap index,ITokenRegistry tokenRegistry,address handler) external view{
+  function beforeExternalSell(IIndexSwap index, ITokenRegistry tokenRegistry, address handler) external view {
     if (!(tokenRegistry.isExternalSwapHandler(handler))) {
       revert ErrorLibrary.OffHandlerNotValid();
     }
@@ -285,7 +284,7 @@ library RebalanceLibrary {
     }
   }
 
-  function beforePullAndRedeem(IIndexSwap index, IAssetManagerConfig config,address token) external {
+  function beforePullAndRedeem(IIndexSwap index, IAssetManagerConfig config, address token) external {
     if (!(index.paused())) {
       revert ErrorLibrary.ContractNotPaused();
     }

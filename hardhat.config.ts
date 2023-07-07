@@ -19,7 +19,6 @@ import "./tasks/createIndex";
 import "hardhat-gas-reporter";
 import "hardhat-abi-exporter";
 
-
 import { HardhatUserConfig } from "hardhat/types";
 import { chainIdToAddresses } from "./scripts/networkVariables";
 
@@ -63,9 +62,7 @@ const config: HardhatUserConfig = {
       forking: {
         // eslint-disable-next-line
         enabled: true,
-        url: process.env.BSC_RPC
-          ? process.env.BSC_RPC
-          : "https://bsc-dataseed.binance.org/",
+        url: process.env.BSC_RPC ? process.env.BSC_RPC : "https://bsc-dataseed.binance.org/",
       },
       // chainId: chainIds.hardhat,
       // allowUnlimitedContractSize: true
@@ -121,10 +118,7 @@ const config: HardhatUserConfig = {
       // chainId: chainIds["MaticTestnet"],
       chainId: 80001,
       allowUnlimitedContractSize: true,
-      url:
-        "https://speedy-nodes-nyc.moralis.io/" +
-        infuraApiKey +
-        "/polygon/mumbai",
+      url: "https://speedy-nodes-nyc.moralis.io/" + infuraApiKey + "/polygon/mumbai",
     },
     MaticMainnet: {
       accounts: {
@@ -170,10 +164,10 @@ const config: HardhatUserConfig = {
       "OffChainRebalance",
       "Rebalancing",
       "AssetManagerConfig",
-      "TokenRegistry"
+      "TokenRegistry",
     ],
     spacing: 2,
-  }
+  },
 };
 
 module.exports = config;

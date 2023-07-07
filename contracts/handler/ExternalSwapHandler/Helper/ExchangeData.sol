@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import { IHandler } from "./../../IHandler.sol";
-import { IIndexSwap } from "./../../../core/IIndexSwap.sol";
+import {IHandler} from "./../../IHandler.sol";
+import {IIndexSwap} from "./../../../core/IIndexSwap.sol";
 
 contract ExchangeData {
   struct ExData {

@@ -3,10 +3,7 @@ import { task, types } from "hardhat/config";
 import { SET_TOKENS_INDEXSWAP } from "./task-names";
 import { chainIdToAddresses } from "../scripts/networkVariables";
 
-task(
-  SET_TOKENS_INDEXSWAP,
-  "Initiation of token and wight to IndexSwap contract"
-)
+task(SET_TOKENS_INDEXSWAP, "Initiation of token and wight to IndexSwap contract")
   .addParam("indexswap", "The indexswap's address")
   .addParam("tokens", "The tokens list address")
   .addParam("weight", "The  weight list address")
@@ -16,9 +13,7 @@ task(
     const { chainId } = await hre.ethers.provider.getNetwork();
     const addresses = chainIdToAddresses[forkChainId];
     const accounts = await hre.ethers.getSigners();
-    console.log(
-      "------------------------------ Initial Setup Ended ------------------------------"
-    );
+    console.log("------------------------------ Initial Setup Ended ------------------------------");
 
     console.log("--------------- Contract Deployment Started ---------------");
 
@@ -45,9 +40,7 @@ task(
 
     console.log(`IndexSwap deployed to: ${indexSwap.address}`);
 
-    console.log(
-      "------------------------------ Contract Deployment Ended ------------------------------"
-    );
+    console.log("------------------------------ Contract Deployment Ended ------------------------------");
 
     return indexSwap;
   });

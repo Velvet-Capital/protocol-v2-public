@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
 
 interface IAssetManagerConfig {
-  function init(FunctionParameters.AssetManagerConfigInitData calldata initData)
-    external;
+  function init(FunctionParameters.AssetManagerConfigInitData calldata initData) external;
 
   function managementFee() external view returns (uint256);
 
@@ -29,14 +28,9 @@ interface IAssetManagerConfig {
 
   function whitelistTokens() external returns (bool);
 
-  function setPermittedTokens(
-        address[] calldata _newTokens
-    ) external;
+  function setPermittedTokens(address[] calldata _newTokens) external;
 
-    function deletePermittedTokens(
-        address[] calldata _newTokens
-    ) external;
+  function deletePermittedTokens(address[] calldata _newTokens) external;
 
-  function isTokenPermitted(address _token) external returns(bool);
-
+  function isTokenPermitted(address _token) external returns (bool);
 }

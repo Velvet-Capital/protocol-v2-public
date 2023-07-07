@@ -191,12 +191,7 @@ contract RebalanceAggregator is Initializable, OwnableUpgradeable, ReentrancyGua
         }
       }
       if (exchange.isWETH(_data.portfolioToken, address(handler))) {
-        handler.deposit{value: address(this).balance}(
-          _data.portfolioToken,
-          swapAmount,
-          _data._lpSlippage,
-          vault
-        );
+        handler.deposit{value: address(this).balance}(_data.portfolioToken, swapAmount, _data._lpSlippage, vault);
       } else {
         handler.deposit(_data.portfolioToken, swapAmount, _data._lpSlippage, vault);
       }

@@ -18,25 +18,19 @@
 
 pragma solidity 0.8.16;
 
-import { IHandler } from "../IHandler.sol";
+import {IHandler} from "../IHandler.sol";
 
-import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { IVaultAlpaca } from "./interfaces/IVaultAlpaca.sol";
-import { ErrorLibrary } from "./../../library/ErrorLibrary.sol";
-import { FunctionParameters } from "../../FunctionParameters.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {IVaultAlpaca} from "./interfaces/IVaultAlpaca.sol";
+import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
+import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract AlpacaHandler is IHandler {
   using SafeMathUpgradeable for uint256;
 
-  event Deposit(
-    uint256 time,
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to
-  );
+  event Deposit(uint256 time, address indexed user, address indexed token, uint256 amount, address indexed to);
   event Redeem(
     uint256 time,
     address indexed user,
@@ -62,28 +56,18 @@ contract AlpacaHandler is IHandler {
     if (_yieldAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IERC20Upgradeable underlyingToken = IERC20Upgradeable(
-      getUnderlying(_yieldAsset)[0]
-    );
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_yieldAsset)[0]);
     IVaultAlpaca yieldToken = IVaultAlpaca(_yieldAsset);
 
     if (msg.value == 0) {
-      TransferHelper.safeApprove(
-        address(underlyingToken),
-        address(yieldToken),
-        0
-      );
-      TransferHelper.safeApprove(
-        address(underlyingToken),
-        address(yieldToken),
-        _amount[0]
-      );
+      TransferHelper.safeApprove(address(underlyingToken), address(yieldToken), 0);
+      TransferHelper.safeApprove(address(underlyingToken), address(yieldToken), _amount[0]);
       yieldToken.deposit(_amount[0]);
     } else {
       if (msg.value < _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
-      yieldToken.deposit{ value: _amount[0] }(_amount[0]);
+      yieldToken.deposit{value: _amount[0]}(_amount[0]);
     }
 
     if (_to != address(this)) {
@@ -93,13 +77,10 @@ contract AlpacaHandler is IHandler {
     emit Deposit(block.timestamp, msg.sender, _yieldAsset, _amount[0], _to);
   }
 
-   /**
+  /**
    * @notice This function redeems assets from the Alpaca protocol
    */
-  function redeem(FunctionParameters.RedeemData calldata inputData)
-    public
-    override
-  {
+  function redeem(FunctionParameters.RedeemData calldata inputData) public override {
     if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -112,45 +93,25 @@ contract AlpacaHandler is IHandler {
     yieldToken.withdraw(inputData._amount);
 
     if (inputData._to != address(this)) {
-      IERC20Upgradeable underlyingToken = IERC20Upgradeable(
-        getUnderlying(inputData._yieldAsset)[0]
-      );
+      IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
       if (inputData.isWETH) {
-        (bool success, ) = payable(inputData._to).call{
-          value: address(this).balance
-        }("");
+        (bool success, ) = payable(inputData._to).call{value: address(this).balance}("");
         require(success, "Transfer failed.");
       } else {
         IERC20Upgradeable token = IERC20Upgradeable(underlyingToken);
         uint256 tokenAmount = token.balanceOf(address(this));
-        TransferHelper.safeTransfer(
-          address(underlyingToken),
-          inputData._to,
-          tokenAmount
-        );
+        TransferHelper.safeTransfer(address(underlyingToken), inputData._to, tokenAmount);
       }
     }
-    emit Redeem(
-      block.timestamp,
-      msg.sender,
-      inputData._yieldAsset,
-      inputData._amount,
-      inputData._to,
-      inputData.isWETH
-    );
+    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
-   /**
+  /**
    * @notice This function returns address of the underlying asset
    * @param _alpacaToken Address of the protocol token whose underlying asset is needed
    * @return underlying Address of the underlying asset
    */
-  function getUnderlying(address _alpacaToken)
-    public
-    view
-    override
-    returns (address[] memory)
-  {
+  function getUnderlying(address _alpacaToken) public view override returns (address[] memory) {
     if (_alpacaToken == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -166,12 +127,7 @@ contract AlpacaHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256 tokenBalance)
-  {
+  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -185,35 +141,21 @@ contract AlpacaHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256[] memory)
-  {
+  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
     uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, t);
-    tokenBalance[0] = yieldTokenBalance.mul(IVaultAlpaca(t).totalToken()).div(
-      IVaultAlpaca(t).totalSupply()
-    );
+    tokenBalance[0] = yieldTokenBalance.mul(IVaultAlpaca(t).totalToken()).div(IVaultAlpaca(t).totalSupply());
     return tokenBalance;
   }
 
-  function encodeData(address t, uint256 _amount)
-    public
-    returns (bytes memory)
-  {}
+  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address)
-    public
-    pure
-    returns (bytes memory, address)
-  {
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
     return ("", address(0));
   }
 

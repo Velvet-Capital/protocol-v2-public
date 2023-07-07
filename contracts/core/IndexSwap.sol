@@ -234,7 +234,10 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
         investData._lpSlippage
       )
     );
-    uint256 investedAmountAfterSlippageBNB = IndexSwapLibrary._getTokenPriceUSDETH(_oracle, investedAmountAfterSlippage);
+    uint256 investedAmountAfterSlippageBNB = IndexSwapLibrary._getTokenPriceUSDETH(
+      _oracle,
+      investedAmountAfterSlippage
+    );
 
     require(investedAmountAfterSlippageBNB > 0, "final invested amount is 0");
     uint256 tokenAmount;
@@ -298,7 +301,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     for (uint256 i = 0; i < _tokens.length; i++) {
       uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(IIndexSwap(address(this)), _tokens[i]);
 
-  //     require(tokenBalance.mul(initData.tokenAmount) >= totalSupplyIndex, "incorrect token amount");
+      //     require(tokenBalance.mul(initData.tokenAmount) >= totalSupplyIndex, "incorrect token amount");
 
       tokenBalance = tokenBalance.mul(initData.tokenAmount).div(totalSupplyIndex);
 
@@ -447,39 +450,39 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     _tokens = tokens;
   }
 
-  function vault() external view returns(address){
+  function vault() external view returns (address) {
     return _vault;
   }
 
-  function feeModule() external view returns (address){
+  function feeModule() external view returns (address) {
     return address(_feeModule);
   }
 
-  function exchange() external view returns (address){
+  function exchange() external view returns (address) {
     return address(_exchange);
   }
 
-  function tokenRegistry() external view returns (address){
+  function tokenRegistry() external view returns (address) {
     return address(_tokenRegistry);
   }
 
-  function accessController() external view returns (address){
+  function accessController() external view returns (address) {
     return address(_accessController);
   }
 
-  function paused() external view returns (bool){
+  function paused() external view returns (bool) {
     return _paused;
   }
 
-  function TOTAL_WEIGHT() external pure returns (uint256){
+  function TOTAL_WEIGHT() external pure returns (uint256) {
     return _TOTAL_WEIGHT;
   }
 
-  function iAssetManagerConfig() external view returns (address){
+  function iAssetManagerConfig() external view returns (address) {
     return address(_iAssetManagerConfig);
   }
 
-  function oracle() external view returns (address){
+  function oracle() external view returns (address) {
     return address(_oracle);
   }
 

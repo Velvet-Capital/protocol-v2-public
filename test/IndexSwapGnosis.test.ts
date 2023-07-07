@@ -338,9 +338,19 @@ describe.only("Tests for MixedIndex", () => {
       const executeTxResponse = await safeSdk.executeTransaction(safeTransaction);
       await executeTxResponse.transactionResponse?.wait();
 
-      await exchange.init(accessController.address, velvetSafeModule.address, priceOracle.address, tokenRegistry.address);
+      await exchange.init(
+        accessController.address,
+        velvetSafeModule.address,
+        priceOracle.address,
+        tokenRegistry.address,
+      );
       const abiEncoder = ethers.utils.defaultAbiCoder;
-      await velvetSafeModule.setUp(abiEncoder.encode(["address","address","address"],[newSafeAddress,exchange.address,addresses.gnosisMultisendLibrary]));
+      await velvetSafeModule.setUp(
+        abiEncoder.encode(
+          ["address", "address", "address"],
+          [newSafeAddress, exchange.address, addresses.gnosisMultisendLibrary],
+        ),
+      );
 
       const IndexSwap = await ethers.getContractFactory("IndexSwap", {
         libraries: {
@@ -797,7 +807,6 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("new asset manager should update tokens", async () => {
-
         const token = await ethers.getContractAt("VBep20Interface", addresses.Cake_BUSDLP_Address);
 
         await rebalancing.connect(nonOwner).updateTokens({

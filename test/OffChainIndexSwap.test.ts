@@ -412,9 +412,9 @@ describe.only("Tests for OffChainIndex", () => {
             _feeModuleImplementationAddress: feeModule.address,
             _baseVelvetGnosisSafeModuleAddress: velvetSafeModule.address,
             _gnosisSingleton: addresses.gnosisSingleton,
-            _gnosisFallbackLibrary : addresses.gnosisFallbackLibrary,
-            _gnosisMultisendLibrary : addresses.gnosisMultisendLibrary,
-            _gnosisSafeProxyFactory : addresses.gnosisSafeProxyFactory,
+            _gnosisFallbackLibrary: addresses.gnosisFallbackLibrary,
+            _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
+            _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
@@ -428,20 +428,24 @@ describe.only("Tests for OffChainIndex", () => {
       indexFactory = IndexFactory.attach(indexFactoryInstance.address);
 
       console.log("indexFactory address:", indexFactory.address);
-      const indexFactoryCreate = await indexFactory.createIndexCustodial({
-        name: "INDEXLY",
-        symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: whitelistedTokens,
-        _public: true,
-        _transferable: false,
-        _transferableToPublic: false,
-        _whitelistTokens: true,
-      },[owner.address],1);
+      const indexFactoryCreate = await indexFactory.createIndexCustodial(
+        {
+          name: "INDEXLY",
+          symbol: "IDX",
+          maxIndexInvestmentAmount: "500000000000000000000",
+          minIndexInvestmentAmount: "10000000000000000",
+          _managementFee: "100",
+          _performanceFee: "10",
+          _assetManagerTreasury: treasury.address,
+          _whitelistedTokens: whitelistedTokens,
+          _public: true,
+          _transferable: false,
+          _transferableToPublic: false,
+          _whitelistTokens: true,
+        },
+        [owner.address],
+        1,
+      );
 
       const indexFactoryCreate2 = await indexFactory.connect(nonOwner).createIndexNonCustodial({
         name: "INDEXLY",
@@ -634,7 +638,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -706,7 +712,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -802,7 +810,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -899,7 +909,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -990,7 +1002,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1075,7 +1089,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1164,7 +1180,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1196,7 +1214,7 @@ describe.only("Tests for OffChainIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("should withdraw fund and burn index token successfully for 1st Index", async() => {
+      it("should withdraw fund and burn index token successfully for 1st Index", async () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
         const AMOUNT = ethers.BigNumber.from(amountIndexToken);
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
@@ -1210,36 +1228,41 @@ describe.only("Tests for OffChainIndex", () => {
         var sellTokenAmountContract = [];
         var sellTokenSwapData = [];
 
-        for(let i = 0 ; i < tokens.length; i++){
-          if(tokens[i] != buyTokenAddress){
+        for (let i = 0; i < tokens.length; i++) {
+          if (tokens[i] != buyTokenAddress) {
             const params = {
               sellToken: tokens[i].toString(),
               buyToken: buyTokenAddress,
               sellAmount: tokenamount[i].toString(),
               slippagePercentage: 0.02,
-            }
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+            };
+            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+              "0x-api-key": process.env.ZEROX_KEY,
+            });
             sellTokenSwapData.push(response.data.data.toString());
             sellTokenAmountContract.push(tokenamount[i].toString());
-          }else{
+          } else {
             sellTokenSwapData.push("0x");
             sellTokenAmountContract.push(tokenamount[i].toString());
           }
         }
         const balanceBefore = await owner.getBalance();
         await offChainIndex.withdraw({
-          tokenAmount : AMOUNT,
-          buyToken : buyTokenAddress,
-          sellAmount : sellTokenAmountContract,
-          protocolFee : [0,0,0,0,0,0],
-          buySwapData : sellTokenSwapData,
-          offChainHandler : zeroExHandler.address
-        })
+          tokenAmount: AMOUNT,
+          buyToken: buyTokenAddress,
+          sellAmount: sellTokenAmountContract,
+          protocolFee: [0, 0, 0, 0, 0, 0],
+          buySwapData: sellTokenSwapData,
+          offChainHandler: zeroExHandler.address,
+        });
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const balanceAfter = await owner.getBalance();
-        console.log("Balace Diff",BigNumber.from(balanceAfter).sub(BigNumber.from(balanceBefore)))
-        console.log("Wbnb balance of contract",await ERC20.attach(iaddress.wbnbAddress).balanceOf(offChainIndex.address));
-      })
+        console.log("Balace Diff", BigNumber.from(balanceAfter).sub(BigNumber.from(balanceBefore)));
+        console.log(
+          "Wbnb balance of contract",
+          await ERC20.attach(iaddress.wbnbAddress).balanceOf(offChainIndex.address),
+        );
+      });
 
       it("should withdraw fund and burn index token successfully for 2nd Index in BUSD", async () => {
         const amountIndexToken = await indexSwap1.balanceOf(nonOwner.address);
@@ -1299,7 +1322,9 @@ describe.only("Tests for OffChainIndex", () => {
               sellAmount: m[key].toString(),
               slippagePercentage: 0.02,
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+              "0x-api-key": process.env.ZEROX_KEY,
+            });
             sellTokensContract.push(key);
             sellTokenSwapData.push(response.data.data.toString());
             sellTokenAmountContract.push(m[key].toString());
@@ -1361,7 +1386,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1430,7 +1457,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1502,7 +1531,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1596,7 +1627,7 @@ describe.only("Tests for OffChainIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it
+      it;
 
       it("should withdraw properly with rebalance in between", async () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
@@ -1656,7 +1687,9 @@ describe.only("Tests for OffChainIndex", () => {
               sellAmount: m[key].toString(),
               slippagePercentage: 0.02,
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+              "0x-api-key": process.env.ZEROX_KEY,
+            });
             sellTokensContract.push(key);
             sellTokenSwapData.push(response.data.data.toString());
             sellTokenAmountContract.push(m[key].toString());
@@ -1765,7 +1798,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1844,7 +1879,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1918,7 +1955,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -2020,7 +2059,9 @@ describe.only("Tests for OffChainIndex", () => {
               sellAmount: m2[key].toString(),
               slippagePercentage: 0.02,
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+              "0x-api-key": process.env.ZEROX_KEY,
+            });
             sellTokensContract.push(key);
             sellTokenSwapData.push(response.data.data.toString());
             sellTokenAmountContract.push(m2[key].toString());
@@ -2086,7 +2127,9 @@ describe.only("Tests for OffChainIndex", () => {
               sellAmount: m[key].toString(),
               slippagePercentage: 0.02,
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+              "0x-api-key": process.env.ZEROX_KEY,
+            });
             sellTokensContract2.push(key);
             sellTokenSwapData2.push(response.data.data.toString());
             sellTokenAmountContract2.push(m[key].toString());
@@ -2146,7 +2189,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -2214,7 +2259,9 @@ describe.only("Tests for OffChainIndex", () => {
                 sellAmount: buyVal.toString(),
                 slippagePercentage: 0.02,
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`,{ '0x-api-key': process.env.ZEROX_KEY});
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());

@@ -367,9 +367,9 @@ describe.only("Tests for IndexFactory", () => {
             _feeModuleImplementationAddress: feeModule.address,
             _baseVelvetGnosisSafeModuleAddress: velvetSafeModule.address,
             _gnosisSingleton: addresses.gnosisSingleton,
-            _gnosisFallbackLibrary : addresses.gnosisFallbackLibrary,
-            _gnosisMultisendLibrary : addresses.gnosisMultisendLibrary,
-            _gnosisSafeProxyFactory : addresses.gnosisSafeProxyFactory,
+            _gnosisFallbackLibrary: addresses.gnosisFallbackLibrary,
+            _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
+            _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
@@ -447,20 +447,24 @@ describe.only("Tests for IndexFactory", () => {
         _whitelistTokens: true,
       });
 
-      const indexFactoryCreate2 = await indexFactory.connect(nonOwner).createIndexCustodial({
-        name: "INDEXL",
-        symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
-        _assetManagerTreasury: assetManagerTreasury.address,
-        _whitelistedTokens: whitelistedTokens,
-        _public: false,
-        _transferable: true,
-        _transferableToPublic: false,
-        _whitelistTokens: false,
-      },[owner.address,nonOwner.address],2);
+      const indexFactoryCreate2 = await indexFactory.connect(nonOwner).createIndexCustodial(
+        {
+          name: "INDEXL",
+          symbol: "IDX",
+          maxIndexInvestmentAmount: "500000000000000000000",
+          minIndexInvestmentAmount: "10000000000000000",
+          _managementFee: "100",
+          _performanceFee: "10",
+          _assetManagerTreasury: assetManagerTreasury.address,
+          _whitelistedTokens: whitelistedTokens,
+          _public: false,
+          _transferable: true,
+          _transferableToPublic: false,
+          _whitelistTokens: false,
+        },
+        [owner.address, nonOwner.address],
+        2,
+      );
 
       const indexFactoryCreate3 = await indexFactory.connect(nonOwner).createIndexNonCustodial({
         name: "INDEXLY",
@@ -544,39 +548,50 @@ describe.only("Tests for IndexFactory", () => {
     });
 
     describe("IndexFactory Contract", function () {
-
-      it("should revert back if the custodial is true and no address is passed in _owner", async () =>{
-        await expect(indexFactory.connect(nonOwner).createIndexCustodial({
-          name: "INDEXLY",
-          symbol: "IDX",
-          maxIndexInvestmentAmount: "500000000000000000000",
-          minIndexInvestmentAmount: "10000000000000000",
-          _managementFee: "100",
-          _performanceFee: "10",
-          _assetManagerTreasury: assetManagerTreasury.address,
-          _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
-          _public: true,
-          _transferable: true,
-          _transferableToPublic: true,
-          _whitelistTokens: false,
-        },[],1)).to.be.revertedWithCustomError(indexFactory,"NoOwnerPassed");
+      it("should revert back if the custodial is true and no address is passed in _owner", async () => {
+        await expect(
+          indexFactory.connect(nonOwner).createIndexCustodial(
+            {
+              name: "INDEXLY",
+              symbol: "IDX",
+              maxIndexInvestmentAmount: "500000000000000000000",
+              minIndexInvestmentAmount: "10000000000000000",
+              _managementFee: "100",
+              _performanceFee: "10",
+              _assetManagerTreasury: assetManagerTreasury.address,
+              _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
+              _public: true,
+              _transferable: true,
+              _transferableToPublic: true,
+              _whitelistTokens: false,
+            },
+            [],
+            1,
+          ),
+        ).to.be.revertedWithCustomError(indexFactory, "NoOwnerPassed");
       });
 
-      it("should revert back if the _custodial is true and threshold is more than owner length", async () =>{
-        await expect(indexFactory.connect(nonOwner).createIndexCustodial({
-          name: "INDEXLY",
-          symbol: "IDX",
-          maxIndexInvestmentAmount: "500000000000000000000",
-          minIndexInvestmentAmount: "10000000000000000",
-          _managementFee: "100",
-          _performanceFee: "10",
-          _assetManagerTreasury: assetManagerTreasury.address,
-          _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
-          _public: true,
-          _transferable: true,
-          _transferableToPublic: true,
-          _whitelistTokens: false,
-        },[owner.address],2)).to.be.revertedWithCustomError(indexFactory,"InvalidThresholdLength");
+      it("should revert back if the _custodial is true and threshold is more than owner length", async () => {
+        await expect(
+          indexFactory.connect(nonOwner).createIndexCustodial(
+            {
+              name: "INDEXLY",
+              symbol: "IDX",
+              maxIndexInvestmentAmount: "500000000000000000000",
+              minIndexInvestmentAmount: "10000000000000000",
+              _managementFee: "100",
+              _performanceFee: "10",
+              _assetManagerTreasury: assetManagerTreasury.address,
+              _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
+              _public: true,
+              _transferable: true,
+              _transferableToPublic: true,
+              _whitelistTokens: false,
+            },
+            [owner.address],
+            2,
+          ),
+        ).to.be.revertedWithCustomError(indexFactory, "InvalidThresholdLength");
       });
 
       it("should check Index token name and symbol", async () => {
@@ -644,16 +659,16 @@ describe.only("Tests for IndexFactory", () => {
         await index.connect(nonOwner).initToken([iaddress.btcAddress, addresses.vBTC_Address], [5000, 5000]);
       });
 
-      it("Owner of vault for 1st fund should be exchangeHandler address", async () =>{
-        const safe = indexInfo.vaultAddress
+      it("Owner of vault for 1st fund should be exchangeHandler address", async () => {
+        const safe = indexInfo.vaultAddress;
         const gnosisSafe = await ethers.getContractFactory("GnosisSafe");
         const gnosisContract = await gnosisSafe.attach(safe);
 
         expect((await gnosisContract.getOwners())[0]).to.be.equal(indexInfo.exchangeHandler);
       });
 
-      it("Owner of vault for 2nd fund should be deployer's addressess", async () =>{
-        const safe = indexInfo1.vaultAddress
+      it("Owner of vault for 2nd fund should be deployer's addressess", async () => {
+        const safe = indexInfo1.vaultAddress;
         const gnosisSafe = await ethers.getContractFactory("GnosisSafe");
         const gnosisContract = await gnosisSafe.attach(safe);
 
@@ -661,16 +676,16 @@ describe.only("Tests for IndexFactory", () => {
         expect((await gnosisContract.getOwners())[1]).to.be.equal(nonOwner.address);
       });
 
-      it("Owner of vault for 3rd fund should be exchangeHandler address", async () =>{
-        const safe = indexInfo2.vaultAddress
+      it("Owner of vault for 3rd fund should be exchangeHandler address", async () => {
+        const safe = indexInfo2.vaultAddress;
         const gnosisSafe = await ethers.getContractFactory("GnosisSafe");
         const gnosisContract = await gnosisSafe.attach(safe);
 
         expect((await gnosisContract.getOwners())[0]).to.be.equal(indexInfo2.exchangeHandler);
       });
 
-      it("Owner of vault for 4th fund should be exchangeHandler address", async () =>{
-        const safe = indexInfo3.vaultAddress
+      it("Owner of vault for 4th fund should be exchangeHandler address", async () => {
+        const safe = indexInfo3.vaultAddress;
         const gnosisSafe = await ethers.getContractFactory("GnosisSafe");
         const gnosisContract = await gnosisSafe.attach(safe);
 

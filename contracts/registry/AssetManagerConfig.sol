@@ -1,21 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable, Initializable } from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 
-import { IAccessController } from "../access/IAccessController.sol";
+import {IAccessController} from "../access/IAccessController.sol";
 
-import { ITokenRegistry } from "../registry/ITokenRegistry.sol";
+import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
 
-import { FunctionParameters } from "../FunctionParameters.sol";
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
-contract AssetManagerConfig is
-  Initializable,
-  OwnableUpgradeable,
-  UUPSUpgradeable
-{
+contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   IAccessController public accessController;
   ITokenRegistry public tokenRegistry;
 
@@ -51,10 +47,7 @@ contract AssetManagerConfig is
   event UpdatePerformanceFee(uint256 indexed time, uint256 indexed performanceFee);
   event SetPermittedTokens(uint256 indexed time, address[] _newTokens);
 
-  function init(FunctionParameters.AssetManagerConfigInitData calldata initData)
-    external
-    initializer
-  {
+  function init(FunctionParameters.AssetManagerConfigInitData calldata initData) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
     if (initData._assetManagerTreasury == address(0)) {
@@ -88,18 +81,14 @@ contract AssetManagerConfig is
   }
 
   modifier onlyAssetManager() {
-    if (
-      !(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))
-    ) {
+    if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
       revert ErrorLibrary.CallerNotAssetManager();
     }
     _;
   }
 
   modifier onlyWhitelistManager() {
-    if (
-      !(accessController.hasRole(keccak256("WHITELIST_MANAGER"), msg.sender))
-    ) {
+    if (!(accessController.hasRole(keccak256("WHITELIST_MANAGER"), msg.sender))) {
       revert ErrorLibrary.CallerNotWhitelistManager();
     }
     _;
@@ -108,11 +97,7 @@ contract AssetManagerConfig is
   /**
    * @notice This function updates the newManagementFee (staging)
    */
-  function proposeNewManagementFee(uint256 _newManagementFee)
-    public
-    virtual
-    onlyAssetManager
-  {
+  function proposeNewManagementFee(uint256 _newManagementFee) public virtual onlyAssetManager {
     if (_newManagementFee > tokenRegistry.maxManagementFee()) {
       revert ErrorLibrary.InvalidFee();
     }
@@ -142,11 +127,7 @@ contract AssetManagerConfig is
   /**
    * @notice This function updates the newPerformanceFee (staging)
    */
-  function proposeNewPerformanceFee(uint256 _newPerformanceFee)
-    public
-    virtual
-    onlyAssetManager
-  {
+  function proposeNewPerformanceFee(uint256 _newPerformanceFee) public virtual onlyAssetManager {
     if (_newPerformanceFee > tokenRegistry.maxPerformanceFee()) {
       revert ErrorLibrary.InvalidFee();
     }
@@ -154,14 +135,10 @@ contract AssetManagerConfig is
     proposedPerformanceFeeTime = block.timestamp;
   }
 
- /**
-  * @notice This function permits a portfolio token from the asset manager side
-  */
-  function setPermittedTokens(address[] calldata _newTokens)
-    external
-    virtual
-    onlyAssetManager
-  {
+  /**
+   * @notice This function permits a portfolio token from the asset manager side
+   */
+  function setPermittedTokens(address[] calldata _newTokens) external virtual onlyAssetManager {
     if (_newTokens.length == 0) {
       revert ErrorLibrary.InvalidLength();
     }
@@ -185,11 +162,7 @@ contract AssetManagerConfig is
   /**
    * @notice This function removes permission from a previously permitted token
    */
-  function deletePermittedTokens(address[] calldata _tokens)
-    external
-    virtual
-    onlyAssetManager
-  {
+  function deletePermittedTokens(address[] calldata _tokens) external virtual onlyAssetManager {
     if (_tokens.length == 0) {
       revert ErrorLibrary.InvalidLength();
     }
@@ -236,22 +209,14 @@ contract AssetManagerConfig is
   /**
    * @notice This function update the address of assetManagerTreasury
    */
-  function updateAssetManagerTreasury(address _newAssetManagementTreasury)
-    public
-    virtual
-    onlyAssetManager
-  {
+  function updateAssetManagerTreasury(address _newAssetManagementTreasury) public virtual onlyAssetManager {
     assetManagerTreasury = _newAssetManagementTreasury;
   }
 
   /**
    * @notice This function whitelists users which can invest in a particular index
    */
-  function addWhitelistedUser(address[] calldata users)
-    public
-    virtual
-    onlyWhitelistManager
-  {
+  function addWhitelistedUser(address[] calldata users) public virtual onlyWhitelistManager {
     uint256 len = users.length;
     for (uint256 i = 0; i < len; i++) {
       whitelistedUsers[users[i]] = true;
@@ -261,11 +226,7 @@ contract AssetManagerConfig is
   /**
    * @notice This function removes a previously whitelisted user
    */
-  function removeWhitelistedUser(address[] calldata users)
-    public
-    virtual
-    onlyWhitelistManager
-  {
+  function removeWhitelistedUser(address[] calldata users) public virtual onlyWhitelistManager {
     uint256 len = users.length;
     for (uint256 i = 0; i < len; i++) {
       whitelistedUsers[users[i]] = false;
@@ -286,10 +247,5 @@ contract AssetManagerConfig is
    * @notice Authorizes upgrade for this contract
    * @param newImplementation Address of the new implementation
    */
-  function _authorizeUpgrade(address newImplementation)
-    internal
-    virtual
-    override
-    onlyOwner
-  {}
+  function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {}
 }

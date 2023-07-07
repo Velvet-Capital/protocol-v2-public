@@ -15,8 +15,7 @@ export const ETHMainNet: ChainAddresses = {
   //ChainLink
   LINK_Address: "0x514910771af9ca656af840dff83e8264ecf986ca",
   VRFCoordinator: "0xf0d54349aDdcf704F77AE15b96510dEA15cb7952",
-  VRFKeyHash:
-    "0xAA77729D3466CA35AE8D28B3BBAC7CC36A5031EFDC430821C02BC31A238AF445",
+  VRFKeyHash: "0xAA77729D3466CA35AE8D28B3BBAC7CC36A5031EFDC430821C02BC31A238AF445",
   VRFFee: parseEther("2.0"), //2 LINK fee
 };
 
@@ -36,8 +35,7 @@ export const BSCTestNet: ChainAddresses = {
   //ChainLink
   LINK_Address: "0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06",
   VRFCoordinator: "0xa555fC018435bef5A13C6c6870a9d4C11DEC329C",
-  VRFKeyHash:
-    "0xc251acd21ec4fb7f31bb8868288bfdbaeb4fbfec2df3735ddbd4f7dc8d60103c",
+  VRFKeyHash: "0xc251acd21ec4fb7f31bb8868288bfdbaeb4fbfec2df3735ddbd4f7dc8d60103c",
   VRFFee: parseEther("0.1"), //0.1 LINK fee
 };
 
@@ -143,11 +141,11 @@ export const BSCMainNet: ChainAddresses = {
   biswap_RewardToken: "0x965F527D9159dCe6288a2219DB51fc6Eef120dD1",
 
   //GnosisContracts
-  gnosisSingleton : "0x3E5c63644E683549055b9Be8653de26E0B4CD36E",
-  gnosisFallbackLibrary : "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4",
-  gnosisMultisendLibrary : "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
-  gnosisSafeProxyFactory :"0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2",
-  moduleProxyFactory : "0x76E2cFc1F5Fa8F6a5b3fC4c8F4788F0116861F9B",
+  gnosisSingleton: "0x3E5c63644E683549055b9Be8653de26E0B4CD36E",
+  gnosisFallbackLibrary: "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4",
+  gnosisMultisendLibrary: "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
+  gnosisSafeProxyFactory: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2",
+  moduleProxyFactory: "0x76E2cFc1F5Fa8F6a5b3fC4c8F4788F0116861F9B",
 };
 
 export const MaticMainNet: ChainAddresses = {

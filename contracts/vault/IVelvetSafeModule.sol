@@ -10,5 +10,5 @@ interface IVelvetSafeModule {
 
   function executeWallet(address handlerAddresses, bytes calldata encodedCalls) external returns (bool isSuccess);
 
-  function executeWalletDelegate(bytes calldata encodedCalls)external returns (bool isSuccess);
+  function executeWalletDelegate(bytes calldata encodedCalls) external returns (bool isSuccess);
 }

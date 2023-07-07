@@ -80,12 +80,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
    * @param _token Address of the token to be checked
    * @param _protocol Address of the protocol in question
    */
-  function isWETH(address _token, address _protocol)
-    public
-    view
-    virtual
-    returns (bool)
-  {
+  function isWETH(address _token, address _protocol) public view virtual returns (bool) {
     IHandler protocol = IHandler(_protocol);
     address[] memory underlying = protocol.getUnderlying(_token);
     address ethAddress = tokenRegistry.getETH();
@@ -138,7 +133,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
     _safeTokenTransfer(token, amount, to);
   }
 
-   /**
+  /**
    * @notice Internal function to transfer tokens from vault to a specific address
    * @param token Address of the token to be pulled
    * @param amount Amount of the token to be pulled
@@ -146,21 +141,16 @@ contract Exchange is Initializable, UUPSUpgradeable {
    */
 
   function _safeTokenTransfer(address token, uint256 amount, address to) internal {
-     bytes memory inputData = abi.encodeWithSelector(
-      IERC20Upgradeable.transfer.selector,
-      to,
-      amount
-    );
+    bytes memory inputData = abi.encodeWithSelector(IERC20Upgradeable.transfer.selector, to, amount);
 
     safe.executeWallet(token, inputData);
-
   }
 
   /**
    * @notice Transfer tokens from vault to a specific address
    */
   function _pullFromVaultRewards(address token, uint256 amount, address to) public onlyIndexManager {
-    _safeTokenTransfer(token,  amount,  to);
+    _safeTokenTransfer(token, amount, to);
   }
 
   /**
@@ -277,7 +267,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
 
   /**
    * @notice This function swaps one token to another
-   * @param inputData Includes the input params 
+   * @param inputData Includes the input params
    * @return swapResult Final outcome after swap
    */
   function _swapTokenToToken(
@@ -338,7 +328,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
 
   /**
    * @notice This function swaps one token to another while investing
-   * @param inputData Includes the input params 
+   * @param inputData Includes the input params
    * @return swapResult Final amount after swap
    */
   function _swapTokenToTokenInvest(
@@ -396,7 +386,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
 
   /**
    * @notice This function swaps one token to another while withdraw
-   * @param inputData Includes the input params 
+   * @param inputData Includes the input params
    * @return swapResult Final amount after swap
    */
   function _swapTokenToTokenWithdraw(
@@ -465,7 +455,6 @@ contract Exchange is Initializable, UUPSUpgradeable {
     return swapResult;
   }
 
-
   // important to receive ETH
   receive() external payable {}
 
@@ -473,9 +462,5 @@ contract Exchange is Initializable, UUPSUpgradeable {
    * @notice Authorizes upgrade for this contract
    * @param newImplementation Address of the new implementation
    */
-  function _authorizeUpgrade(address newImplementation)
-    internal
-    virtual
-    override
-  {}
+  function _authorizeUpgrade(address newImplementation) internal virtual override {}
 }

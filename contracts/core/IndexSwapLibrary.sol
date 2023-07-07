@@ -28,7 +28,7 @@ import {IFeeModule} from "../fee/IFeeModule.sol";
 import {IExchange} from "./IExchange.sol";
 import {IHandler, FunctionParameters} from "../handler/IHandler.sol";
 
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 library IndexSwapLibrary {
   using SafeMathUpgradeable for uint256;
@@ -57,7 +57,10 @@ library IndexSwapLibrary {
         tokenBalanceUSD = 0;
         for (uint256 j = 0; j < tokenBalance.length; j++) {
           if (tokenBalance[j] > 0) {
-            tokenBalanceUSD += IPriceOracle(exchange.oracle()).getPriceTokenUSD18Decimals(underlying[j], tokenBalance[j]);
+            tokenBalanceUSD += IPriceOracle(exchange.oracle()).getPriceTokenUSD18Decimals(
+              underlying[j],
+              tokenBalance[j]
+            );
           }
         }
         tokenBalanceInUSD[i] = tokenBalanceUSD;
@@ -148,7 +151,7 @@ library IndexSwapLibrary {
     bool isETH
   ) external {
     TransferHelper.safeTransfer(token, address(handler), swapAmount);
-    handler.redeem(FunctionParameters.RedeemData(swapAmount, _lpSlippage,to, token, isETH));
+    handler.redeem(FunctionParameters.RedeemData(swapAmount, _lpSlippage, to, token, isETH));
   }
 
   /**
@@ -298,11 +301,11 @@ library IndexSwapLibrary {
     return (amount);
   }
 
-  function calculateWithdrawAmount(IIndexSwap index,uint256 _tokenAmount) external view returns(uint256[] memory){
+  function calculateWithdrawAmount(IIndexSwap index, uint256 _tokenAmount) external view returns (uint256[] memory) {
     uint256 supply = index.totalSupply();
     address[] memory _tokens = index.getTokens();
     uint256[] memory _tokenAmounts = new uint256[](_tokens.length);
-    for(uint i = 0 ; i < _tokens.length; i++){
+    for (uint i = 0; i < _tokens.length; i++) {
       IHandler handler = IHandler(ITokenRegistry(index.tokenRegistry()).getTokenInformation(_tokens[i]).handler);
       uint256 tokenBalance = handler.getTokenBalance(index.vault(), _tokens[i]);
       _tokenAmounts[i] = tokenBalance.mul(_tokenAmount).div(supply);
@@ -456,7 +459,11 @@ library IndexSwapLibrary {
    * @param amount The amount to convert to USD
    * @return amountInUSD The converted USD amount
    */
-  function _getTokenAmountInUSD(address _oracle, address t, uint256 amount) external view returns (uint256 amountInUSD) {
+  function _getTokenAmountInUSD(
+    address _oracle,
+    address t,
+    uint256 amount
+  ) external view returns (uint256 amountInUSD) {
     amountInUSD = IPriceOracle(_oracle).getPriceTokenUSD18Decimals(t, amount);
   }
 
@@ -469,15 +476,15 @@ library IndexSwapLibrary {
     tokenBalance = handler.getTokenBalance(_index.vault(), t);
   }
 
-  function checkPrimary(IIndexSwap index ,address[] calldata tokens) external view{
-    for(uint i = 0 ; i < tokens.length; i++){
-      if(ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary == false){
+  function checkPrimary(IIndexSwap index, address[] calldata tokens) external view {
+    for (uint i = 0; i < tokens.length; i++) {
+      if (ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary == false) {
         revert ErrorLibrary.NotPrimaryToken();
       }
     }
   }
 
-  function beforeWithdrawOffChain(bool status, ITokenRegistry tokenRegistry,address handler) external view {
+  function beforeWithdrawOffChain(bool status, ITokenRegistry tokenRegistry, address handler) external view {
     if (status == false) {
       revert ErrorLibrary.TokensNotRedeemed();
     }
@@ -486,7 +493,7 @@ library IndexSwapLibrary {
     }
   }
 
-  function chargeFees(IIndexSwap index,IFeeModule feeModule) external returns(uint256 vaultBalance){
+  function chargeFees(IIndexSwap index, IFeeModule feeModule) external returns (uint256 vaultBalance) {
     (, vaultBalance) = getTokenAndVaultBalance(index, index.getTokens());
     uint256 vaultBalanceInBNB = IPriceOracle(index.oracle()).getUsdEthPrice(vaultBalance);
     feeModule.chargeFeesFromIndex(vaultBalanceInBNB);

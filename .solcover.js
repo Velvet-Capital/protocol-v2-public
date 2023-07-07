@@ -1,4 +1,4 @@
 module.exports = {
-    // skipFiles: ['./handler/ExternalSwapHandler/OpenOceanHandler.sol']
-    configureYulOptimizer: true
-  };
+  // skipFiles: ['./handler/ExternalSwapHandler/OpenOceanHandler.sol']
+  configureYulOptimizer: true,
+};

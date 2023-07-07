@@ -2,30 +2,23 @@
 pragma solidity 0.8.16;
 
 interface IVBNB {
-    function transfer(address dst, uint256 amount) external returns (bool);
+  function transfer(address dst, uint256 amount) external returns (bool);
 
-    function transferFrom(
-        address src,
-        address dst,
-        uint256 amount
-    ) external returns (bool);
+  function transferFrom(address src, address dst, uint256 amount) external returns (bool);
 
-    function approve(address spender, uint256 amount) external returns (bool);
+  function approve(address spender, uint256 amount) external returns (bool);
 
-    function allowance(
-        address owner,
-        address spender
-    ) external view returns (uint256);
+  function allowance(address owner, address spender) external view returns (uint256);
 
-    function balanceOf(address owner) external view returns (uint256);
+  function balanceOf(address owner) external view returns (uint256);
 
-    function balanceOfUnderlying(address owner) external returns (uint256);
+  function balanceOfUnderlying(address owner) external returns (uint256);
 
-    function mint() external payable;
+  function mint() external payable;
 
-    function redeem(uint256 redeemTokens) external returns (uint256);
+  function redeem(uint256 redeemTokens) external returns (uint256);
 
-    function redeemUnderlying(uint256 redeemAmount) external returns (uint256);
+  function redeemUnderlying(uint256 redeemAmount) external returns (uint256);
 
-    function exchangeRateCurrent() external view returns (uint256);
+  function exchangeRateCurrent() external view returns (uint256);
 }

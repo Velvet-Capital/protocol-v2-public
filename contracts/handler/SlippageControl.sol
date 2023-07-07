@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import { Ownable } from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
-import { SafeMath } from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 abstract contract SlippageControl is Ownable {
   using SafeMath for uint256;
@@ -17,14 +17,8 @@ abstract contract SlippageControl is Ownable {
     maxSlippage = _slippage;
   }
 
-  function getSlippage(uint256 _amount, uint256 _lpSlippage)
-    internal
-    view
-    returns (uint256 minAmount)
-  {
+  function getSlippage(uint256 _amount, uint256 _lpSlippage) internal view returns (uint256 minAmount) {
     require(maxSlippage >= _lpSlippage, "Invalid LP Slippage!");
-    minAmount = _amount.mul(HUNDRED_PERCENT.sub(_lpSlippage)).div(
-      HUNDRED_PERCENT
-    );
+    minAmount = _amount.mul(HUNDRED_PERCENT.sub(_lpSlippage)).div(HUNDRED_PERCENT);
   }
 }

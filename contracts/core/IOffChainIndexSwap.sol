@@ -14,27 +14,19 @@
 
 pragma solidity 0.8.16;
 
-import { IIndexSwap } from "../core/IIndexSwap.sol";
+import {IIndexSwap} from "../core/IIndexSwap.sol";
 
-import { FunctionParameters } from "../FunctionParameters.sol";
-import { ExchangeData } from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
+import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
 
 interface IOffChainIndexSwap {
-  function init(address indexSwap)
-    external;
+  function init(address indexSwap) external;
 
-  function offChainInvestment(
-    ExchangeData.ZeroExData memory inputData
-  ) external payable returns (uint256 balanceInUSD);
+  function offChainInvestment(ExchangeData.ZeroExData memory inputData) external payable returns (uint256 balanceInUSD);
 
-  function redeemTokens(
-    uint256 tokenAmount,
-    address _token,
-    address _swapHandler
-  ) external;
+  function redeemTokens(uint256 tokenAmount, address _token, address _swapHandler) external;
 
   function withdrawOffChain(ExchangeData.ZeroExWithdraw memory inputData) external;
 
-  function getTokenAmounts(address _user,address _token) external returns(uint256[] memory);
-
+  function getTokenAmounts(address _user, address _token) external returns (uint256[] memory);
 }

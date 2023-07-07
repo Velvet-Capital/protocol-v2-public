@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { RouterInterface } from "./interfaces/RouterInterface.sol";
-import { SlippageControl } from "./SlippageControl.sol";
-import { FunctionParameters } from "../FunctionParameters.sol";
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
-import { LPInterface } from "./interfaces/LPInterface.sol";
-import { Babylonian } from "@uniswap/lib/contracts/libraries/Babylonian.sol";
-import { FactoryInterface } from "./interfaces/FactoryInterface.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-import { FullMath } from "./libraries/FullMath.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {RouterInterface} from "./interfaces/RouterInterface.sol";
+import {SlippageControl} from "./SlippageControl.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {LPInterface} from "./interfaces/LPInterface.sol";
+import {Babylonian} from "@uniswap/lib/contracts/libraries/Babylonian.sol";
+import {FactoryInterface} from "./interfaces/FactoryInterface.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {FullMath} from "./libraries/FullMath.sol";
 pragma solidity 0.8.16;
 
 abstract contract UniswapV2LPHandler is SlippageControl {
-    using SafeMathUpgradeable for uint;
+  using SafeMathUpgradeable for uint;
   event VELVET_ADDED_LIQUIDITY(uint256[] amountProvided, uint256 minAmountA, uint256 minAmountB, uint256 liquidity);
   event VELVET_REMOVE_LIQUIDITY(uint256 liquidityProvided, uint256 amountA, uint256 amountB);
   uint256 amountA;
   uint256 amountB;
   uint256 liquidity;
 
-   /**
+  /**
    * @notice This function adds liquidity to the BiSwap protocol
    * @param _lpAsset Address of the protocol asset to be deposited
    * @param _amount Amount that is to be deposited
@@ -35,7 +35,7 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     address _to,
     address routerAddress
   ) internal {
-     if (_lpAsset == address(0) || _to == address(0)) {
+    if (_lpAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     address[] memory underlying = _getUnderlyingTokens(_lpAsset);
@@ -71,13 +71,11 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     }
     emit VELVET_ADDED_LIQUIDITY(_amount, amountA, amountB, liquidity);
   }
+
   /**
    * @notice This function remove liquidity from the called protocol
    */
-  function _redeem(
-    FunctionParameters.RedeemData calldata inputData,
-    address routerAddress
-  ) internal {
+  function _redeem(FunctionParameters.RedeemData calldata inputData, address routerAddress) internal {
     if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -87,7 +85,7 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     }
     address[] memory underlying = _getUnderlyingTokens(inputData._yieldAsset);
     RouterInterface router = RouterInterface(routerAddress);
-   if (inputData.isWETH) {
+    if (inputData.isWETH) {
       uint256 indexi = 0;
       uint256 indexj = 1;
       if (underlying[0] == router.WETH()) {
@@ -122,9 +120,10 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     }
     emit VELVET_REMOVE_LIQUIDITY(inputData._amount, amountA, amountB);
   }
- /**
+
+  /**
    * @notice This function is used to fetch liquidty amount for given lp asset
-   */ 
+   */
   function _getLiquidityValue(
     address lpToken,
     uint256 liquidityAmount
@@ -139,9 +138,10 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     uint256 totalSupply = pair.totalSupply();
     return _computeLiquidityValue(reservesA, reservesB, totalSupply, liquidityAmount, feeOn, kLast);
   }
-   /**
+
+  /**
    * @notice This function is used to compute liquidty for various operations.
-   */ 
+   */
   function _computeLiquidityValue(
     uint256 reservesA,
     uint256 reservesB,
@@ -157,30 +157,19 @@ abstract contract UniswapV2LPHandler is SlippageControl {
         uint256 numerator1 = totalSupply;
         uint256 numerator2 = rootK.sub(rootKLast);
         uint256 denominator = rootK.mul(5).add(rootKLast);
-        uint256 feeLiquidity = FullMath.mulDiv(
-          numerator1,
-          numerator2,
-          denominator
-        );
+        uint256 feeLiquidity = FullMath.mulDiv(numerator1, numerator2, denominator);
         totalSupply = totalSupply.add(feeLiquidity);
       }
     }
-    return (
-      reservesA.mul(liquidityAmount) / totalSupply,
-      reservesB.mul(liquidityAmount) / totalSupply
-    );
+    return (reservesA.mul(liquidityAmount) / totalSupply, reservesB.mul(liquidityAmount) / totalSupply);
   }
+
   /**
    * @notice This function returns address of the underlying asset
    * @param _lpToken Address of the protocol token whose underlying asset is needed
    * @return underlying Address of the underlying asset
    */
-   function _getUnderlyingTokens(address _lpToken)
-    virtual
-    internal
-    view
-    returns (address[] memory)
-  {
+  function _getUnderlyingTokens(address _lpToken) internal view virtual returns (address[] memory) {
     if (_lpToken == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -191,17 +180,13 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     return underlying;
   }
 
-    /**
+  /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
    * @param t Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function _getTokenBalance(address _tokenHolder, address t)
-    internal
-    view
-    returns (uint256 tokenBalance)
-  {
+  function _getTokenBalance(address _tokenHolder, address t) internal view returns (uint256 tokenBalance) {
     if (_tokenHolder == address(0) || t == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -209,17 +194,13 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     tokenBalance = token.balanceOf(_tokenHolder);
   }
 
-    /**
+  /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
    * @param t Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function _getUnderlyingBalance(address _tokenHolder, address t)
-    internal
-    view
-    returns (uint256[] memory)
-  {
+  function _getUnderlyingBalance(address _tokenHolder, address t) internal view returns (uint256[] memory) {
     if (_tokenHolder == address(0) || t == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }

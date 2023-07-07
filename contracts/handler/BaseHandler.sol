@@ -15,13 +15,12 @@
 
 pragma solidity 0.8.16;
 
-import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { IHandler } from "./IHandler.sol";
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {IHandler} from "./IHandler.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
 
 contract BaseHandler is IHandler {
-
   /**
    * @notice This function deposits assets to the base tokens
    * @param _vAsset Address of the protocol asset to be deposited
@@ -39,22 +38,14 @@ contract BaseHandler is IHandler {
   /**
    * @notice This function redeems assets deposited into the base tokens
    */
-  function redeem(FunctionParameters.RedeemData calldata inputData)
-    public
-    override
-  {}
+  function redeem(FunctionParameters.RedeemData calldata inputData) public override {}
 
   /**
    * @notice This function returns address of the underlying asset
    * @param _vToken Address of the protocol token whose underlying asset is needed
    * @return underlying Address of the underlying asset
    */
-  function getUnderlying(address _vToken)
-    public
-    pure
-    override
-    returns (address[] memory)
-  {
+  function getUnderlying(address _vToken) public pure override returns (address[] memory) {
     address[] memory underlying = new address[](1);
     underlying[0] = _vToken;
     return underlying;
@@ -66,12 +57,7 @@ contract BaseHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256 tokenBalance)
-  {
+  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
     IERC20Upgradeable token = IERC20Upgradeable(t);
     tokenBalance = token.balanceOf(_tokenHolder);
   }
@@ -82,30 +68,18 @@ contract BaseHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256[] memory)
-  {
+  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
     uint256[] memory tokenBalance = new uint256[](1);
     IERC20Upgradeable token = IERC20Upgradeable(t);
     tokenBalance[0] = token.balanceOf(_tokenHolder);
     return tokenBalance;
   }
 
-  function encodeData(address t, uint256 _amount)
-    public
-    returns (bytes memory)
-  {}
+  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address)
-    public
-    pure
-    returns (bytes memory, address)
-  {
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
     return ("", address(0));
   }
 

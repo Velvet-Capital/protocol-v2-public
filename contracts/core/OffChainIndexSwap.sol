@@ -112,7 +112,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
       IndexSwapLibrary._checkInvestmentValue(tokenBalanceInBNB, iAssetManagerConfig);
       TransferHelper.safeTransferFrom(_initData.sellTokenAddress, msg.sender, address(indexOperations), _tokenAmount);
     }
-    vaultBalance = IndexSwapLibrary.chargeFees(index,feeModule);
+    vaultBalance = IndexSwapLibrary.chargeFees(index, feeModule);
     balanceInUSD = _offChainInvestment(_initData, indexOperations, _lpSlippage);
     uint256 investedAmountAfterSlippageBNB = IndexSwapLibrary._getTokenPriceUSDETH(oracle, balanceInUSD);
 
@@ -152,9 +152,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     balanceInUSD = 0;
     address[] memory _tokens = index.getTokens();
     for (uint256 i = 0; i < _tokens.length; i++) {
-      IHandler handler = IHandler(
-        ITokenRegistry(index.tokenRegistry()).getTokenInformation(_tokens[i]).handler
-      );
+      IHandler handler = IHandler(ITokenRegistry(index.tokenRegistry()).getTokenInformation(_tokens[i]).handler);
 
       (balanceInUSD, underlyingIndex) = indexOperations.swapOffChainTokens(
         ExchangeData.IndexOperationData(
@@ -164,7 +162,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
           underlyingIndex,
           inputData.protocolFee[i],
           balanceInUSD,
-           _lpSlippage[i],
+          _lpSlippage[i],
           _tokens[i]
         )
       );
@@ -185,7 +183,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    */
   function withdraw(ExchangeData.PrimaryWithdraw memory inputData) external virtual nonReentrant {
     address[] memory _tokens = index.getTokens();
-    IndexSwapLibrary.checkPrimary(index,_tokens);
+    IndexSwapLibrary.checkPrimary(index, _tokens);
     uint256 totalSupplyIndex = index.totalSupply();
     _beforeCheckAndBurn(inputData.tokenAmount, inputData.buyToken, false);
     uint256 balanceBefore = IERC20Upgradeable(inputData.buyToken).balanceOf(address(this));
@@ -248,11 +246,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
             IWETH(underlying[j]).deposit{value: address(this).balance}();
           }
         }
-        uint256[] memory balanceAfter = IndexSwapLibrary.checkUnderlyingBalance(
-          _tokens[i],
-          handler,
-          address(this)
-        );
+        uint256[] memory balanceAfter = IndexSwapLibrary.checkUnderlyingBalance(_tokens[i], handler, address(this));
         for (uint256 j = 0; j < underlying.length; j++) {
           tokenAmounts[user][_tokens[i]].push(balanceAfter[j].sub(balanceBefore[j]));
           userUnderlyingAmounts[user][underlying[j]] = userUnderlyingAmounts[user][underlying[j]]
@@ -281,7 +275,11 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
   function withdrawOffChain(ExchangeData.ZeroExWithdraw memory inputData) external virtual nonReentrant {
     address user = msg.sender;
     address buyToken = userData[user].withdrawToken;
-    IndexSwapLibrary.beforeWithdrawOffChain(userData[user].userRedeemedStatus,tokenRegistry,inputData.offChainHandler);
+    IndexSwapLibrary.beforeWithdrawOffChain(
+      userData[user].userRedeemedStatus,
+      tokenRegistry,
+      inputData.offChainHandler
+    );
     uint256 balanceBefore = IERC20Upgradeable(buyToken).balanceOf(address(this));
     for (uint256 i = 0; i < inputData.sellTokenAddress.length; i++) {
       _withdraw(
@@ -403,7 +401,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     address assetManagerTreasury = iAssetManagerConfig.assetManagerTreasury();
     address velvetTreasury = tokenRegistry.velvetTreasury();
     if (!(msg.sender == assetManagerTreasury || msg.sender == velvetTreasury)) {
-      IndexSwapLibrary.chargeFees(index,feeModule);
+      IndexSwapLibrary.chargeFees(index, feeModule);
     }
     index.burnShares(msg.sender, _tokenAmount);
   }
