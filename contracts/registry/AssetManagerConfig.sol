@@ -21,6 +21,9 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   uint256 public managementFee;
   uint256 public performanceFee;
 
+  uint256 public entryFee;
+  uint256 public exitFee;
+
   uint256 public newPerformanceFee;
   uint256 public newManagementFee;
 
@@ -43,10 +46,24 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   bool public transferable;
   bool public transferableToPublic;
 
+  event ProposeManagementFee(uint256 indexed time, uint256 indexed newManagementFee);
+  event ProposePerformanceFee(uint256 indexed time, uint256 indexed performanceFee);
+  event DeleteProposedManagementFee();
+  event DeleteProposedPerformanceFee();
   event UpdateManagementFee(uint256 indexed time, uint256 indexed newManagementFee);
   event UpdatePerformanceFee(uint256 indexed time, uint256 indexed performanceFee);
   event SetPermittedTokens(uint256 indexed time, address[] _newTokens);
+  event RemovePermittedTokens(uint256 indexed time, address[] tokens);
+  event UpdateAssetManagerTreasury(uint256 indexed time, address treasuryAddress);
+  event AddWhitelistedUser(uint256 indexed time, address[] users);
+  event RemoveWhitelistedUser(uint256 indexed time, address[] users);
+  event AddWhitelistTokens(uint256 indexed time, address[] tokens);
+  event ChangedPortfolioToPublic(uint256 indexed time);
+  event TransferabilityUpdate(uint256 indexed time, bool _transferable, bool _publicTransfers);
 
+  /**
+   * @notice This function is used to init the assetmanager-config data while deployment
+   */
   function init(FunctionParameters.AssetManagerConfigInitData calldata initData) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
@@ -58,13 +75,18 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
     if (
       !(initData._managementFee <= tokenRegistry.maxManagementFee() &&
-        initData._performanceFee <= tokenRegistry.maxPerformanceFee())
+        initData._performanceFee <= tokenRegistry.maxPerformanceFee() &&
+        initData._entryFee <= tokenRegistry.maxEntryFee() &&
+        initData._exitFee <= tokenRegistry.maxExitFee())
     ) {
       revert ErrorLibrary.InvalidFee();
     }
 
     managementFee = initData._managementFee;
     performanceFee = initData._performanceFee;
+
+    entryFee = initData._entryFee;
+    exitFee = initData._exitFee;
 
     MIN_INVESTMENTAMOUNT = initData._minInvestmentAmount;
     MAX_INVESTMENTAMOUNT = initData._maxInvestmentAmount;
@@ -103,6 +125,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     }
     newManagementFee = _newManagementFee;
     proposedManagementFeeTime = block.timestamp;
+    emit ProposeManagementFee(proposedManagementFeeTime, newManagementFee);
   }
 
   /**
@@ -111,6 +134,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   function deleteProposedManagementFee() public virtual onlyAssetManager {
     proposedManagementFeeTime = 0;
     newManagementFee = 0;
+    emit DeleteProposedManagementFee();
   }
 
   /**
@@ -133,6 +157,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     }
     newPerformanceFee = _newPerformanceFee;
     proposedPerformanceFeeTime = block.timestamp;
+    emit ProposePerformanceFee(proposedPerformanceFeeTime, newPerformanceFee);
   }
 
   /**
@@ -146,6 +171,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
       if (!(tokenRegistry.isPermitted(_newTokens[i]))) {
         revert ErrorLibrary.TokenNotPermitted();
       }
+
       if (_newTokens[i] == address(0)) {
         revert ErrorLibrary.InvalidTokenAddress();
       }
@@ -175,6 +201,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
       }
       delete _permittedTokens[_tokens[i]];
     }
+    emit RemovePermittedTokens(block.timestamp, _tokens);
   }
 
   /**
@@ -188,11 +215,47 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   }
 
   /**
+   * @notice This function allows the asset manager to convert a private fund to a public fund
+   */
+  function convertPrivateFundToPublic() public virtual onlyAssetManager {
+    if (!publicPortfolio) {
+      publicPortfolio = true;
+      if (transferable) {
+        transferableToPublic = true;
+      }
+    }
+
+    emit ChangedPortfolioToPublic(block.timestamp);
+  }
+
+  /**
+   * @notice This function allows the asset manager to update the transferability of a fund
+   */
+  function updateTransferability(bool _transferable, bool _publicTransfer) public virtual onlyAssetManager {
+    transferable = _transferable;
+
+    if (!transferable) {
+      transferableToPublic = false;
+    } else {
+      if (publicPortfolio) {
+        if (!_publicTransfer) {
+          revert ErrorLibrary.PublicFundToWhitelistedNotAllowed();
+        }
+        transferableToPublic = true;
+      } else {
+        transferableToPublic = _publicTransfer;
+      }
+    }
+    emit TransferabilityUpdate(block.timestamp, transferable, transferableToPublic);
+  }
+
+  /**
    * @notice This function delete the newPerformanceFee
    */
   function deleteProposedPerformanceFee() public virtual onlyAssetManager {
     proposedPerformanceFeeTime = 0;
     newPerformanceFee = 0;
+    emit DeleteProposedPerformanceFee();
   }
 
   /**
@@ -211,6 +274,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
    */
   function updateAssetManagerTreasury(address _newAssetManagementTreasury) public virtual onlyAssetManager {
     assetManagerTreasury = _newAssetManagementTreasury;
+    emit UpdateAssetManagerTreasury(block.timestamp, _newAssetManagementTreasury);
   }
 
   /**
@@ -221,6 +285,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     for (uint256 i = 0; i < len; i++) {
       whitelistedUsers[users[i]] = true;
     }
+    emit AddWhitelistedUser(block.timestamp, users);
   }
 
   /**
@@ -231,6 +296,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     for (uint256 i = 0; i < len; i++) {
       whitelistedUsers[users[i]] = false;
     }
+    emit RemoveWhitelistedUser(block.timestamp, users);
   }
 
   /**
@@ -241,6 +307,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     for (uint256 i = 0; i < len; i++) {
       whitelistedToken[tokens[i]] = true;
     }
+    emit AddWhitelistTokens(block.timestamp, tokens);
   }
 
   /**

@@ -18,16 +18,10 @@ import {IIndexSwap} from "../core/IIndexSwap.sol";
 
 import {FunctionParameters} from "../FunctionParameters.sol";
 import {IHandler} from "../handler/IHandler.sol";
+import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
 
 interface IExchange {
-  function init(
-    address _accessController,
-    address _safe,
-    address _oracle,
-    // address _swapHandler,
-    address _tokenRegistry
-    // address _zeroExHandler
-  ) external;
+  function init(address _accessController, address _safe, address _oracle, address _tokenRegistry) external;
 
   /**
    * @return Checks if token is WETH
@@ -41,11 +35,8 @@ interface IExchange {
   /**
    * @notice The function swaps ETH to a specific token
    * @param inputData includes the input parmas
-   * @return swapResult The outcome amount of the specific token afer swapping
    */
-  function _swapETHToToken(
-    FunctionParameters.SwapETHToTokenData calldata inputData
-  ) external payable returns (uint256[] calldata);
+  function swapETHToToken(FunctionParameters.SwapETHToTokenPublicData calldata inputData) external payable;
 
   /**
    * @notice The function swaps a specific token to ETH
@@ -66,6 +57,14 @@ interface IExchange {
   function _swapTokenToToken(
     FunctionParameters.SwapTokenToTokenData memory inputData
   ) external returns (uint256[] memory);
+
+  function _swapTokenToTokens(
+    FunctionParameters.SwapTokenToTokensData memory inputData
+  ) external payable returns (uint256 investedAmountAfterSlippage);
+
+  function swapOffChainTokens(
+    ExchangeData.IndexOperationData memory inputdata
+  ) external returns (uint256 balanceInUSD, uint256 underlyingIndex);
 
   function claimTokens(IIndexSwap _index, address[] calldata _tokens) external;
 

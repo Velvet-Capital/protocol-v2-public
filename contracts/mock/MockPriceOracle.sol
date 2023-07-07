@@ -8,7 +8,7 @@ import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/uti
 import {AggregatorV2V3Interface, AggregatorInterface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
 
-contract PriceOracle is Ownable {
+contract MockPriceOracle is Ownable {
   using SafeMathUpgradeable for uint256;
 
   /// @notice Thrown when aggregator already exists in price oracle
@@ -21,10 +21,7 @@ contract PriceOracle is Ownable {
   }
 
   mapping(address => AggregatorInfo) internal aggregatorAddresses;
-
-  // Events
-  event addFeed(uint256 time, address[] base, address[] quote, AggregatorV2V3Interface[] aggregator);
-  event updateFeed(uint256 time, address base, address quote, address aggregator);
+  mapping(address => int256) internal mockPrice;
 
   /**
    * @notice Retrieve the aggregator of an base / quote pair in the current phase
@@ -53,18 +50,6 @@ contract PriceOracle is Ownable {
       }
       aggregatorAddresses[base[i]].aggregatorInterfaces[quote[i]] = aggregator[i];
     }
-    emit addFeed(block.timestamp, base, quote, aggregator);
-  }
-
-  /**
-   * @notice Updatee an existing feed
-   * @param base base asset address
-   * @param quote quote asset address
-   * @param aggregator aggregator
-   */
-  function _updateFeed(address base, address quote, AggregatorV2V3Interface aggregator) public onlyOwner {
-    aggregatorAddresses[base].aggregatorInterfaces[quote] = aggregator;
-    emit updateFeed(block.timestamp, base, quote, address(aggregator));
   }
 
   /**
@@ -85,18 +70,10 @@ contract PriceOracle is Ownable {
    * @notice Returns the latest price
    * @param base base asset address
    * @param quote quote asset address
-   * @return The latest token price of the pair
+   * @return price The latest token price of the pair
    */
-  function latestRoundData(address base, address quote) internal view returns (int256) {
-    (
-      ,
-      /*uint80 roundID*/
-      int256 price /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,
-      ,
-      ,
-
-    ) = aggregatorAddresses[base].aggregatorInterfaces[quote].latestRoundData();
-    return price;
+  function latestRoundData(address base, address quote) internal view returns (int256 price) {
+    price = _getMockData(base, quote);
   }
 
   /**
@@ -138,17 +115,17 @@ contract PriceOracle is Ownable {
    * @return amountOut The latest token price of the pair
    */
   function getPriceForAmount(address token, uint256 amount, bool ethPath) public view returns (uint256 amountOut) {
-    // token / eth
+    IERC20MetadataUpgradeable t = IERC20MetadataUpgradeable(token);
+    uint8 decimal = t.decimals();
+    uint256 diff = uint256(18).sub(decimal);
+
     if (ethPath) {
-      // getPriceTokenUSD18Decimals returns usd amount in 18 decimals
       uint256 price = getPriceTokenUSD18Decimals(token, amount);
-      amountOut = getUsdEthPrice(price);
+      amountOut = getUsdEthPrice(price).div(10 ** diff);
     } else {
-      // eth will be in 18 decimals, price and decimal2 is also 18 decimals
       uint256 price = uint256(latestRoundData(Denominations.ETH, Denominations.USD));
       uint256 decimal2 = decimals(Denominations.ETH, Denominations.USD);
-      // getPriceUSDToken returns the amount in decimals of token (out)
-      amountOut = getPriceUSDToken(token, price.mul(amount).div(10 ** decimal2));
+      amountOut = getPriceUSDToken(token, price.mul(amount).div(10 ** decimal2)).div(10 ** diff);
     }
   }
 
@@ -158,15 +135,12 @@ contract PriceOracle is Ownable {
    * @param tokenOut token asset address
    * @return amountOut The latest token price of the pair
    */
-
   function getPriceForTokenAmount(
     address tokenIn,
     address tokenOut,
     uint256 amount
   ) public view returns (uint256 amountOut) {
-    // getPriceTokenUSD18Decimals returns usd amount in 18 decimals
     uint256 price = getPriceTokenUSD18Decimals(tokenIn, amount);
-    // getPriceUSDToken returns the amount in decimals of token (out)
     amountOut = getPriceUSDToken(tokenOut, price);
   }
 
@@ -196,10 +170,20 @@ contract PriceOracle is Ownable {
   function getPriceUSDToken(address _base, uint256 amountIn) public view returns (uint256 amountOut) {
     uint256 output = uint256(getPrice(_base, Denominations.USD));
     uint256 decimal = decimals(_base, Denominations.USD);
+    amountOut = amountIn.mul(10 ** decimal).div(output);
+  }
 
-    uint8 tokenOutDecimal = IERC20MetadataUpgradeable(_base).decimals();
-    uint256 diff = uint256(18).sub(tokenOutDecimal);
+  /**
+   * @notice This is a getter function used to retrieve the mock price of the base address
+   */
+  function _getMockData(address base, address quote) internal view returns (int256) {
+    return mockPrice[base];
+  }
 
-    amountOut = (amountIn.mul(10 ** decimal).div(output)).div(10 ** diff);
+  /**
+   * @notice This is a setter function used to set the mock price of the base address
+   */
+  function setMockData(address base, int256 price) external {
+    mockPrice[base] = price;
   }
 }

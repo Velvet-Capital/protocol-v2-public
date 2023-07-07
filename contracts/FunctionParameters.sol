@@ -50,6 +50,17 @@ library FunctionParameters {
     address _token;
     address _to;
     address _swapHandler;
+    address _toUser;
+    uint256 _slippage;
+    uint256 _lpSlippage;
+    uint256 _swapAmount;
+  }
+
+  struct SwapETHToTokenPublicData {
+    address _token;
+    address _to;
+    address _swapHandler;
+    address _toUser;
     uint256 _slippage;
     uint256 _lpSlippage;
   }
@@ -59,6 +70,7 @@ library FunctionParameters {
     address _tokenOut;
     address _to;
     address _swapHandler;
+    address _toUser;
     uint256 _swapAmount;
     uint256 _slippage;
     uint256 _lpSlippage;
@@ -69,6 +81,7 @@ library FunctionParameters {
     address _index;
     address _inputToken;
     address _swapHandler;
+    address _toUser;
     uint256 _tokenAmount;
     uint256 _totalSupply;
     uint256[] amount;
@@ -93,6 +106,8 @@ library FunctionParameters {
     uint256 minIndexInvestmentAmount;
     uint256 _managementFee;
     uint256 _performanceFee;
+    uint256 _entryFee;
+    uint256 _exitFee;
     bool _public;
     bool _transferable;
     bool _transferableToPublic;
@@ -109,6 +124,8 @@ library FunctionParameters {
   struct AssetManagerConfigInitData {
     uint256 _managementFee;
     uint256 _performanceFee;
+    uint256 _entryFee;
+    uint256 _exitFee;
     uint256 _minInvestmentAmount;
     uint256 _maxInvestmentAmount;
     address _tokenRegistry;

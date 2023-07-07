@@ -59,7 +59,10 @@ library GnosisDeployer {
    * @param _safe Address of gnosis safe
    * @param _gnosisModule Address of velvet safe module
    */
-  function generateByteCode(address _safe, address _gnosisModule) internal returns (bytes memory _multisendAction) {
+  function generateByteCode(
+    address _safe,
+    address _gnosisModule
+  ) internal pure returns (bytes memory _multisendAction) {
     bytes memory _enableSafeModule = abi.encodeWithSignature("enableModule(address)", address(_gnosisModule));
     bytes memory _enableVelvetMultisend = abi.encodePacked(
       uint8(0),

@@ -4,6 +4,8 @@ import { ethers, upgrades } from "hardhat";
 import { chainIdToAddresses } from "../scripts/networkVariables";
 import console from "console";
 
+import { tokenAddresses } from "./Deployments.test";
+
 var chai = require("chai");
 //use default BigNumber
 chai.use(require("chai-bignumber")());
@@ -19,8 +21,9 @@ var endLoopValue = 0;
 var startTokenValue = 0;
 var endTokenValue = 0;
 let dataArray: any;
-let tokenAddresses: any;
+let tokenAddresses1: any;
 let urChoice: any;
+let priceOracle: any;
 
 // console.log(
 //   "\n<-------------------------------------------------->"
@@ -34,9 +37,17 @@ let urChoice: any;
 // By default, all the handlers will be tested. For specific testing, change the wishInput variable = 1.
 let wishInput = 0;
 
+async function deployPriceOracle() {
+  const PriceOracle = await ethers.getContractFactory("PriceOracle");
+  priceOracle = await PriceOracle.deploy();
+  await priceOracle.deployed();
+
+  await tokenAddresses(priceOracle, true);
+}
+
 if (wishInput == 0) {
   startLoopValue = 1;
-  endLoopValue = handlerJSON.length;
+  endLoopValue = handlerJSON.length - 1;
   startTokenValue = 3;
 } else if (wishInput == 1) {
   console.log("\nEnter the number for the corresponding handler whose functions you want to check: ");
@@ -45,9 +56,9 @@ if (wishInput == 0) {
   }
   let numInput = userInput("Enter your choice : ");
   console.log("\n----------Choose token----------");
-  tokenAddresses = Object.keys(handlerJSON[numInput - 1]);
-  for (let j = 3; j < tokenAddresses.length; j++) {
-    console.log("Press", j - 2, "for", tokenAddresses[j]);
+  tokenAddresses1 = Object.keys(handlerJSON[numInput - 1]);
+  for (let j = 3; j < tokenAddresses1.length; j++) {
+    console.log("Press", j - 2, "for", tokenAddresses1[j]);
   }
   urChoice = userInput("Enter the token number you want to test: ");
   let tokenNumber = parseInt(urChoice) + 2;
@@ -63,7 +74,10 @@ if (wishInput == 0) {
 for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; protocolVariable++) {
   if (startTokenValue != endTokenValue) {
     let temp = Object.keys(handlerJSON[protocolVariable - 1]).length;
-    endTokenValue = temp - 2;
+    endTokenValue = temp - 3;
+  }
+  if (protocolVariable == startLoopValue) {
+    deployPriceOracle();
   }
   for (let tokenVariable = startTokenValue; tokenVariable <= endTokenValue; tokenVariable++) {
     describe.only("Tests for Handler", () => {
@@ -89,29 +103,27 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
           accounts = await ethers.getSigners();
           [owner] = accounts;
 
+          const isLP = handlerJSON[protocolVariable - 1].isLPHAndler;
           const HandlerName = handlerJSON[protocolVariable - 1].handlerName;
           const deployHandler = await ethers.getContractFactory(HandlerName);
 
-          if (HandlerName == "BeefyLPHandler") {
-            const pancakeSwapLP = await ethers.getContractFactory("PancakeSwapLPHandler");
-            pancakeswaplp = await pancakeSwapLP.deploy();
-            await pancakeswaplp.deployed();
-            await pancakeswaplp.addOrUpdateProtocolSlippage("700");
+          if (isLP == "true") {
+            if (HandlerName == "BeefyLPHandler") {
+              const pancakeSwapLP = await ethers.getContractFactory("PancakeSwapLPHandler");
+              pancakeswaplp = await pancakeSwapLP.deploy(priceOracle.address);
+              await pancakeswaplp.deployed();
+              await pancakeswaplp.addOrUpdateProtocolSlippage("700");
 
-            // const biswapLP = await ethers.getContractFactory("BiSwapLPHandler");
-            // biswaplp = await biswapLP.deploy();
-            // await biswaplp.deployed();
+              // const biswapLP = await ethers.getContractFactory("BiSwapLPHandler");
+              // biswaplp = await biswapLP.deploy();
+              // await biswaplp.deployed();
 
-            // if (tokenVariable == 3 || tokenVariable == 4) {
-            handlerVariable = await deployHandler.deploy(pancakeswaplp.address);
-
-            await handlerVariable.deployed();
-
-            // }
-            // } else if (tokenVariable == 5 || tokenVariable == 6) {
-            //   handlerVariable = await deployHandler.deploy(biswaplp.address);
-            //   await handlerVariable.deployed();
-            // }
+              // if (tokenVariable == 3 || tokenVariable == 4) {
+              handlerVariable = await deployHandler.deploy(pancakeswaplp.address, priceOracle.address);
+              await handlerVariable.deployed();
+            } else {
+              handlerVariable = await deployHandler.deploy(priceOracle.address);
+            }
           } else {
             handlerVariable = await deployHandler.deploy();
             await handlerVariable.deployed();
@@ -186,6 +198,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   ["1000000000000000000", balanceAfterToken2],
                   "600",
                   owner.address,
+                  owner.address,
                   {
                     value: "1000000000000000000",
                   },
@@ -196,6 +209,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   dataArray[tokenVariable],
                   [balanceAfterToken1, "1000000000000000000"],
                   "600",
+                  owner.address,
                   owner.address,
                   {
                     value: "1000000000000000000",
@@ -208,6 +222,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   [balanceAfterToken1, balanceAfterToken2],
                   "600",
                   owner.address,
+                  owner.address,
                 );
                 lend.wait();
               }
@@ -218,6 +233,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   dataArray[tokenVariable],
                   ["1000000000000000000"],
                   "600",
+                  owner.address,
                   owner.address,
                   {
                     value: "1000000000000000000",
@@ -235,6 +251,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   dataArray[tokenVariable],
                   [handlerbalance],
                   "600",
+                  owner.address,
                   owner.address,
                 );
                 lend.wait();
@@ -307,6 +324,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   ["1000000000000000000", balanceAfterToken2],
                   "600",
                   handlerVariable.address,
+                  owner.address,
                   {
                     value: "1000000000000000000",
                   },
@@ -318,6 +336,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   [balanceAfterToken1, "1000000000000000000"],
                   "600",
                   handlerVariable.address,
+                  owner.address,
                   {
                     value: "1000000000000000000",
                   },
@@ -329,6 +348,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   [balanceAfterToken1, balanceAfterToken2],
                   "600",
                   handlerVariable.address,
+                  owner.address,
                 );
                 lend.wait();
               }
@@ -340,6 +360,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   ["1000000000000000000"],
                   "600",
                   handlerVariable.address,
+                  owner.address,
                   {
                     value: "1000000000000000000",
                   },
@@ -357,6 +378,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
                   [handlerbalance],
                   "600",
                   handlerVariable.address,
+                  owner.address,
                 );
                 lend.wait();
               }

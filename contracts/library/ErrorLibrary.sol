@@ -5,7 +5,7 @@ pragma solidity 0.8.16;
 /**
  * @title ErrorLibrary
  * @author Velvet.Capital
- * @notice This is a library contract including errors
+ * @notice This is a library contract including custom defined errors
  */
 
 library ErrorLibrary {
@@ -236,4 +236,28 @@ library ErrorLibrary {
   error InvalidThresholdLength();
   /// @notice Throws when no owner address is passed while fund creation
   error NoOwnerPassed();
+  /// @notice Throws when length of underlying token is greater than 1
+  error InvalidTokenLength();
+  /// @notice Throws when already an operation is taking place and another operation is called
+  error AlreadyOngoingOperation();
+  /// @notice Throws when wrong function is executed for revert offchain fund
+  error InvalidExecution();
+  /// @notice Throws when Final value after investment is zero
+  error ZeroFinalInvestmentValue();
+  /// @notice Throws when tokenamount after swap is zero
+  error ZeroTokenAmount();
+  /// @notice Throws eth transfer failed
+  error ETHTransferFailed();
+  /// @notice Thorws when the caller does not have a default admin role
+  error CallerNotAdmin();
+  /// @notice Throws when buyAmount is not correct in offchainIndexSwap
+  error InvalidBuyValues();
+  /// @notice Throws when token is not primary
+  error TokenNotPrimary();
+  /// @notice Throws when tokenOut during withdraw is not permitted in the asset manager config
+  error _tokenOutNotPermitted();
+  /// @notice Throws when token balance is too small to be included in index
+  error BalanceTooSmall();
+  /// @notice Throws when a public fund is tried to made transferable only to whitelisted addresses
+  error PublicFundToWhitelistedNotAllowed();
 }

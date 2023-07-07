@@ -35,10 +35,12 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   uint256 public maxManagementFee;
   uint256 public maxPerformanceFee;
+  uint256 public maxEntryFee;
+  uint256 public maxExitFee;
 
+  // Percentage of fee we're taking off of the management fee
   uint256 public protocolFee;
-
-  address public IndexOperationHandler;
+  uint256 public protocolFeeBottomConstraint;
 
   uint256 public MAX_VELVET_INVESTMENTAMOUNT;
   uint256 public MIN_VELVET_INVESTMENTAMOUNT;
@@ -47,7 +49,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   uint256 public COOLDOWN_PERIOD;
 
-  address public WETH;
+  address internal WETH;
   event EnableToken(
     uint256 time,
     address[] _oracle,
@@ -62,17 +64,26 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   event DisablePermittedTokens(uint256 time, address[] newTokens);
   event EnableSwapHandlers(uint256 time, address[] handler);
   event DisableSwapHandlers(uint256 time, address[] handler);
-  event AddNonDerivative(address handler);
+  event AddNonDerivative(uint256 time, address handler);
+  event AddRewardToken(uint256 time, address token);
+  event RemoveRewardToken(uint256 time, address token);
+  event ChangedIndexOperation(uint256 time, address newIndexOperation);
+  event DisableToken(uint256 time, address token);
 
+  /**
+   * @notice This function is used to init the Token Registry while deployment
+   */
   function initialize(
     uint256 _protocolFee,
+    uint256 _protocolFeeBottomConstraint,
     uint256 _maxAssetManagerFee,
     uint256 _maxPerformanceFee,
+    uint256 _maxEntryFee,
+    uint256 _maxExitFee,
     uint256 _minVelvetInvestmentAmount,
     uint256 _maxVelvetInvestmentAmount,
     address _velvetTreasury,
     address _weth,
-    address _indexOperationHandler,
     uint256 coolDownPeriod
   ) external initializer {
     __UUPSUpgradeable_init();
@@ -85,8 +96,11 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     protocolFee = _protocolFee;
+    protocolFeeBottomConstraint = _protocolFeeBottomConstraint;
     maxManagementFee = _maxAssetManagerFee;
     maxPerformanceFee = _maxPerformanceFee;
+    maxEntryFee = _maxEntryFee;
+    maxExitFee = _maxExitFee;
 
     MIN_VELVET_INVESTMENTAMOUNT = _minVelvetInvestmentAmount;
     MAX_VELVET_INVESTMENTAMOUNT = _maxVelvetInvestmentAmount;
@@ -95,8 +109,6 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     WETH = _weth;
     COOLDOWN_PERIOD = coolDownPeriod;
-
-    IndexOperationHandler = _indexOperationHandler;
   }
 
   /**
@@ -129,7 +141,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       IPriceOracle oracle = IPriceOracle(_oracle[i]);
       address[] memory underlying = IHandler(_handler[i]).getUnderlying(_token[i]);
       for (uint256 j = 0; j < underlying.length; j++) {
-        if (!(oracle.getPriceTokenUSD(underlying[j], 1 ether) > 0)) {
+        if (!(oracle.getPriceTokenUSD18Decimals(underlying[j], 1 ether) > 0)) {
           revert ErrorLibrary.TokenNotInPriceOracle();
         }
       }
@@ -141,12 +153,20 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     emit EnableToken(block.timestamp, _oracle, _token, _handler, _rewardTokens, _primary);
   }
 
+  /**
+   * @notice This function is used to add a particular token as a reward token
+   */
   function addRewardToken(address _token) public onlyOwner {
     isRewardToken[_token] = true;
+    emit AddRewardToken(block.timestamp, _token);
   }
 
+  /**
+   * @notice This function is used to remove a particular token as a reward token
+   */
   function removeRewardToken(address _token) public onlyOwner {
     delete isRewardToken[_token];
+    emit RemoveRewardToken(block.timestamp, _token);
   }
 
   /**
@@ -195,10 +215,6 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     return _offChainHandler[offChainHandler];
   }
 
-  function changeIndexOperation(address _newIndexOperation) external virtual onlyOwner {
-    IndexOperationHandler = _newIndexOperation;
-  }
-
   // todo updatetoken?? -> then require mapping doesn't already exist
 
   /**
@@ -206,7 +222,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    */
   function addNonDerivative(address handler) public virtual onlyOwner {
     nonDerivativeToken[handler] = true;
-    emit AddNonDerivative(handler);
+    emit AddNonDerivative(block.timestamp, handler);
   }
 
   /**
@@ -228,6 +244,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    */
   function disableToken(address _token) public virtual onlyOwner {
     tokenInformation[_token].enabled = false;
+    emit DisableToken(block.timestamp, _token);
   }
 
   /**
@@ -274,18 +291,25 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     if (_newTokens.length == 0) {
       revert ErrorLibrary.InvalidLength();
     }
+
     for (uint256 i = 0; i < _newTokens.length; i++) {
-      if (!(_permittedToken[_newTokens[i]] != true)) {
+      TokenRecord memory tokenInfo = getTokenInformation(_newTokens[i]);
+
+      if (_permittedToken[_newTokens[i]]) {
         revert ErrorLibrary.AddressAlreadyApproved();
       }
       if (!isEnabled(_newTokens[i])) {
         revert ErrorLibrary.TokenNotEnabled();
       }
+      if (!tokenInfo.primary) {
+        revert ErrorLibrary.TokenNotPrimary();
+      }
+
       IPriceOracle oracle = IPriceOracle(_oracle[i]);
 
-      address[] memory underlying = IHandler(getTokenInformation(_newTokens[i]).handler).getUnderlying(_newTokens[i]);
+      address[] memory underlying = IHandler(tokenInfo.handler).getUnderlying(_newTokens[i]);
       for (uint256 j = 0; j < underlying.length; j++) {
-        if (!(oracle.getPriceTokenUSD(underlying[j], 1 ether) > 0)) {
+        if (!(oracle.getPriceTokenUSD18Decimals(underlying[j], 1 ether) > 0)) {
           revert ErrorLibrary.TokenNotInPriceOracle();
         }
       }
@@ -306,7 +330,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       if (_tokens[i] == address(0)) {
         revert ErrorLibrary.InvalidTokenAddress();
       }
-      if (!(_permittedToken[_tokens[i]] != false)) {
+      if (!(_permittedToken[_tokens[i]])) {
         revert ErrorLibrary.AddressNotApproved();
       }
       delete _permittedToken[_tokens[i]];

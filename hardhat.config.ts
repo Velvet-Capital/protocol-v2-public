@@ -2,13 +2,12 @@ import { config as dotEnvConfig } from "dotenv";
 dotEnvConfig();
 import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
-import "@nomiclabs/hardhat-waffle";
 import "@nomiclabs/hardhat-ethers";
 import "@typechain/hardhat";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-contract-sizer";
 import "solidity-coverage";
-
+import "hardhat-tracer";
 import "./tasks/accounts";
 import "./tasks/balance";
 import "./tasks/block-number";
@@ -64,7 +63,7 @@ const config: HardhatUserConfig = {
         enabled: true,
         url: process.env.BSC_RPC ? process.env.BSC_RPC : "https://bsc-dataseed.binance.org/",
       },
-      // chainId: chainIds.hardhat,
+      chainId: 56,
       // allowUnlimitedContractSize: true
     },
     ganache: {

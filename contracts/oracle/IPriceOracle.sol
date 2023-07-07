@@ -24,7 +24,5 @@ interface IPriceOracle {
     uint256 amount
   ) external view returns (uint256 amountOut);
 
-  function getPriceTokenUSD(address _base, uint256 amountIn) external view returns (uint256 amountOut);
-
   function getPriceTokenUSD18Decimals(address _base, uint256 amountIn) external view returns (uint256 amountOut);
 }

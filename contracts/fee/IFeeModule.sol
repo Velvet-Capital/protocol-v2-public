@@ -12,4 +12,8 @@ interface IFeeModule {
   ) external;
 
   function chargeFees() external;
+
+  function chargeEntryFee(uint256 _mintAmount, uint256 _fee) external returns (uint256);
+
+  function chargeExitFee(uint256 _mintAmount, uint256 _fee) external returns (uint256, uint256, uint256);
 }

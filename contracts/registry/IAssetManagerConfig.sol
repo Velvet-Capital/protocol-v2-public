@@ -10,6 +10,10 @@ interface IAssetManagerConfig {
 
   function performanceFee() external view returns (uint256);
 
+  function entryFee() external view returns (uint256);
+
+  function exitFee() external view returns (uint256);
+
   function MAX_INVESTMENTAMOUNT() external view returns (uint256);
 
   function MIN_INVESTMENTAMOUNT() external view returns (uint256);

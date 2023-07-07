@@ -53,7 +53,8 @@ contract VenusHandler is IHandler {
     address _vAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
     if (_vAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -165,6 +166,8 @@ contract VenusHandler is IHandler {
     tokenBalance[0] = token.balanceOfUnderlying(_tokenHolder);
     return tokenBalance;
   }
+
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
 
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 

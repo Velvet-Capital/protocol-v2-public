@@ -33,8 +33,8 @@ import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract ApeSwapLendingHandler is IHandler, Ownable {
-  address constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
-  address constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+  address public constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
+  address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
   address public constant RAIN_MAKER = 0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa;
 
   event Velvet_ApeSwap_Mint(address _cAsset, uint256 _amount, address _to);
@@ -53,7 +53,8 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     address _cAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
     require(address(_cAsset) != address(0), "zero address passed");
     require(address(_to) != address(0), "zero address passed");
@@ -162,11 +163,13 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     return tokenBalance;
   }
 
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
+  function getClaimTokenCalldata(address _token, address _holder) public pure returns (bytes memory, address) {
     return (abi.encodeWithSelector(IRainMaker.claimComp.selector, _holder), RAIN_MAKER);
   }
 

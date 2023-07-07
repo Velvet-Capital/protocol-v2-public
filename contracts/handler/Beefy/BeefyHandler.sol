@@ -41,7 +41,8 @@ contract BeefyHandler is IHandler {
     bool isWETH
   );
 
-  address constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+  address public constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+  address public constant MOO_VENUS_BNB = address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71);
 
   /**
    * @notice This function deposits assets to the Beefy protocol
@@ -54,7 +55,8 @@ contract BeefyHandler is IHandler {
     address _mooAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
     if (_mooAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -70,7 +72,7 @@ contract BeefyHandler is IHandler {
         TransferHelper.safeTransfer(_mooAsset, _to, assetBalance);
       }
     } else {
-      if (_mooAsset != address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71)) {
+      if (_mooAsset != MOO_VENUS_BNB) {
         revert ErrorLibrary.PleaseDepositUnderlyingToken();
       }
 
@@ -95,8 +97,6 @@ contract BeefyHandler is IHandler {
     if (inputData._amount > asset.balanceOf(address(this))) {
       revert ErrorLibrary.NotEnoughBalanceInBeefyProtocol();
     }
-    TransferHelper.safeApprove(address(asset), address(inputData._yieldAsset), 0);
-    TransferHelper.safeApprove(address(asset), address(inputData._yieldAsset), inputData._amount);
     if (inputData.isWETH) {
       asset.withdrawBNB(inputData._amount);
     } else {
@@ -126,7 +126,7 @@ contract BeefyHandler is IHandler {
     }
     address[] memory underlying = new address[](1);
     IVaultBeefy token = IVaultBeefy(_mooAsset);
-    if (_mooAsset == address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71)) {
+    if (_mooAsset == MOO_VENUS_BNB) {
       underlying[0] = WETH;
     } else {
       underlying[0] = address(token.want());
@@ -164,13 +164,13 @@ contract BeefyHandler is IHandler {
     return tokenBalance;
   }
 
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
-    return ("", address(0));
-  }
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {}
 
   receive() external payable {}
 }
