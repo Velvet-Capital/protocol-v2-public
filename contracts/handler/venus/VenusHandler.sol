@@ -28,8 +28,9 @@ import {VBep20Interface} from "./interfaces/VBep20Interface.sol";
 import {IHandler} from "../IHandler.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "contracts/FunctionParameters.sol";
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
-contract VenusHandler is IHandler {
+contract VenusHandler is IHandler, Ownable {
   address public constant COMPTROLLER = 0xfD36E2c2a6789Db23113685031d7F16329158384;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);

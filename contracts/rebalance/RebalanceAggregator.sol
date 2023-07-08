@@ -7,7 +7,7 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {IExchange} from "../core/IExchange.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 import {IIndexSwap} from "../core/IIndexSwap.sol";
@@ -26,7 +26,7 @@ import {RebalanceLibrary} from "./RebalanceLibrary.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 
-contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
   using SafeMathUpgradeable for uint256;
   IIndexSwap public index;
 
@@ -39,7 +39,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
   address internal vault;
   address internal tokenRedeemed;
   address internal _contract;
-  address public owner;
   mapping(address => uint256[]) public redeemedAmounts;
   IWETH public wETH;
 
@@ -80,8 +79,8 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     address _assetManagerConfig,
     address _vault
   ) external initializer {
+    __Ownable_init();
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     address zeroAddress = address(0);
     if (
       _index == zeroAddress ||
@@ -114,13 +113,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
   modifier onlyIndexManager() {
     if (!(accessController.hasRole(keccak256("INDEX_MANAGER_ROLE"), msg.sender))) {
       revert ErrorLibrary.CallerNotIndexManager();
-    }
-    _;
-  }
-
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
     }
     _;
   }

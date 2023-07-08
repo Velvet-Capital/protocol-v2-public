@@ -19,6 +19,7 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 
 import {IIndexSwap} from "./IIndexSwap.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
@@ -40,12 +41,11 @@ import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.s
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 
-contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable, OwnableUpgradeable {
   IAccessController internal accessController;
   IVelvetSafeModule internal safe;
   IPriceOracle internal oracle;
   ITokenRegistry internal tokenRegistry;
-  address public owner;
   address internal WETH;
   address internal zeroAddress;
 
@@ -72,8 +72,8 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     address _oracle,
     address _tokenRegistry
   ) external initializer {
+    __Ownable_init();
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     zeroAddress = address(0);
     if (
       _accessController == zeroAddress ||
@@ -108,13 +108,6 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
   modifier onlyIndexManager() {
     if (!(accessController.hasRole(keccak256("INDEX_MANAGER_ROLE"), msg.sender))) {
       revert ErrorLibrary.CallerNotIndexManager();
-    }
-    _;
-  }
-
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
     }
     _;
   }

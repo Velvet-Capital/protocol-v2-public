@@ -17,7 +17,7 @@ pragma solidity 0.8.16;
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IIndexSwap} from "../core/IIndexSwap.sol";
 import "../core/IndexSwapLibrary.sol";
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
@@ -34,7 +34,7 @@ import {FunctionParameters} from "../FunctionParameters.sol";
 
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
-contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
   /**
    * @dev Token record data structure
    * @param lastDenormUpdate timestamp of last denorm change
@@ -81,7 +81,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   IExchange internal _exchange;
   IAssetManagerConfig internal _iAssetManagerConfig;
   address internal WETH;
-  address public owner;
   // Total denormalized weight of the pool.
   uint256 internal constant _TOTAL_WEIGHT = 10_000;
 
@@ -123,9 +122,9 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param initData Includes the input params
    */
   function init(FunctionParameters.IndexSwapInitData calldata initData) external initializer {
+    __Ownable_init();
     __ERC20_init(initData._name, initData._symbol);
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     _vault = initData._vault;
     _module = initData._module;
     _accessController = IAccessController(initData._accessController);
@@ -167,13 +166,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   modifier onlySuperAdmin() {
     if (!_checkRole("SUPER_ADMIN", msg.sender)) {
       revert ErrorLibrary.CallerNotSuperAdmin();
-    }
-    _;
-  }
-
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
     }
     _;
   }

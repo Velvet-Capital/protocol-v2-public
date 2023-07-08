@@ -28,8 +28,9 @@ import {IHandler} from "../IHandler.sol";
 import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
-contract BeefyHandler is IHandler {
+contract BeefyHandler is IHandler, Ownable {
   using SafeMathUpgradeable for uint256;
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
