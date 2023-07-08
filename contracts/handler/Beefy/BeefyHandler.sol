@@ -23,13 +23,13 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 import {IHandler} from "../IHandler.sol";
 import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 
-contract BeefyHandler is IHandler {
+contract BeefyHandler is IHandler, Ownable {
   using SafeMathUpgradeable for uint256;
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(

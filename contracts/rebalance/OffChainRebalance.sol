@@ -8,7 +8,7 @@ import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeabl
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {IndexSwapLibrary} from "../core/IndexSwapLibrary.sol";
 import {IExchange} from "../core/IExchange.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 import {IIndexSwap} from "../core/IIndexSwap.sol";
@@ -26,7 +26,7 @@ import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 import {IRebalanceAggregator} from "./IRebalanceAggregator.sol";
 
-contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
   using SafeMathUpgradeable for uint256;
   using SafeMathUpgradeable for uint96;
   IIndexSwap internal index;
@@ -42,7 +42,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   address internal vault;
   address internal _contract;
   address internal zeroAddress;
-  address public owner;
   struct RebalanceData {
     uint96[] oldWeight;
     address[] oldTokens;
@@ -86,8 +85,8 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     address _vault,
     address _aggregator
   ) external initializer {
+    __Ownable_init();
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     zeroAddress = address(0);
     if (
       _index == zeroAddress ||
@@ -114,13 +113,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   modifier onlyAssetManager() {
     if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
       revert ErrorLibrary.CallerNotAssetManager();
-    }
-    _;
-  }
-
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
     }
     _;
   }

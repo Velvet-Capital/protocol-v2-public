@@ -30,7 +30,7 @@ import {IAccessController} from "../access/IAccessController.sol";
 import {IVelvetSafeModule} from "../vault/IVelvetSafeModule.sol";
 
 import {ISwapHandler} from "../handler/ISwapHandler.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IExchange} from "./IExchange.sol";
 import {IHandler} from "../handler/IHandler.sol";
 import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
@@ -40,12 +40,11 @@ import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.s
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 
-contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable, OwnableUpgradeable {
   IAccessController internal accessController;
   IVelvetSafeModule internal safe;
   IPriceOracle internal oracle;
   ITokenRegistry internal tokenRegistry;
-  address public owner;
   address internal WETH;
   address internal zeroAddress;
 
@@ -72,8 +71,8 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     address _oracle,
     address _tokenRegistry
   ) external initializer {
+    __Ownable_init();
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     zeroAddress = address(0);
     if (
       _accessController == zeroAddress ||
@@ -111,14 +110,6 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     }
     _;
   }
-
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
-    }
-    _;
-  }
-
   /**
    * @notice The function claims additional reward tokens
    * @dev Requires the tokens to be send to this contract address before swapping

@@ -19,8 +19,8 @@ import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {IHandler} from "./IHandler.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
-
-contract BaseHandler is IHandler {
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
+contract BaseHandler is IHandler, Ownable {
   /**
    * @notice This function deposits assets to the base tokens
    * @param _vAsset Address of the protocol asset to be deposited
