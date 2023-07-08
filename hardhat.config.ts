@@ -21,6 +21,10 @@ import "hardhat-abi-exporter";
 import { HardhatUserConfig } from "hardhat/types";
 import { chainIdToAddresses } from "./scripts/networkVariables";
 
+import * as tdly from "@tenderly/hardhat-tenderly";
+
+tdly.setup({ automaticVerifications: false });
+
 const mnemonic = process.env.MNEMONIC;
 if (!mnemonic) {
   throw new Error("Please set your MNEMONIC in a .env file");
@@ -166,6 +170,11 @@ const config: HardhatUserConfig = {
       "TokenRegistry",
     ],
     spacing: 2,
+  },
+  tenderly: {
+    project: "latestdev",
+    username: "velvet-capital",
+    privateVerification: true,
   },
 };
 
