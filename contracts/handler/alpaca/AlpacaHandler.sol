@@ -51,7 +51,8 @@ contract AlpacaHandler is IHandler {
     address _yieldAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
     if (_yieldAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -151,13 +152,13 @@ contract AlpacaHandler is IHandler {
     return tokenBalance;
   }
 
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
-    return ("", address(0));
-  }
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {}
 
   receive() external payable {}
 }

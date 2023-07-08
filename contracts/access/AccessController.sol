@@ -15,11 +15,11 @@ import {AccessControl} from "@openzeppelin/contracts-4.8.2/access/AccessControl.
 import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
 import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 import {FunctionParameters} from "../FunctionParameters.sol";
 
-contract AccessController is AccessControl, Ownable {
-  bytes32 public constant HANDLER_CONTRACT = keccak256("HANDLER_CONTRACT");
+contract AccessController is AccessControl {
   bytes32 public constant INDEX_MANAGER_ROLE = keccak256("INDEX_MANAGER_ROLE");
   bytes32 public constant SUPER_ADMIN = keccak256("SUPER_ADMIN");
   bytes32 public constant WHITELIST_MANAGER_ADMIN = keccak256("WHITELIST_MANAGER_ADMIN");
@@ -33,20 +33,28 @@ contract AccessController is AccessControl, Ownable {
     _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
   }
 
-  function setupRole(bytes32 role, address account) public onlyOwner {
+  modifier onlyAdmin() {
+    if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+      revert ErrorLibrary.CallerNotAdmin();
+    }
+    _;
+  }
+
+  /**
+   * @notice This function is used to grant a specific role to an address
+   * @param role The specific role that has to be assigned
+   * @param account The account that is to get the role
+   */
+  function setupRole(bytes32 role, address account) public onlyAdmin {
     _setupRole(role, account);
   }
 
-  function setRoleAdmin(bytes32 role, bytes32 adminRole) public onlyOwner {
-    _setRoleAdmin(role, adminRole);
-  }
-
-  function setUpRoles(FunctionParameters.AccessSetup memory setupData) public onlyOwner {
-    _setupRole(HANDLER_CONTRACT, setupData._exchangeHandler);
-
+  /**
+   * @notice This function is invoked while creation of a new fund and is used to specify its different components and their roles
+   * @param setupData Contains the input params for the function
+   */
+  function setUpRoles(FunctionParameters.AccessSetup memory setupData) public onlyAdmin {
     _setupRole(INDEX_MANAGER_ROLE, setupData._index);
-
-    _setupRole(INDEX_MANAGER_ROLE, address(ITokenRegistry(setupData._tokenRegistry).IndexOperationHandler()));
 
     _setupRole(INDEX_MANAGER_ROLE, setupData._offChainIndexSwap);
 
@@ -71,7 +79,6 @@ contract AccessController is AccessControl, Ownable {
 
     _setupRole(INDEX_MANAGER_ROLE, setupData._offChainRebalancing);
     _setupRole(REBALANCER_CONTRACT, setupData._offChainRebalancing);
-    _setupRole(HANDLER_CONTRACT, setupData._offChainRebalancing);
 
     _setupRole(INDEX_MANAGER_ROLE, setupData._rebalanceAggregator);
     _setupRole(REBALANCER_CONTRACT, setupData._rebalanceAggregator);

@@ -28,7 +28,7 @@ contract PancakeSwapHandler is Initializable {
   IUniswapV2Router02 internal pancakeSwapRouter;
   IPriceOracle internal oracle;
 
-  uint256 public constant divisor_int = 10_000;
+  uint256 public constant DIVISOR_INT = 10_000;
 
   using SafeMathUpgradeable for uint256;
 
@@ -43,7 +43,7 @@ contract PancakeSwapHandler is Initializable {
     return pancakeSwapRouter.WETH();
   }
 
-  function getSwapAddress(uint256 _swapAmount, address _t) public view returns (address) {
+  function getSwapAddress() public view returns (address) {
     return address(pancakeSwapRouter);
   }
 
@@ -130,7 +130,7 @@ contract PancakeSwapHandler is Initializable {
     uint256 _slippage,
     address[] memory path
   ) internal view returns (uint256 minAmount) {
-    if (!(_slippage < divisor_int)) {
+    if (!(_slippage < DIVISOR_INT)) {
       revert ErrorLibrary.SlippageCannotBeGreaterThan100();
     }
     uint256 currentAmount;
@@ -141,6 +141,6 @@ contract PancakeSwapHandler is Initializable {
     } else {
       currentAmount = oracle.getPriceForAmount(path[0], _amount, true);
     }
-    minAmount = currentAmount.mul(divisor_int.sub(_slippage)).div(divisor_int);
+    minAmount = currentAmount.mul(DIVISOR_INT.sub(_slippage)).div(DIVISOR_INT);
   }
 }

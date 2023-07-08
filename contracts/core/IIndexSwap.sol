@@ -155,6 +155,22 @@ interface IIndexSwap {
   function setRedeemed(bool _state) external;
 
   /**
+    @notice The function will set lastRebalanced time called by the rebalancing contract.
+    @param _time The time is block.timestamp, the moment when rebalance is done
+  */
+  function setLastRebalance(uint256 _time) external;
+
+  /**
+    @notice The function returns lastRebalanced time
+  */
+  function getLastRebalance() external view returns (uint256);
+
+  /**
+    @notice The function returns lastPaused time
+  */
+  function getLastPaused() external view returns (uint256);
+
+  /**
    * @notice The function updates the record struct including the denorm information
    * @dev The token list is passed so the function can be called with current or updated token list
    * @param tokens The updated token list of the portfolio
@@ -179,4 +195,10 @@ interface IIndexSwap {
   function setLastInvestmentPeriod(address _to) external;
 
   function checkCoolDownPeriod() external view;
+
+  function mintInvest(address _to, uint256 _mintAmount) external;
+
+  function burnWithdraw(address _to, uint256 _mintAmount) external returns (uint256 exitFee);
+
+  function setFlags(bool _pauseState, bool _redeemState) external;
 }

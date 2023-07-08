@@ -31,7 +31,6 @@ The contracts are divided into multiple sections:
 - [ApeSwap](https://apeswap.finance/): It provides lending as well as (pair) Liquidity options where the users can invest and get interest bearing tokens in return.
 - [Beefy](https://beefy.com/): It provides lending as well as Liquidity options. After providing liquidity to a chosen protocol (e.g. PancakeSwap) the LP token can be deposited into Beefy and their protocol stakes the LP token which will in turn bring additional rewards (e.g. on PancakeSwap we get CAKE tokens).
 - [BiSwap](https://biswap.org/): It allows for Liquidity option where the user gets interest bearing LP token in return that brings additional rewards.
-- [Liqee](https://liqee.io/#/): It is a lending-based platform bringing better yields for the users.
 - [PancakeSwap](https://pancakeswap.finance/): It provides the liquidity option and also additional yield farming options for better returns.
 - [Venus](https://venus.io/): It is a lending-based platform bringing better yields for the users.
 - [Wombat](https://www.wombat.exchange/): It is a staking platform where after investing, the LP token gets staked in the protocol, thus bringing rewards for the investor.

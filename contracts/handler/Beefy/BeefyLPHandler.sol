@@ -26,7 +26,7 @@ import {LPInterface} from "./interfaces/LPInterface.sol";
 import {FactoryInterface} from "./interfaces/FactoryInterface.sol";
 import {Babylonian} from "@uniswap/lib/contracts/libraries/Babylonian.sol";
 import {ISolidlyPair} from "./interfaces/ISolidlyPair.sol";
-
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 import {IHandler} from "../IHandler.sol";
 import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
@@ -34,11 +34,13 @@ import {IStrategy} from "./interfaces/IStrategy.sol";
 import {FullMath} from "../libraries/FullMath.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
+import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 
-contract BeefyLPHandler is IHandler {
+contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   using SafeMathUpgradeable for uint256;
-  uint256 public constant divisor_int = 10_000;
+  uint256 public constant DIVISOR_INT = 10_000;
   address public immutable lpHandlerAddress;
+  IPriceOracle public _oracle;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
@@ -50,10 +52,12 @@ contract BeefyLPHandler is IHandler {
     bool isWETH
   );
 
-  address constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
-
-  constructor(address _lpHandlerAddress) {
+  constructor(address _lpHandlerAddress, address _priceOracle) {
+    if (_lpHandlerAddress == address(0) && _priceOracle == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
     lpHandlerAddress = _lpHandlerAddress;
+    _oracle = IPriceOracle(_priceOracle);
   }
 
   /**
@@ -67,7 +71,8 @@ contract BeefyLPHandler is IHandler {
     address mooLpAsset,
     uint256[] memory _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
     if (mooLpAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -85,13 +90,19 @@ contract BeefyLPHandler is IHandler {
       }
       TransferHelper.safeTransfer(underlying[0], lpHandlerAddress, _amount[0]);
       TransferHelper.safeTransfer(underlying[1], lpHandlerAddress, _amount[1]);
-      IHandler(lpHandlerAddress).deposit(address(underlyingLpToken), _amount, _lpSlippage, address(this));
+      IHandler(lpHandlerAddress).deposit(address(underlyingLpToken), _amount, _lpSlippage, address(this), user);
     } else {
       uint256 amountBNB = address(this).balance;
       uint256 index = underlying[0] == WETH ? 1 : 0;
       uint256 tokbal = IERC20Upgradeable(underlying[index]).balanceOf(address(this));
       TransferHelper.safeTransfer(address(underlying[index]), lpHandlerAddress, tokbal);
-      IHandler(lpHandlerAddress).deposit{value: amountBNB}(underlyingLpToken, _amount, _lpSlippage, address(this));
+      IHandler(lpHandlerAddress).deposit{value: amountBNB}(
+        underlyingLpToken,
+        _amount,
+        _lpSlippage,
+        address(this),
+        user
+      );
     }
 
     uint256 LPTokens = IERC20Upgradeable(underlyingLpToken).balanceOf(address(this));
@@ -157,8 +168,9 @@ contract BeefyLPHandler is IHandler {
    * @return tokenBalance t token balance of the holder
    */
   function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    require(address(_tokenHolder) != address(0), "zero address passed");
-    require(address(t) != address(0), "zero address passed");
+    if (_tokenHolder == address(0) || t == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
     IVaultBeefy asset = IVaultBeefy(t);
     tokenBalance = asset.balanceOf(_tokenHolder);
   }
@@ -176,61 +188,32 @@ contract BeefyLPHandler is IHandler {
     uint256[] memory tokenBalance = new uint256[](2);
     address underlyingLpToken = address(IStrategy(address(IVaultBeefy(t).strategy())).want());
     uint256 balance = getTokenBalance(_tokenHolder, t).mul(IVaultBeefy(t).balance()).div(IVaultBeefy(t).totalSupply());
-    (tokenBalance[0], tokenBalance[1]) = getLiquidityValue(underlyingLpToken, balance);
+    (tokenBalance[0], tokenBalance[1]) = _getLiquidityValue(underlyingLpToken, balance);
     return tokenBalance;
   }
 
   /**
-   * @notice This function returns the liquidty value as per the calls
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   * @return finalLB value of the lp asset t
    */
-  function getLiquidityValue(
-    address lpToken,
-    uint256 liquidityAmount
-  ) internal view returns (uint256 tokenAAmount, uint256 tokenBAmount) {
-    require(address(lpToken) != address(0), "zero address passed");
-    if (lpToken == address(0)) {
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {
+    if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    (uint256 reservesA, uint256 reservesB, ) = LPInterface(lpToken).getReserves();
-    LPInterface pair = LPInterface(lpToken);
-    bool feeOn = FactoryInterface(pair.factory()).feeTo() != address(0);
-    uint256 kLast = feeOn ? pair.kLast() : 0;
-    uint256 totalSupply = pair.totalSupply();
-    return computeLiquidityValue(reservesA, reservesB, totalSupply, liquidityAmount, feeOn, kLast);
-  }
-
-  /**
-   * @notice This function is used to compute liquidty for various operations.
-   */
-  function computeLiquidityValue(
-    uint256 reservesA,
-    uint256 reservesB,
-    uint256 totalSupply,
-    uint256 liquidityAmount,
-    bool feeOn,
-    uint256 kLast
-  ) internal pure returns (uint256 tokenAAmount, uint256 tokenBAmount) {
-    if (feeOn && kLast > 0) {
-      uint256 rootK = Babylonian.sqrt(reservesA.mul(reservesB));
-      uint256 rootKLast = Babylonian.sqrt(kLast);
-      if (rootK > rootKLast) {
-        uint256 numerator1 = totalSupply;
-        uint256 numerator2 = rootK.sub(rootKLast);
-        uint256 denominator = rootK.mul(5).add(rootKLast);
-        uint256 feeLiquidity = FullMath.mulDiv(numerator1, numerator2, denominator);
-        totalSupply = totalSupply.add(feeLiquidity);
-      }
-    }
-    return (reservesA.mul(liquidityAmount) / totalSupply, reservesB.mul(liquidityAmount) / totalSupply);
+    address underlyingLpToken = address(IStrategy(address(IVaultBeefy(t).strategy())).want());
+    uint lB = _calculatePrice(underlyingLpToken, address(_oracle));
+    uint256 balance = _getTokenBalance(_tokenHolder, t);
+    uint finalLB = lB.mul(balance).div(10 ** 18);
+    return finalLB;
   }
 
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
-    return ("", address(0));
-  }
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {}
 
   receive() external payable {}
 }

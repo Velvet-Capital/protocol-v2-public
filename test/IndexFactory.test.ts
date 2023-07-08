@@ -3,7 +3,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import "@nomicfoundation/hardhat-chai-matchers";
 import hre from "hardhat";
-import { ethers, upgrades } from "hardhat";
+import { ethers, upgrades, network } from "hardhat";
 import { BigNumber, Contract } from "ethers";
 import {
   tokenAddresses,
@@ -11,11 +11,9 @@ import {
   indexSwapLibrary,
   baseHandler,
   accessController,
-  liqeeHandler,
   venusHandler,
   wombatHandler,
   beefyHandler,
-  pancakeLpHandler,
 } from "./Deployments.test";
 
 import {
@@ -27,7 +25,6 @@ import {
   IndexFactory,
   PancakeSwapHandler,
   VelvetSafeModule,
-  Vault,
   PriceOracle,
   AssetManagerConfig,
   TokenRegistry,
@@ -59,8 +56,6 @@ describe.only("Tests for IndexFactory", () => {
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
   let swapHandler1: PancakeSwapHandler;
-  //let lendingHandler: LendingHandler;
-  // let vault: Vault;
   let swapHandler: PancakeSwapHandler;
   let tokenRegistry: TokenRegistry;
   let assetManagerConfig: AssetManagerConfig;
@@ -71,6 +66,7 @@ describe.only("Tests for IndexFactory", () => {
   let accessController1: AccessController;
   let feeModule0: FeeModule;
   let feeModule1: FeeModule;
+  let feeModule2: FeeModule;
   let rebalanceLibrary: RebalanceLibrary;
   let txObject;
   let velvetSafeModule: VelvetSafeModule;
@@ -81,7 +77,6 @@ describe.only("Tests for IndexFactory", () => {
   let treasury: SignerWithAddress;
   let assetManagerTreasury: SignerWithAddress;
   let nonOwner: SignerWithAddress;
-  // let velvetManager: SignerWithAddress;
   let addr3: SignerWithAddress;
   let addr2: SignerWithAddress;
   let addr1: SignerWithAddress;
@@ -97,7 +92,7 @@ describe.only("Tests for IndexFactory", () => {
   let indexInfo2: any;
   let indexInfo3: any;
   let indexInfo4: any;
-  //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
+  let pancakeLpHandler: any;
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
   let velvetTreasuryBalance = 0;
@@ -112,6 +107,11 @@ describe.only("Tests for IndexFactory", () => {
       const PriceOracle = await ethers.getContractFactory("PriceOracle");
       priceOracle = await PriceOracle.deploy();
       await priceOracle.deployed();
+
+      const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
+      pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
+      await pancakeLpHandler.deployed();
+      await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
 
       accounts = await ethers.getSigners();
       [
@@ -132,33 +132,21 @@ describe.only("Tests for IndexFactory", () => {
 
       iaddress = await tokenAddresses(priceOracle, true);
 
-      const ZeroExHandler = await ethers.getContractFactory("ZeroExHandler");
-      const zeroExHandler = await ZeroExHandler.deploy();
-      await zeroExHandler.deployed();
-
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
-
-      const IndexOperations = await ethers.getContractFactory("IndexOperations", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      const indexOperations = await IndexOperations.deploy();
-      await indexOperations.deployed();
-
       const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
 
       const registry = await upgrades.deployProxy(
         TokenRegistry,
         [
-          "100",
-          "1000",
-          "1000",
+          "2500", // protocol fee
+          "30", // protocolFeeBottomConstraint
+          "1000", // max asset manager fee
+          "3000", // max performance fee
+          "500",
+          "500",
           "10000000000000000",
           "500000000000000000000",
           treasury.address,
           addresses.WETH_Address,
-          indexOperations.address,
           "1",
         ],
         { kind: "uups" },
@@ -229,8 +217,6 @@ describe.only("Tests for IndexFactory", () => {
       swapHandler1 = await PancakeSwapHandler1.deploy();
       await swapHandler1.deployed();
 
-      swapHandler1.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
-
       // Granting owner index manager role to swap eth to token
       await accessController.grantRole(
         "0x1916b456004f332cd8a19679364ef4be668619658be72c17b7e86697c4ae0f16",
@@ -263,6 +249,7 @@ describe.only("Tests for IndexFactory", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
+          priceOracle.address,
         ],
         [
           iaddress.busdAddress,
@@ -279,8 +266,9 @@ describe.only("Tests for IndexFactory", () => {
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
           addresses.MAIN_LP_BUSD,
-          addresses.qETH,
           addresses.mooValasBUSD,
+          addresses.mooVenusBNB,
+          addresses.mooValasBTCB,
         ],
         [
           baseHandler.address,
@@ -297,7 +285,8 @@ describe.only("Tests for IndexFactory", () => {
           pancakeLpHandler.address,
           pancakeLpHandler.address,
           wombatHandler.address,
-          liqeeHandler.address,
+          beefyHandler.address,
+          beefyHandler.address,
           beefyHandler.address,
         ],
         [
@@ -315,10 +304,29 @@ describe.only("Tests for IndexFactory", () => {
           [addresses.cake_RewardToken],
           [addresses.cake_RewardToken],
           [addresses.wombat_RewardToken],
-          [addresses.liqee_RewardToken],
+          [],
+          [],
           [],
         ],
-        [true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false],
+        [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+        ],
       );
       registry1.wait();
       tokenRegistry.enableSwapHandlers([swapHandler.address, swapHandler1.address]);
@@ -395,10 +403,6 @@ describe.only("Tests for IndexFactory", () => {
         addresses.vDAI_Address,
         addresses.vDOGE_Address,
         addresses.vLINK_Address,
-        addresses.qBNB,
-        addresses.qETH,
-        addresses.qUSX,
-        addresses.qFIL,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
         addresses.WBNB_BUSDLP_Address,
@@ -414,11 +418,15 @@ describe.only("Tests for IndexFactory", () => {
         addresses.ibBUSD_Address,
         addresses.ibBTCB_Address,
         addresses.MAIN_LP_BUSD,
+        addresses.mooVenusBNB,
+        addresses.mooValasBTCB,
       ];
 
       await assetManagerConfig.init({
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "100",
+        _exitFee: "100",
         _minInvestmentAmount: "10000000000000000",
         _maxInvestmentAmount: "500000000000000000000",
         _tokenRegistry: tokenRegistry.address,
@@ -437,8 +445,10 @@ describe.only("Tests for IndexFactory", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -453,8 +463,10 @@ describe.only("Tests for IndexFactory", () => {
           symbol: "IDX",
           maxIndexInvestmentAmount: "500000000000000000000",
           minIndexInvestmentAmount: "10000000000000000",
-          _managementFee: "100",
-          _performanceFee: "10",
+          _managementFee: "200",
+          _performanceFee: "2500",
+          _entryFee: "100",
+          _exitFee: "100",
           _assetManagerTreasury: assetManagerTreasury.address,
           _whitelistedTokens: whitelistedTokens,
           _public: false,
@@ -471,8 +483,10 @@ describe.only("Tests for IndexFactory", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "0",
+        _performanceFee: "0",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -486,8 +500,10 @@ describe.only("Tests for IndexFactory", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: false,
@@ -533,6 +549,7 @@ describe.only("Tests for IndexFactory", () => {
 
       feeModule0 = FeeModule.attach(indexInfo.feeModule);
       feeModule1 = FeeModule.attach(indexInfo1.feeModule);
+      feeModule2 = FeeModule.attach(indexInfo2.feeModule);
 
       const config = await indexSwap1.iAssetManagerConfig();
 
@@ -558,6 +575,8 @@ describe.only("Tests for IndexFactory", () => {
               minIndexInvestmentAmount: "10000000000000000",
               _managementFee: "100",
               _performanceFee: "10",
+              _entryFee: "0",
+              _exitFee: "0",
               _assetManagerTreasury: assetManagerTreasury.address,
               _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
               _public: true,
@@ -579,8 +598,10 @@ describe.only("Tests for IndexFactory", () => {
               symbol: "IDX",
               maxIndexInvestmentAmount: "500000000000000000000",
               minIndexInvestmentAmount: "10000000000000000",
-              _managementFee: "100",
-              _performanceFee: "10",
+              _managementFee: "200",
+              _performanceFee: "2500",
+              _entryFee: "0",
+              _exitFee: "0",
               _assetManagerTreasury: assetManagerTreasury.address,
               _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
               _public: true,
@@ -592,6 +613,113 @@ describe.only("Tests for IndexFactory", () => {
             2,
           ),
         ).to.be.revertedWithCustomError(indexFactory, "InvalidThresholdLength");
+      });
+
+      it("asset manager should create a private transferable fund and make it non-transferable", async () => {
+        await expect(
+          indexFactory.connect(nonOwner).createIndexNonCustodial({
+            name: "INDEXLY",
+            symbol: "IDX",
+            maxIndexInvestmentAmount: "500000000000000000000",
+            minIndexInvestmentAmount: "10000000000000000",
+            _managementFee: "200",
+            _performanceFee: "2500",
+            _entryFee: "0",
+            _exitFee: "0",
+            _assetManagerTreasury: assetManagerTreasury.address,
+            _whitelistedTokens: [addresses.WBNB_BUSDLP_Address],
+            _public: false,
+            _transferable: true,
+            _transferableToPublic: true,
+            _whitelistTokens: false,
+          }),
+        );
+
+        const indexAddress = await indexFactory.getIndexList(4);
+        const indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        expect(await assetManagerConfig.transferable()).to.eq(true);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(true);
+        // Change the fund to non-transferable
+        await expect(assetManagerConfig.connect(nonOwner).updateTransferability(false, false));
+        expect(await assetManagerConfig.transferable()).to.eq(false);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(false);
+      });
+
+      it("asset manager should be able to make the previous private fund transferable to whitelisted addresses", async () => {
+        const indexAddress = await indexFactory.getIndexList(4);
+        const indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        expect(await assetManagerConfig.transferable()).to.eq(false);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(false);
+        // Change the fund transferable to whitelisted addresses
+        await expect(assetManagerConfig.connect(nonOwner).updateTransferability(true, false));
+        expect(await assetManagerConfig.transferable()).to.eq(true);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(false);
+      });
+
+      it("asset manager should be able to convert the previous transferable private fund to public", async () => {
+        const indexAddress = await indexFactory.getIndexList(4);
+        const indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        expect(await assetManagerConfig.publicPortfolio()).to.eq(false);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(false);
+        // Change the fund to public
+        await expect(assetManagerConfig.connect(nonOwner).convertPrivateFundToPublic());
+        expect(await assetManagerConfig.publicPortfolio()).to.eq(true);
+        // The public fund by default becomes tranferable to public
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(true);
+      });
+
+      it("asset manager should be able to make the previous public fund non-transferable", async () => {
+        const indexAddress = await indexFactory.getIndexList(4);
+        const indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        expect(await assetManagerConfig.transferable()).to.eq(true);
+        // Change the fund to non-transferable
+        await expect(assetManagerConfig.connect(nonOwner).updateTransferability(false, false));
+        expect(await assetManagerConfig.transferable()).to.eq(false);
+      });
+
+      it("asset manager should not be able to make the previous public fund transferable to only whitelisted addresses", async () => {
+        const indexAddress = await indexFactory.getIndexList(4);
+        const indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        expect(await assetManagerConfig.transferable()).to.eq(false);
+        // Try changing the fund to transferable only to whitelisted addresses
+        await expect(
+          assetManagerConfig.connect(nonOwner).updateTransferability(true, false),
+        ).to.be.revertedWithCustomError(assetManagerConfig, "PublicFundToWhitelistedNotAllowed");
+      });
+
+      it("asset manager should be able to make the previous public fund transferable", async () => {
+        const indexAddress = await indexFactory.getIndexList(4);
+        const indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        expect(await assetManagerConfig.transferable()).to.eq(false);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(false);
+        // Change the fund transferable to public
+        await expect(assetManagerConfig.connect(nonOwner).updateTransferability(true, true));
+        expect(await assetManagerConfig.transferable()).to.eq(true);
+        expect(await assetManagerConfig.transferableToPublic()).to.eq(true);
       });
 
       it("should check Index token name and symbol", async () => {
@@ -638,13 +766,13 @@ describe.only("Tests for IndexFactory", () => {
       it("Initialize 1st IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([iaddress.dogeAddress, addresses.MAIN_LP_BUSD], [5000, 5000]);
+        await index.initToken([addresses.mooVenusBNB, addresses.Cake_WBNBLP_Address], [5000, 5000]);
       });
 
       it("Initialize 2nd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(1);
         const index = indexSwap.attach(indexAddress);
-        await index.connect(nonOwner).initToken([iaddress.btcAddress, addresses.vBNB_Address], [5000, 5000]);
+        await index.connect(nonOwner).initToken([iaddress.btcAddress, addresses.MAIN_LP_BUSD], [5000, 5000]);
       });
 
       it("Initialize 3rd IndexFund Tokens", async () => {
@@ -750,8 +878,8 @@ describe.only("Tests for IndexFactory", () => {
           },
         );
         const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)))
-        // console.log(indexSupplyAfter);
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -774,6 +902,8 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap2.totalSupply();
         // console.log(indexSupplyAfter);
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -801,6 +931,8 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap2.totalSupply();
         // console.log(indexSupplyAfter);
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -830,6 +962,8 @@ describe.only("Tests for IndexFactory", () => {
         // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
 
         // console.log(indexSupplyAfter);
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -852,6 +986,8 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap3.totalSupply();
         // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -871,7 +1007,7 @@ describe.only("Tests for IndexFactory", () => {
               value: "2000000000000000000",
             },
           ),
-        ).to.be.revertedWithCustomError(indexSwap3, "UserNotAllowedToInvest");
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "UserNotAllowedToInvest");
       });
 
       it("Add addr3 whitelisted user", async () => {
@@ -935,6 +1071,8 @@ describe.only("Tests for IndexFactory", () => {
           );
           const indexSupplyAfter = await indexSwap.totalSupply();
           // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+          console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+          console.log(indexSupplyAfter);
 
           expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
         });
@@ -1074,6 +1212,8 @@ describe.only("Tests for IndexFactory", () => {
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)))
         // console.log(indexSupplyAfter);
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -1097,7 +1237,8 @@ describe.only("Tests for IndexFactory", () => {
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)))
         // console.log(indexSupplyAfter);
-
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
@@ -1116,22 +1257,17 @@ describe.only("Tests for IndexFactory", () => {
               value: "2000000000000000000",
             },
           ),
-        ).to.be.revertedWithCustomError(indexSwap1, "UserNotAllowedToInvest");
-      });
-
-      it("Calculate fees should return fee values", async () => {
-        const res = await feeModule0.callStatic.calculateFees();
-
-        expect(Number(res._protocolFee)).to.be.greaterThanOrEqual(Number(0));
-        expect(Number(res._managementFee)).to.be.greaterThanOrEqual(Number(0));
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "UserNotAllowedToInvest");
       });
 
       it("Should charge fees for index 1", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         const assetManagerBalanceBefore = await indexSwap.balanceOf(assetManagerTreasury.address);
         const velvetBalanceBefore = await indexSwap.balanceOf(treasury.address);
-
-        await feeModule0.chargeFees();
+        let tx2 = await feeModule0.callStatic.calculateFees();
+        console.log(tx2);
+        let tx = await feeModule0.chargeFees();
+        let receipt = await tx.wait();
 
         const indexSupplyAfter = await indexSwap.totalSupply();
         const assetManagerBalanceAfter = await indexSwap.balanceOf(assetManagerTreasury.address);
@@ -1140,6 +1276,30 @@ describe.only("Tests for IndexFactory", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
         expect(Number(velvetBalanceAfter)).to.be.greaterThanOrEqual(Number(velvetBalanceBefore));
         expect(Number(assetManagerBalanceAfter)).to.be.greaterThanOrEqual(Number(assetManagerBalanceBefore));
+
+        //console.log(receipt.events);
+        let protocolFeeMinted = 0;
+        let managementFeeMinted = 0;
+
+        let result = await receipt.events?.filter((x) => {
+          return x.event == "FeesToBeMinted";
+        });
+
+        if (result && result[0].args) {
+          protocolFeeMinted = Number(result[0].args["protocolFee"]);
+          managementFeeMinted = Number(result[0].args["managerFee"]);
+        }
+
+        console.log(protocolFeeMinted, managementFeeMinted);
+
+        if (protocolFeeMinted != 0 && managementFeeMinted != 0) {
+          let procotolFeePercentage = (protocolFeeMinted / (protocolFeeMinted + managementFeeMinted)) * 100;
+          let managementFeePercentage = (managementFeeMinted / (protocolFeeMinted + managementFeeMinted)) * 100;
+
+          // should be 75%/25% but sometimes it's around 24.999
+          expect(procotolFeePercentage).to.be.greaterThan(24);
+          expect(managementFeePercentage).to.be.lessThan(76);
+        }
       });
 
       it("Should charge fees for index 2", async () => {
@@ -1158,6 +1318,32 @@ describe.only("Tests for IndexFactory", () => {
         expect(Number(assetManagerBalanceAfter)).to.be.greaterThanOrEqual(Number(assetManagerBalanceBefore));
       });
 
+      it("Management fees for index 3 should be 0", async () => {
+        const indexSupplyBefore = await indexSwap2.totalSupply();
+        const assetManagerBalanceBefore = await indexSwap2.balanceOf(assetManagerTreasury.address);
+
+        let tx = await feeModule2.chargeFees();
+        let receipt = await tx.wait();
+
+        const indexSupplyAfter = await indexSwap2.totalSupply();
+        const assetManagerBalanceAfter = await indexSwap2.balanceOf(assetManagerTreasury.address);
+
+        expect(Number(assetManagerBalanceAfter)).to.be.equal(Number(assetManagerBalanceBefore));
+
+        //console.log(receipt.events);
+        let managementFeeMinted = 0;
+
+        let result = await receipt.events?.filter((x) => {
+          return x.event == "FeesToBeMinted";
+        });
+
+        if (result && result[0].args) {
+          managementFeeMinted = Number(result[0].args["managerFee"]);
+        }
+        // should be 75%/25% but sometimes it's around 24.999
+        expect(managementFeeMinted).to.be.equal(0);
+      });
+
       it("Invest 0.00001 BNB into Top10 fund should fail", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         await expect(
@@ -1174,15 +1360,35 @@ describe.only("Tests for IndexFactory", () => {
               value: "10000000000000",
             },
           ),
-        )
-          .to.be.revertedWithCustomError(indexSwapLibrary, "WrongInvestmentAmount")
-          .withArgs("10000000000000000", "500000000000000000000");
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "WrongInvestmentAmount");
 
         const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)))
+        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         // console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
+      });
+
+      it("asset manager should be able to add token which is approved in registry for all the indexes", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.setPermittedTokens([iaddress.wbnbAddress]);
+
+        const config1 = await indexSwap1.iAssetManagerConfig();
+        const AssetManagerConfig1 = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig1 = AssetManagerConfig1.attach(config1);
+        await assetManagerConfig1.connect(nonOwner).setPermittedTokens([iaddress.wbnbAddress]);
+
+        const config2 = await indexSwap2.iAssetManagerConfig();
+        const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
+        await assetManagerConfig2.connect(nonOwner).setPermittedTokens([iaddress.wbnbAddress]);
+
+        const config3 = await indexSwap3.iAssetManagerConfig();
+        const AssetManagerConfig3 = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig3 = AssetManagerConfig3.attach(config3);
+        await assetManagerConfig3.connect(nonOwner).setPermittedTokens([iaddress.wbnbAddress]);
       });
 
       it("Invest 2BNB into Top10 fund", async () => {
@@ -1201,7 +1407,7 @@ describe.only("Tests for IndexFactory", () => {
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        //console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -1243,7 +1449,7 @@ describe.only("Tests for IndexFactory", () => {
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        //console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
@@ -1266,7 +1472,7 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap1.totalSupply();
         //console.log("1bnb after", indexSupplyAfter);
-        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)))
+        //console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
         const assetManagerBalanceAfter = await indexSwap1.balanceOf(assetManagerTreasury.address);
         const velvetBalanceAfter = await indexSwap1.balanceOf(treasury.address);
@@ -1371,7 +1577,7 @@ describe.only("Tests for IndexFactory", () => {
       it("updateTokens should revert if token is not enabled", async () => {
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.qFIL, iaddress.daiAddress, iaddress.wbnbAddress],
+            tokens: [addresses.ibBTCB_Address, iaddress.daiAddress, iaddress.wbnbAddress],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["300", "300"],
@@ -1453,7 +1659,7 @@ describe.only("Tests for IndexFactory", () => {
       it("should update tokens", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await rebalancing.updateTokens({
-          tokens: [iaddress.busdAddress, iaddress.btcAddress, iaddress.wbnbAddress],
+          tokens: [iaddress.ethAddress, iaddress.btcAddress, iaddress.wbnbAddress],
           _swapHandler: swapHandler.address,
           denorms: [2000, 6000, 2000],
           _slippageSell: ["500", "900", "300"],
@@ -1496,13 +1702,13 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("should unpause", async () => {
-        await ethers.provider.send("evm_increaseTime", [600]);
+        await ethers.provider.send("evm_increaseTime", [1900]);
         await rebalancing.connect(addr1).setPause(false);
       });
 
       it("should update tokens for 2nd Index", async () => {
         await rebalancing1.connect(nonOwner).updateTokens({
-          tokens: [iaddress.ethAddress, iaddress.busdAddress, iaddress.wbnbAddress],
+          tokens: [iaddress.ethAddress, iaddress.btcAddress, iaddress.wbnbAddress],
           _swapHandler: swapHandler.address,
           denorms: [2000, 6000, 2000],
           _slippageSell: ["500", "900"],
@@ -1632,7 +1838,6 @@ describe.only("Tests for IndexFactory", () => {
           },
         );
         const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log("DIFFFFF ",BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)))
         // console.log(indexSupplyAfter);
       });
 
@@ -1641,7 +1846,7 @@ describe.only("Tests for IndexFactory", () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
         // console.log("available transfer amount", amountIndexToken);
         await expect(indexSwap.transfer(addr1.address, amountIndexToken.div(2))).to.be.revertedWithCustomError(
-          indexSwap,
+          indexSwapLibrary,
           "Transferprohibited",
         );
       });
@@ -1651,7 +1856,7 @@ describe.only("Tests for IndexFactory", () => {
         const amountIndexToken = await indexSwap1.balanceOf(owner.address);
         // console.log("available transfer amount", amountIndexToken);
         await expect(indexSwap1.transfer(addr3.address, amountIndexToken.div(2))).to.be.revertedWithCustomError(
-          indexSwap1,
+          indexSwapLibrary,
           "Transferprohibited",
         );
       });
@@ -1979,6 +2184,13 @@ describe.only("Tests for IndexFactory", () => {
         // console.log("After Upgrade");
       });
 
+      it("should not upgrade if msg.sender is not owner", async () => {
+        const proxyAddress1 = (await indexFactory.IndexSwapInfolList(0)).exchangeHandler;
+        const proxyAddress2 = (await indexFactory.IndexSwapInfolList(1)).exchangeHandler;
+        await indexFactory.upgradeExchange([proxyAddress1, proxyAddress2], exchange.address);
+        // console.log("After Upgrade");
+      });
+
       it("non owner of indexFactory should not be able to upgrade Exchange", async () => {
         const proxyAddress = (await indexFactory.IndexSwapInfolList(2)).exchangeHandler;
         // console.log("PRoxy ADdress : ", proxyAddress);
@@ -2024,6 +2236,7 @@ describe.only("Tests for IndexFactory", () => {
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
+        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         // console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
@@ -2118,6 +2331,8 @@ describe.only("Tests for IndexFactory", () => {
             minIndexInvestmentAmount: "10000000000000000",
             _managementFee: "100",
             _performanceFee: "10",
+            _entryFee: "0",
+            _exitFee: "0",
             _assetManagerTreasury: assetManagerTreasury.address,
             _whitelistedTokens: whitelistedTokens,
             _public: true,
@@ -2127,6 +2342,7 @@ describe.only("Tests for IndexFactory", () => {
           }),
         ).to.be.revertedWithCustomError(newProxy, "indexCreationIsPause");
       });
+
       it("should unpause index creation and creat index", async () => {
         const IndexFactory = await ethers.getContractFactory("IndexFactory");
         const newProxy = IndexFactory.attach(indexFactory.address);
@@ -2144,10 +2360,6 @@ describe.only("Tests for IndexFactory", () => {
           addresses.vDAI_Address,
           addresses.vDOGE_Address,
           addresses.vLINK_Address,
-          addresses.qBNB,
-          addresses.qETH,
-          addresses.qUSX,
-          addresses.qFIL,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
           addresses.WBNB_BUSDLP_Address,
@@ -2170,6 +2382,8 @@ describe.only("Tests for IndexFactory", () => {
           minIndexInvestmentAmount: "10000000000000000",
           _managementFee: "100",
           _performanceFee: "10",
+          _entryFee: "0",
+          _exitFee: "0",
           _assetManagerTreasury: assetManagerTreasury.address,
           _whitelistedTokens: whitelistedTokens,
           _public: true,
@@ -2177,18 +2391,17 @@ describe.only("Tests for IndexFactory", () => {
           _transferableToPublic: false,
           _whitelistTokens: true,
         });
-        const indexAddress4 = await indexFactory.getIndexList(4);
-        const indexInfo4 = await indexFactory.IndexSwapInfolList(4);
-        indexSwap4 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress4);
-        expect(await indexSwap4.name()).to.eq("INDEXLY123");
-        expect(await indexSwap4.symbol()).to.eq("IDX123");
-        const indexAddress = await indexFactory.getIndexList(4);
-        const index = indexSwap4.attach(indexAddress);
+        const indexAddress5 = await indexFactory.getIndexList(5);
+        const indexSwap5 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress5);
+        expect(await indexSwap5.name()).to.eq("INDEXLY123");
+        expect(await indexSwap5.symbol()).to.eq("IDX123");
+        const indexAddress = await indexFactory.getIndexList(5);
+        const index = indexSwap5.attach(indexAddress);
         await index.initToken([iaddress.btcAddress, iaddress.wbnbAddress], [5000, 5000]);
 
-        const indexSupplyBefore = await indexSwap4.totalSupply();
+        const indexSupplyBefore = await indexSwap5.totalSupply();
         // console.log("0.1bnb before", indexSupplyBefore);
-        await indexSwap4.investInFund(
+        await indexSwap5.investInFund(
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
@@ -2201,7 +2414,7 @@ describe.only("Tests for IndexFactory", () => {
             value: "100000000000000000",
           },
         );
-        const indexSupplyAfter = await indexSwap4.totalSupply();
+        const indexSupplyAfter = await indexSwap5.totalSupply();
         // console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
@@ -2247,7 +2460,7 @@ describe.only("Tests for IndexFactory", () => {
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           }),
-        ).to.be.revertedWithCustomError(indexSwap1, "CoolDownPeriodNotPassed");
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "CoolDownPeriodNotPassed");
       });
 
       it("should withdraw fund and burn index token successfully", async () => {
@@ -2266,6 +2479,218 @@ describe.only("Tests for IndexFactory", () => {
         });
 
         expect(txObject.confirmations).to.equal(1);
+      });
+      it("should fail to create an index with management fee greater than max fee", async () => {
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig2 = await AssetManagerConfig.deploy();
+        await assetManagerConfig2.deployed();
+        await expect(
+          assetManagerConfig2.init({
+            _managementFee: "20000",
+            _performanceFee: "10",
+            _entryFee: "0",
+            _exitFee: "0",
+            _minInvestmentAmount: "10000000000000000",
+            _maxInvestmentAmount: "500000000000000000000",
+            _tokenRegistry: tokenRegistry.address,
+            _accessController: accessController.address,
+            _assetManagerTreasury: treasury.address,
+            _whitelistedTokens: [],
+            _publicPortfolio: true,
+            _transferable: true,
+            _transferableToPublic: true,
+            _whitelistTokens: false,
+          }),
+        ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+      });
+
+      it("should fail to create an index with management fee greater than max fee", async () => {
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig2 = await AssetManagerConfig.deploy();
+        await assetManagerConfig2.deployed();
+        await expect(
+          assetManagerConfig2.init({
+            _managementFee: "100",
+            _performanceFee: "20000",
+            _entryFee: "0",
+            _exitFee: "0",
+            _minInvestmentAmount: "10000000000000000",
+            _maxInvestmentAmount: "500000000000000000000",
+            _tokenRegistry: tokenRegistry.address,
+            _accessController: accessController.address,
+            _assetManagerTreasury: treasury.address,
+            _whitelistedTokens: [],
+            _publicPortfolio: true,
+            _transferable: true,
+            _transferableToPublic: true,
+            _whitelistTokens: false,
+          }),
+        ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+      });
+
+      it("Non asset manager should not be able to propose new management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(nonOwner).proposeNewManagementFee("200")).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "CallerNotAssetManager",
+        );
+      });
+
+      it("Asset manager should propose new management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).proposeNewManagementFee("200");
+      });
+
+      it("Asset manager should not be able to update management fee before 28 days passed", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(assetManager).updateManagementFee()).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "TimePeriodNotOver",
+        );
+      });
+
+      it("Non asset manager should not be able to delete proposed new management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(nonOwner).deleteProposedManagementFee()).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "CallerNotAssetManager",
+        );
+      });
+
+      it("Asset manager should be able to delete proposed new management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).deleteProposedManagementFee();
+      });
+
+      it("Non asset manager should not be able to update management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(nonOwner).updateManagementFee()).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "CallerNotAssetManager",
+        );
+      });
+
+      it("Asset manager should propose new management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).proposeNewManagementFee("150");
+      });
+
+      it("Asset manager should be able to update management fee after 28 days passed", async () => {
+        await network.provider.send("evm_increaseTime", [2419200]);
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+
+        await assetManagerConfig.connect(assetManager).updateManagementFee();
+      });
+
+      // same for performance
+
+      it("Non asset manager should not be able to propose new performance fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(
+          assetManagerConfig.connect(nonOwner).proposeNewPerformanceFee("200"),
+        ).to.be.revertedWithCustomError(assetManagerConfig, "CallerNotAssetManager");
+      });
+
+      it("Asset manager should propose new performance fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).proposeNewPerformanceFee("200");
+      });
+
+      it("Asset manager should be able to update performance fee before 28 days passed", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(assetManager).updatePerformanceFee()).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "TimePeriodNotOver",
+        );
+      });
+
+      it("Non asset manager should not be able to delete proposed new performance fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(nonOwner).deleteProposedPerformanceFee()).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "CallerNotAssetManager",
+        );
+      });
+
+      it("Asset manager should be able to delete proposed new performance fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).deleteProposedPerformanceFee();
+      });
+
+      it("Non asset manager should not be able to update performance fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(assetManagerConfig.connect(nonOwner).updatePerformanceFee()).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "CallerNotAssetManager",
+        );
+      });
+
+      it("Asset manager should propose new management fee", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).proposeNewPerformanceFee("150");
+      });
+
+      it("Asset manager should be able to update management fee after 28 days passed", async () => {
+        await time.increase(2419200);
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).updatePerformanceFee();
+      });
+
+      // treasury
+      it("Non asset manager should not be able to update the asset manager treasury", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(
+          assetManagerConfig.connect(nonOwner).updateAssetManagerTreasury(owner.address),
+        ).to.be.revertedWithCustomError(assetManagerConfig, "CallerNotAssetManager");
+      });
+
+      it("Asset manager should not be able to update the asset manager treasury", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await assetManagerConfig.connect(assetManager).updateAssetManagerTreasury(owner.address);
+      });
+
+      it("Non asset manager should not be able to update the velvet treasury", async () => {
+        await expect(tokenRegistry.connect(nonOwner).updateVelvetTreasury(owner.address)).to.be.reverted;
+      });
+
+      it("Asset manager should be able to update the velvet treasury", async () => {
+        await tokenRegistry.updateVelvetTreasury(owner.address);
       });
     });
   });

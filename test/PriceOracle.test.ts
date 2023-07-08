@@ -3,9 +3,8 @@ import { expect } from "chai";
 import "@nomicfoundation/hardhat-chai-matchers";
 import { ethers, upgrades } from "hardhat";
 import { BigNumber } from "ethers";
-import { solidity } from "ethereum-waffle";
 
-import { Exchange, PancakeSwapHandler, PriceOracle, TokenRegistry, Vault, VelvetSafeModule } from "../typechain";
+import { Exchange, PancakeSwapHandler, PriceOracle, TokenRegistry, VelvetSafeModule } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
 import { indexSwapLibrary, tokenAddresses, IAddresses, RebalancingDeploy } from "./Deployments.test";
@@ -53,30 +52,17 @@ describe.only("Tests for priceOracle", () => {
       [owner, investor1, nonOwner, addr1, addr2, treasury, ...addrs] = accounts;
 
       iaddress = await tokenAddresses(priceOracle, true);
-
-      const ZeroExHandler = await ethers.getContractFactory("ZeroExHandler");
-      const zeroExHandler = await ZeroExHandler.deploy();
-      await zeroExHandler.deployed();
-
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
-
-      const IndexOperations = await ethers.getContractFactory("IndexOperations", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      const indexOperations = await IndexOperations.deploy();
-      await indexOperations.deployed();
-
       await tokenRegistry.initialize(
-        "100",
-        "1000",
-        "1000",
+        "2500", // protocol fee
+        "30", // protocolFeeBottomConstraint
+        "1000", // max asset manager fee
+        "3000", // max performance fee
+        "500",
+        "500",
         "10000000000000000",
         "500000000000000000000",
         treasury.address,
         addresses.WETH_Address,
-        indexOperations.address,
         "1",
       );
 
@@ -122,7 +108,7 @@ describe.only("Tests for priceOracle", () => {
       });
 
       it("Get BTC/USD price", async () => {
-        const price = await priceOracle.getPriceTokenUSD(
+        const price = await priceOracle.getPriceTokenUSD18Decimals(
           "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c",
           "1000000000000000000",
         );
@@ -130,27 +116,27 @@ describe.only("Tests for priceOracle", () => {
       });
 
       it("Get ETH/USD price", async () => {
-        const price = await priceOracle.getPriceTokenUSD(iaddress.ethAddress, "1000000000000000000");
+        const price = await priceOracle.getPriceTokenUSD18Decimals(iaddress.ethAddress, "1000000000000000000");
         // console.log(price);
       });
 
       it("Get BUSD/USD price", async () => {
-        const price = await priceOracle.getPriceTokenUSD(iaddress.busdAddress, "1000000000000000000");
+        const price = await priceOracle.getPriceTokenUSD18Decimals(iaddress.busdAddress, "1000000000000000000");
         // console.log(price);
       });
 
       it("Get DAI/USD price", async () => {
-        const price = await priceOracle.getPriceTokenUSD(iaddress.daiAddress, "1000000000000000000");
+        const price = await priceOracle.getPriceTokenUSD18Decimals(iaddress.daiAddress, "1000000000000000000");
         // console.log(price);
       });
 
       it("Get WBNB/USD price", async () => {
-        const price = await priceOracle.getPriceTokenUSD(iaddress.wbnbAddress, "1000000000000000000");
+        const price = await priceOracle.getPriceTokenUSD18Decimals(iaddress.wbnbAddress, "1000000000000000000");
         // console.log(price);
       });
 
       it("Get DOGE/USD price", async () => {
-        const price = await priceOracle.getPriceTokenUSD(iaddress.dogeAddress, "1000000000000000000");
+        const price = await priceOracle.getPriceTokenUSD18Decimals(iaddress.dogeAddress, "1000000000000000000");
         // console.log(price);
       });
 
@@ -171,7 +157,7 @@ describe.only("Tests for priceOracle", () => {
 
       it("Get ETH/WETH price", async () => {
         const price = await priceOracle.getPriceForAmount(iaddress.ethAddress, "1000000000000000000", true);
-        // console.log(price);
+        console.log(price);
       });
 
       it("Get WETH/ETH price", async () => {
@@ -187,6 +173,37 @@ describe.only("Tests for priceOracle", () => {
       it("Get WETH/DOGE price", async () => {
         const price = await priceOracle.getPriceForAmount(iaddress.dogeAddress, "1000000000000000000", false);
         // console.log(price);
+      });
+
+      // audit testing
+      it("Get USD/DOGE price", async () => {
+        console.log("---------- AUDIT TESTING ----------");
+        const price = await priceOracle.getPriceUSDToken(iaddress.dogeAddress, "1000000000000000000");
+        console.log("1 usd to doge: ", price);
+      });
+
+      it("Get DOGE/wbnb price", async () => {
+        const price = await priceOracle.getPriceForTokenAmount(iaddress.dogeAddress, iaddress.wbnbAddress, "100000000");
+        console.log("1 doge to wbnb: ", price);
+      });
+
+      it("Get wbnb/DOGE price", async () => {
+        const price = await priceOracle.getPriceForTokenAmount(
+          iaddress.wbnbAddress,
+          iaddress.dogeAddress,
+          "1000000000000000000",
+        );
+        console.log("1 wbnb to doge: ", price);
+      });
+
+      it("Get doge/wbnb price", async () => {
+        const price = await priceOracle.getPriceForAmount(iaddress.dogeAddress, "100000000", true);
+        console.log("1 doge to eth: ", price);
+      });
+
+      it("Get wbnb/doge price", async () => {
+        const price = await priceOracle.getPriceForAmount(iaddress.dogeAddress, "1000000000000000000", false);
+        console.log("1 eth to doge: ", price);
       });
     });
   });

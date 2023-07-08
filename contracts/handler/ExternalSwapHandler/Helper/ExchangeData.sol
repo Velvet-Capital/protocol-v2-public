@@ -58,15 +58,23 @@ contract ExchangeData {
     address token;
   }
 
+  struct InputData {
+    uint256[] buyAmount;
+    address sellTokenAddress;
+    address _offChainHandler;
+    bytes[] _buySwapData;
+  }
+
   struct IndexOperationData {
-    ExchangeData.ZeroExData inputData;
-    IHandler handler;
+    ExchangeData.InputData inputData;
     IIndexSwap index;
     uint256 indexValue;
     uint256 protocolFee;
     uint256 balance;
     uint256 _lpSlippage;
+    uint256 _buyAmount;
     address _token;
+    address _toUser;
   }
 
   struct PrimaryWithdraw {

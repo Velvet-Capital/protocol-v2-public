@@ -3,6 +3,8 @@
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {RouterInterface} from "./interfaces/RouterInterface.sol";
 import {SlippageControl} from "./SlippageControl.sol";
+import {DustHandler} from "./DustHandler.sol";
+
 import {FunctionParameters} from "../FunctionParameters.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {LPInterface} from "./interfaces/LPInterface.sol";
@@ -10,15 +12,18 @@ import {Babylonian} from "@uniswap/lib/contracts/libraries/Babylonian.sol";
 import {FactoryInterface} from "./interfaces/FactoryInterface.sol";
 import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 import {FullMath} from "./libraries/FullMath.sol";
+import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 pragma solidity 0.8.16;
 
-abstract contract UniswapV2LPHandler is SlippageControl {
+abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
   using SafeMathUpgradeable for uint;
   event VELVET_ADDED_LIQUIDITY(uint256[] amountProvided, uint256 minAmountA, uint256 minAmountB, uint256 liquidity);
   event VELVET_REMOVE_LIQUIDITY(uint256 liquidityProvided, uint256 amountA, uint256 amountB);
-  uint256 amountA;
-  uint256 amountB;
-  uint256 liquidity;
+  uint256 public amountA;
+  uint256 public amountB;
+  uint256 public liquidity;
+
+  uint256 internal constant ONE_ETH = 1000000000000000000;
 
   /**
    * @notice This function adds liquidity to the BiSwap protocol
@@ -33,7 +38,10 @@ abstract contract UniswapV2LPHandler is SlippageControl {
     uint256[] memory _amount,
     uint256 _lpSlippage,
     address _to,
-    address routerAddress
+    address routerAddress,
+    address user,
+    uint priceA,
+    uint priceB
   ) internal {
     if (_lpAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -51,11 +59,22 @@ abstract contract UniswapV2LPHandler is SlippageControl {
         address(underlying[1]),
         _amount[0],
         _amount[1],
-        getSlippage(_amount[0], _lpSlippage),
-        getSlippage(_amount[1], _lpSlippage),
+        1,
+        1,
         _to,
         block.timestamp
       );
+
+      _returnDust(
+        underlying[0],
+        user // we need to pass user from exchange
+      );
+      _returnDust(
+        underlying[1],
+        user // we need to pass user from exchange
+      );
+
+      _validateLPSlippage(amountA, amountB, priceA, priceB, _lpSlippage);
     } else {
       uint256 i = underlying[0] == router.WETH() ? 1 : 0;
       TransferHelper.safeApprove(address(underlying[i]), address(router), 0);
@@ -63,11 +82,22 @@ abstract contract UniswapV2LPHandler is SlippageControl {
       (amountA, amountB, liquidity) = router.addLiquidityETH{value: msg.value}(
         underlying[i],
         _amount[i],
-        getSlippage(_amount[i], _lpSlippage), //To be changed
-        getSlippage(msg.value, _lpSlippage), //To be changed
+        1,
+        1,
         _to,
         block.timestamp
       );
+
+      _returnDust(
+        router.WETH(),
+        user // we need to pass user from exchange
+      );
+      _returnDust(
+        underlying[i],
+        user // we need to pass user from exchange
+      );
+
+      _validateLPSlippage(amountA, amountB, priceA, priceB, _lpSlippage);
     }
     emit VELVET_ADDED_LIQUIDITY(_amount, amountA, amountB, liquidity);
   }
@@ -75,7 +105,12 @@ abstract contract UniswapV2LPHandler is SlippageControl {
   /**
    * @notice This function remove liquidity from the called protocol
    */
-  function _redeem(FunctionParameters.RedeemData calldata inputData, address routerAddress) internal {
+  function _redeem(
+    FunctionParameters.RedeemData calldata inputData,
+    address routerAddress,
+    uint priceA,
+    uint priceB
+  ) internal {
     if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -92,31 +127,30 @@ abstract contract UniswapV2LPHandler is SlippageControl {
         indexi = 1;
         indexj = 0;
       }
-      uint256[] memory amountMin = new uint256[](2);
       TransferHelper.safeApprove(address(token), address(router), 0);
       TransferHelper.safeApprove(address(token), address(router), inputData._amount);
-      (amountMin[0], amountMin[1]) = _getLiquidityValue(inputData._yieldAsset, inputData._amount);
       (amountA, amountB) = router.removeLiquidityETH(
         underlying[indexi],
         inputData._amount,
-        getSlippage(amountMin[indexi], inputData._lpSlippage),
-        getSlippage(amountMin[indexj], inputData._lpSlippage),
+        1,
+        1,
         inputData._to,
         block.timestamp
       );
+      _validateLPSlippage(amountA, amountB, priceA, priceB, inputData._lpSlippage);
     } else {
-      (uint256 amountAMin, uint256 amountBMin) = _getLiquidityValue(inputData._yieldAsset, inputData._amount);
       TransferHelper.safeApprove(address(token), address(router), 0);
       TransferHelper.safeApprove(address(token), address(router), inputData._amount);
       (amountA, amountB) = router.removeLiquidity(
         underlying[0],
         underlying[1],
         inputData._amount,
-        getSlippage(amountAMin, inputData._lpSlippage),
-        getSlippage(amountBMin, inputData._lpSlippage),
+        1,
+        1,
         inputData._to,
         block.timestamp
       );
+      _validateLPSlippage(amountA, amountB, priceA, priceB, inputData._lpSlippage);
     }
     emit VELVET_REMOVE_LIQUIDITY(inputData._amount, amountA, amountB);
   }
@@ -162,6 +196,23 @@ abstract contract UniswapV2LPHandler is SlippageControl {
       }
     }
     return (reservesA.mul(liquidityAmount) / totalSupply, reservesB.mul(liquidityAmount) / totalSupply);
+  }
+
+  /**
+   * @notice This function is used to liquidty fair value price
+   */
+  function _calculatePrice(address t, address priceOracle) internal view returns (uint256) {
+    address[] memory underlying = _getUnderlyingTokens(t);
+    LPInterface _asset = LPInterface(t);
+    (uint reserve0, uint reserve1, ) = _asset.getReserves();
+    uint totalSupply = _asset.totalSupply();
+    uint price0 = IPriceOracle(priceOracle).getPriceTokenUSD18Decimals(underlying[0], ONE_ETH);
+    uint price1 = IPriceOracle(priceOracle).getPriceTokenUSD18Decimals(underlying[1], ONE_ETH);
+
+    uint256 sqrtReserve = Babylonian.sqrt(reserve0.mul(reserve1));
+    uint256 sqrtPrice = Babylonian.sqrt(price0.mul(price1));
+    uint256 price = sqrtReserve.mul(sqrtPrice).mul(2).div(totalSupply);
+    return price;
   }
 
   /**

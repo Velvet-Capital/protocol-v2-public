@@ -10,33 +10,36 @@ import {
   IAddresses,
   RebalancingDeploy,
   indexSwapLibrary,
-  accessController,
   baseHandler,
   venusHandler,
   wombatHandler,
-  beefyLPHandler,
-  pancakeLpHandler,
-  apeSwapLPHandler,
-  biSwapLPHandler,
 } from "./Deployments.test";
 
 import {
-  AssetManagerConfig,
-  Exchange,
   IndexSwap,
+  IndexSwap__factory,
+  Exchange,
+  Rebalancing__factory,
+  AccessController,
+  IndexFactory,
   PancakeSwapHandler,
-  PancakeSwapLPHandler,
-  PriceOracle,
-  Rebalancing,
-  TokenRegistry,
   VelvetSafeModule,
+  PriceOracle,
+  AssetManagerConfig,
+  TokenRegistry,
+  FeeModule,
+  OffChainIndexSwap,
+  RebalanceLibrary,
+  VelvetSafeModule__factory,
+  Exchange__factory,
+  AccessController__factory,
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
 
-import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@gnosis.pm/safe-core-sdk";
-import EthersAdapter from "@gnosis.pm/safe-ethers-lib";
-import { SafeTransactionDataPartial, GnosisSafeContract, SafeVersion } from "@gnosis.pm/safe-core-sdk-types";
+import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@safe-global/protocol-kit";
+import { EthersAdapter } from "@safe-global/protocol-kit";
+import { SafeTransactionDataPartial } from "@safe-global/safe-core-sdk-types";
 
 var chai = require("chai");
 //use default BigNumber
@@ -45,24 +48,55 @@ chai.use(require("chai-bignumber")());
 describe.only("Tests for MixedIndex", () => {
   let iaddress: IAddresses;
   let accounts;
-  let newSafeAddress: string;
-  let velvetSafeModule: VelvetSafeModule;
+  let priceOracle: PriceOracle;
+  let indexSwap: any;
+  let indexSwap1: any;
+  let indexSwap2: any;
+  let indexSwap3: any;
+  let indexSwap4: any;
+  let indexSwapContract: IndexSwap;
+  let indexFactory: IndexFactory;
+  let swapHandler1: PancakeSwapHandler;
+  let swapHandler: PancakeSwapHandler;
   let tokenRegistry: TokenRegistry;
   let assetManagerConfig: AssetManagerConfig;
-  let exchange: Exchange;
-  let priceOracle: PriceOracle;
-  let indexSwap: IndexSwap;
-  let rebalancing: Rebalancing;
-  let swapHandler: PancakeSwapHandler;
-  let lpHandler: PancakeSwapLPHandler;
+  let exchange: any;
+  let exchange1: Exchange;
+  let rebalancing: any;
+  let rebalancing1: any;
+  let accessController: any;
+  let accessController0: AccessController;
+  let accessController1: AccessController;
+  let feeModule0: FeeModule;
+  let feeModule1: FeeModule;
+  let feeModule2: FeeModule;
+  let rebalanceLibrary: RebalanceLibrary;
   let txObject;
-  let owner: SignerWithAddress;
+  let velvetSafeModule: VelvetSafeModule;
+  let gnosisSafeAddress: string;
+  let offChainIndexSwap: OffChainIndexSwap;
   let investor1: SignerWithAddress;
-  let nonOwner: SignerWithAddress;
-  let addr1: SignerWithAddress;
-  let addr2: SignerWithAddress;
+  let owner: SignerWithAddress;
   let treasury: SignerWithAddress;
+  let assetManagerTreasury: SignerWithAddress;
+  let nonOwner: SignerWithAddress;
+  let addr3: SignerWithAddress;
+  let addr2: SignerWithAddress;
+  let addr1: SignerWithAddress;
+  let assetManagerAdmin: SignerWithAddress;
+  let assetManager: SignerWithAddress;
+  let whitelistManagerAdmin: SignerWithAddress;
+  let whitelistManager: SignerWithAddress;
+  let velvetManager: SignerWithAddress;
   let addrs: SignerWithAddress[];
+  let indexInfo: any;
+  let indexInfo1: any;
+  let indexInfo2: any;
+  let indexInfo3: any;
+  let indexInfo4: any;
+  let pancakeLpHandler: any;
+  let apeSwapLPHandler: any;
+  let biSwapLPHandler: any;
   //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
@@ -71,54 +105,67 @@ describe.only("Tests for MixedIndex", () => {
   const chainId: any = forkChainId ? forkChainId : 56;
   const addresses = chainIdToAddresses[chainId];
 
-  describe("Tests for MixedIndex with Gnosis safe", () => {
+  describe("Tests for MixedIndex ", () => {
     before(async () => {
       const PriceOracle = await ethers.getContractFactory("PriceOracle");
       priceOracle = await PriceOracle.deploy();
       await priceOracle.deployed();
 
-      const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
-      tokenRegistry = await TokenRegistry.deploy();
-      await tokenRegistry.deployed();
+      const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
+      pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
+      await pancakeLpHandler.deployed();
+      await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
+
+      const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
+      biSwapLPHandler = await BiSwapLPHandler.deploy(priceOracle.address);
+      await biSwapLPHandler.deployed();
+      await biSwapLPHandler.addOrUpdateProtocolSlippage("2500");
+
+      const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
+      apeSwapLPHandler = await ApeSwapLPHandler.deploy(priceOracle.address);
+      await apeSwapLPHandler.deployed();
+      await apeSwapLPHandler.addOrUpdateProtocolSlippage("2500");
 
       accounts = await ethers.getSigners();
-      [owner, investor1, nonOwner, addr1, addr2, treasury, ...addrs] = accounts;
+      [
+        owner,
+        investor1,
+        nonOwner,
+        treasury,
+        assetManagerTreasury,
+        addr1,
+        addr2,
+        addr3,
+        assetManager,
+        assetManagerAdmin,
+        whitelistManager,
+        whitelistManagerAdmin,
+        ...addrs
+      ] = accounts;
 
       iaddress = await tokenAddresses(priceOracle, true);
 
-      const ZeroExHandler = await ethers.getContractFactory("ZeroExHandler");
-      const zeroExHandler = await ZeroExHandler.deploy();
-      await zeroExHandler.deployed();
+      const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
 
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
-
-      const IndexOperations = await ethers.getContractFactory("IndexOperations", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      const indexOperations = await IndexOperations.deploy();
-      await indexOperations.deployed();
-
-      await tokenRegistry.initialize(
-        "100",
-        "1000",
-        "1000",
-        "10000000000000000",
-        "500000000000000000000",
-        treasury.address,
-        addresses.WETH_Address,
-        indexOperations.address,
-        "1",
+      const registry = await upgrades.deployProxy(
+        TokenRegistry,
+        [
+          "2500", // protocol fee
+          "30", // protocolFeeBottomConstraint
+          "1000", // max asset manager fee
+          "3000", // max performance fee
+          "500",
+          "500",
+          "10000000000000000",
+          "500000000000000000000",
+          treasury.address,
+          addresses.WETH_Address,
+          "1",
+        ],
+        { kind: "uups" },
       );
 
-      const Exchange = await ethers.getContractFactory("Exchange", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      exchange = await Exchange.deploy();
-      await exchange.deployed();
+      tokenRegistry = TokenRegistry.attach(registry.address);
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -126,14 +173,74 @@ describe.only("Tests for MixedIndex", () => {
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
 
-      // const LpHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-      // lpHandler = await LpHandler.connect(owner).deploy();
-      // await lpHandler.deployed();
+      const provider = ethers.getDefaultProvider();
 
-      // lpHandler.addOrUpdateProtocolSlippage("700");
+      const RebalanceLibrary = await ethers.getContractFactory("RebalanceLibrary", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      const rebalanceLibrary = await RebalanceLibrary.deploy();
+      await rebalanceLibrary.deployed();
 
-      let registry = await tokenRegistry.enableToken(
+      const OffChainRebalance = await ethers.getContractFactory("OffChainRebalance", {
+        libraries: {
+          RebalanceLibrary: rebalanceLibrary.address,
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      const offChainRebalanceDefault = await OffChainRebalance.deploy();
+      await offChainRebalanceDefault.deployed();
+
+      const RebalanceAggregator = await ethers.getContractFactory("RebalanceAggregator", {
+        libraries: {
+          RebalanceLibrary: rebalanceLibrary.address,
+        },
+      });
+
+      const rebalanceAggregatorDefault = await RebalanceAggregator.deploy();
+      await rebalanceAggregatorDefault.deployed();
+
+      const Rebalancing = await ethers.getContractFactory("Rebalancing", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+          RebalanceLibrary: rebalanceLibrary.address,
+        },
+      });
+      const rebalancingDefult = await Rebalancing.deploy();
+      await rebalancingDefult.deployed();
+
+      const IndexSwap = await ethers.getContractFactory("IndexSwap", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      indexSwapContract = await IndexSwap.deploy();
+      await indexSwapContract.deployed();
+
+      const offChainIndex = await ethers.getContractFactory("OffChainIndexSwap", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      offChainIndexSwap = await offChainIndex.deploy();
+      await offChainIndexSwap.deployed();
+
+      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      swapHandler1 = await PancakeSwapHandler1.deploy();
+      await swapHandler1.deployed();
+
+      const Exchange = await ethers.getContractFactory("Exchange", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      exchange1 = await Exchange.deploy();
+      await exchange1.deployed();
+      let registry1 = await tokenRegistry.enableToken(
         [
+          priceOracle.address,
+          priceOracle.address,
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
@@ -164,6 +271,8 @@ describe.only("Tests for MixedIndex", () => {
           addresses.LP_BNBx,
           addresses.BSwap_WBNB_BUSDLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
+          addresses.BSwap_BTC_WBNBLP_Address,
+          addresses.ApeSwap_WBNB_BUSD_Address,
         ],
         [
           baseHandler.address,
@@ -178,6 +287,8 @@ describe.only("Tests for MixedIndex", () => {
           wombatHandler.address,
           wombatHandler.address,
           wombatHandler.address,
+          biSwapLPHandler.address,
+          apeSwapLPHandler.address,
           biSwapLPHandler.address,
           apeSwapLPHandler.address,
         ],
@@ -196,10 +307,12 @@ describe.only("Tests for MixedIndex", () => {
           [addresses.wombat_RewardToken],
           [addresses.biswap_RewardToken],
           [addresses.apeSwap_RewardToken],
+          [addresses.biswap_RewardToken],
+          [addresses.apeSwap_RewardToken],
         ],
-        [true, true, true, true, true, true, false, false, false, false, false, false, false, false],
+        [true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false],
       );
-      registry.wait();
+      registry1.wait();
       tokenRegistry.enableSwapHandlers([swapHandler.address]);
       tokenRegistry.addNonDerivative(wombatHandler.address);
 
@@ -216,10 +329,6 @@ describe.only("Tests for MixedIndex", () => {
         addresses.vDAI_Address,
         addresses.vDOGE_Address,
         addresses.vLINK_Address,
-        addresses.qBNB,
-        addresses.qETH,
-        addresses.qUSX,
-        addresses.qFIL,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
         addresses.WBNB_BUSDLP_Address,
@@ -238,31 +347,17 @@ describe.only("Tests for MixedIndex", () => {
         addresses.MAIN_LP_DAI,
         addresses.MAIN_LP_BUSD,
         addresses.mooBTCBUSDLP,
+        addresses.LP_BNBx,
       ];
-
       await tokenRegistry.enablePermittedTokens(
         [iaddress.busdAddress, iaddress.wbnbAddress, iaddress.ethAddress, iaddress.daiAddress],
         [priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address],
       );
+      await tokenRegistry.addNonDerivative(wombatHandler.address);
 
       const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-      assetManagerConfig = await AssetManagerConfig.deploy();
+      const assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
-
-      await assetManagerConfig.init({
-        _managementFee: "100",
-        _performanceFee: "10",
-        _minInvestmentAmount: "10000000000000000",
-        _maxInvestmentAmount: "500000000000000000000",
-        _tokenRegistry: tokenRegistry.address,
-        _accessController: accessController.address,
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: whitelistedTokens,
-        _publicPortfolio: true,
-        _transferable: true,
-        _transferableToPublic: true,
-        _whitelistTokens: false,
-      });
 
       const FeeLibrary = await ethers.getContractFactory("FeeLibrary");
       const feeLibrary = await FeeLibrary.deploy();
@@ -280,116 +375,66 @@ describe.only("Tests for MixedIndex", () => {
       const VelvetSafeModule = await ethers.getContractFactory("VelvetSafeModule");
       velvetSafeModule = await VelvetSafeModule.deploy();
       await velvetSafeModule.deployed();
-      console.log("VelvetSafeModule deployed to: ", velvetSafeModule.address);
 
-      const ethAdapter = new EthersAdapter({
-        ethers,
-        signer: owner,
-      });
+      const IndexFactory = await ethers.getContractFactory("IndexFactory");
 
-      const id = await ethAdapter.getChainId();
-      const contractNetworks: ContractNetworksConfig = {
-        [id]: {
-          multiSendAddress: addresses.MULTI_SEND_ADDRESS,
-          safeMasterCopyAddress: addresses.SAFE_MASTER_COPY_ADDRESS,
-          safeProxyFactoryAddress: addresses.SAFE_PROXY_FACTORY_ADDRESS,
-        },
-      };
-
-      const safeFactory = await SafeFactory.create({
-        ethAdapter,
-        contractNetworks,
-        isL1SafeMasterCopy: true,
-      });
-
-      const owners = [owner.address];
-      const threshold = 1;
-      const safeAccountConfig: SafeAccountConfig = {
-        owners,
-        threshold,
-      };
-
-      const safeSdk: Safe = await safeFactory.deploySafe({ safeAccountConfig });
-      newSafeAddress = safeSdk.getAddress();
-      let safeAddress = newSafeAddress;
-      console.log("Gnosis Safe deployed to: ", newSafeAddress);
-
-      let ABI = ["function enableModule(address module)"];
-      let abiEncode = new ethers.utils.Interface(ABI);
-      let txData = abiEncode.encodeFunctionData("enableModule", [velvetSafeModule.address]);
-
-      const transaction: SafeTransactionDataPartial = {
-        to: newSafeAddress,
-        value: "0",
-        data: txData,
-        operation: 0,
-        safeTxGas: 0,
-        baseGas: 0,
-        gasPrice: 0,
-        gasToken: "0x0000000000000000000000000000000000000000",
-        refundReceiver: "0x0000000000000000000000000000000000000000",
-      };
-      const safeTransaction = await safeSdk.createTransaction(transaction);
-
-      const txHash = await safeSdk.getTransactionHash(safeTransaction);
-      const approveTxResponse = await safeSdk.approveTransactionHash(txHash);
-      await approveTxResponse.transactionResponse?.wait();
-
-      const executeTxResponse = await safeSdk.executeTransaction(safeTransaction);
-      await executeTxResponse.transactionResponse?.wait();
-
-      await exchange.init(
-        accessController.address,
-        velvetSafeModule.address,
-        priceOracle.address,
-        tokenRegistry.address,
-      );
-      const abiEncoder = ethers.utils.defaultAbiCoder;
-      await velvetSafeModule.setUp(
-        abiEncoder.encode(
-          ["address", "address", "address"],
-          [newSafeAddress, exchange.address, addresses.gnosisMultisendLibrary],
-        ),
+      const indexFactoryInstance = await upgrades.deployProxy(
+        IndexFactory,
+        [
+          {
+            _indexSwapLibrary: indexSwapLibrary.address,
+            _baseIndexSwapAddress: indexSwapContract.address,
+            _baseRebalancingAddres: rebalancingDefult.address,
+            _baseOffChainRebalancingAddress: offChainRebalanceDefault.address,
+            _baseRebalanceAggregatorAddress: rebalanceAggregatorDefault.address,
+            _baseExchangeHandlerAddress: exchange1.address,
+            _baseAssetManagerConfigAddress: assetManagerConfig.address,
+            _baseOffChainIndexSwapAddress: offChainIndexSwap.address,
+            _feeModuleImplementationAddress: feeModule.address,
+            _baseVelvetGnosisSafeModuleAddress: velvetSafeModule.address,
+            _gnosisSingleton: addresses.gnosisSingleton,
+            _gnosisFallbackLibrary: addresses.gnosisFallbackLibrary,
+            _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
+            _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
+            _priceOracle: priceOracle.address,
+            _tokenRegistry: tokenRegistry.address,
+            _velvetProtocolFee: "100",
+            _maxInvestmentAmount: "500000000000000000000",
+            _minInvestmentAmount: "10000000000000000",
+          },
+        ],
+        { kind: "uups" },
       );
 
-      const IndexSwap = await ethers.getContractFactory("IndexSwap", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
+      indexFactory = IndexFactory.attach(indexFactoryInstance.address);
+      console.log("indexFactory address:", indexFactory.address);
+      const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
+        name: "INDEXLY",
+        symbol: "IDX",
+        maxIndexInvestmentAmount: "500000000000000000000",
+        minIndexInvestmentAmount: "10000000000000000",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
+        _assetManagerTreasury: assetManagerTreasury.address,
+        _whitelistedTokens: whitelistedTokens,
+        _public: true,
+        _transferable: false,
+        _transferableToPublic: false,
+        _whitelistTokens: false,
       });
 
-      indexSwap = await IndexSwap.deploy();
-      await indexSwap.deployed();
-      indexSwap.init({
-        _name: "INDEXLY",
-        _symbol: "IDX",
-        _vault: newSafeAddress,
-        _module: velvetSafeModule.address,
-        _oracle: priceOracle.address,
-        _accessController: accessController.address,
-        _tokenRegistry: tokenRegistry.address,
-        _exchange: exchange.address,
-        _iAssetManagerConfig: assetManagerConfig.address,
-        _feeModule: feeModule.address,
-      });
-
-      feeModule.init(indexSwap.address, assetManagerConfig.address, tokenRegistry.address, accessController.address);
-
-      rebalancing = await RebalancingDeploy(
-        indexSwap.address,
-        indexSwapLibrary.address,
-        tokenRegistry.address,
-        exchange.address,
-        accessController,
-        owner.address,
-        priceOracle,
-        assetManagerConfig,
-        feeModule,
-        indexOperations.address,
-      );
+      const indexAddress = await indexFactory.getIndexList(0);
+      indexInfo = await indexFactory.IndexSwapInfolList(0);
+      indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+      rebalancing = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo.rebalancing);
+      exchange = await ethers.getContractAt(Exchange__factory.abi, indexInfo.exchangeHandler);
+      accessController = await ethers.getContractAt(AccessController__factory.abi, await indexSwap.accessController());
+      console.log(await indexSwap.callStatic.accessController());
     });
 
-    describe("Mixed Protocols", function () {
+    describe("Mixed Protocols", async function () {
       it("should check Index token name and symbol", async () => {
         expect(await indexSwap.name()).to.eq("INDEXLY");
         expect(await indexSwap.symbol()).to.eq("IDX");
@@ -408,13 +453,18 @@ describe.only("Tests for MixedIndex", () => {
 
       it("Initialize IndexFund Tokens", async () => {
         await indexSwap.initToken(
-          [addresses.BSwap_WBNB_BUSDLP_Address, addresses.ApeSwap_ETH_BTCB_Address, addresses.Cake_BUSDLP_Address],
+          [addresses.BSwap_BTC_WBNBLP_Address, addresses.ApeSwap_ETH_BTCB_Address, addresses.Cake_WBNBLP_Address],
           [5000, 2000, 3000],
         );
       });
 
       it("should add pid", async () => {
-        await pancakeLpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address], [39]);
+        await pancakeLpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0]);
+        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0]);
+      });
+
+      it("should remove pid", async () => {
+        await apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0]);
       });
 
       it("asset manager should not be able to add token which is not approved in registry", async () => {
@@ -429,12 +479,17 @@ describe.only("Tests for MixedIndex", () => {
 
       it("Invest 0.01 BNB should not revert , if investing token is not initialized", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
+        console.log("indexSupplyBefore", indexSupplyBefore);
+        let balanceBefore;
+        // for(let i = 0 ; i < indexSwap.getTokens(); i++){
+
+        // }
         await indexSwap.investInFund(
           {
-            _slippage: ["100", "100", "100"],
-            _lpSlippage: ["200", "200", "200"],
+            _slippage: ["200", "200", "200"],
+            _lpSlippage: ["800", "800", "800"],
             _to: owner.address,
-            _tokenAmount: "1000000000000000000",
+            _tokenAmount: "10000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           },
@@ -443,7 +498,7 @@ describe.only("Tests for MixedIndex", () => {
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
+        console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -478,7 +533,7 @@ describe.only("Tests for MixedIndex", () => {
           "VBep20Interface",
           "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
         );
-        const vETHBalanceBefore = await VBep20Interface.balanceOf(newSafeAddress);
+        const vETHBalanceBefore = await VBep20Interface.balanceOf(indexSwap.vault());
 
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("0.1bnb before", indexSupplyBefore);
@@ -486,7 +541,7 @@ describe.only("Tests for MixedIndex", () => {
           indexSwap.investInFund(
             {
               _slippage: ["100", "100", "100"],
-              _lpSlippage: ["900", "900", "900"],
+              _lpSlippage: ["2600", "2600", "2600"],
               _to: owner.address,
               _tokenAmount: "100000000000000000",
               _swapHandler: swapHandler.address,
@@ -508,14 +563,14 @@ describe.only("Tests for MixedIndex", () => {
           "VBep20Interface",
           "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
         );
-        const vETHBalanceBefore = await VBep20Interface.balanceOf(newSafeAddress);
+        const vETHBalanceBefore = await VBep20Interface.balanceOf(indexSwap.vault());
 
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("0.1bnb before", indexSupplyBefore);
         await indexSwap.investInFund(
           {
             _slippage: ["100", "100", "100"],
-            _lpSlippage: ["200", "200", "200"],
+            _lpSlippage: ["800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
@@ -539,27 +594,21 @@ describe.only("Tests for MixedIndex", () => {
         const btctoken = ERC20.attach(iaddress.btcAddress);
         const wbnbtoken = ERC20.attach(iaddress.wbnbAddress);
         // console.log("swap start");
-        const swapResult = await exchange.connect(owner)._swapETHToToken(
-          {
-            _token: iaddress.busdAddress,
-            _to: owner.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
+        const swapResult = await swapHandler
+          .connect(owner)
+          .swapETHToTokens("200", iaddress.busdAddress, owner.address, {
             value: "1000000000000000000",
-          },
-        );
+          });
+
         // console.log("swap done");
         await busdtoken.approve(indexSwap.address, "10000000000000000000");
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("10busd before", indexSupplyBefore);
-        // console.log("vault eth balance before", await ethtoken.balanceOf(newSafeAddress));
-        // console.log("vault bnb balance before", await wbnbtoken.balanceOf(newSafeAddress));
+        // console.log("vault eth balance before", await ethtoken.balanceOf(indexSwap.vault()));
+        // console.log("vault bnb balance before", await wbnbtoken.balanceOf(indexSwap.vault()));
         await indexSwap.investInFund({
           _slippage: ["200", "200", "200"],
-          _lpSlippage: ["200", "200", "200"],
+          _lpSlippage: ["800", "800", "800"],
           _to: owner.address,
           _tokenAmount: "10000000000000000000",
           _swapHandler: swapHandler.address,
@@ -567,8 +616,8 @@ describe.only("Tests for MixedIndex", () => {
         });
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log("10BUSD After", indexSupplyAfter);
-        // console.log("vault eth balance after", await ethtoken.balanceOf(newSafeAddress));
-        // console.log("vault bnb balance after", await wbnbtoken.balanceOf(newSafeAddress));
+        // console.log("vault eth balance after", await ethtoken.balanceOf(indexSwap.vault()));
+        // console.log("vault bnb balance after", await wbnbtoken.balanceOf(indexSwap.vault()));
 
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
@@ -590,9 +639,7 @@ describe.only("Tests for MixedIndex", () => {
               value: "10000000000000",
             },
           ),
-        )
-          .to.be.revertedWithCustomError(indexSwapLibrary, "WrongInvestmentAmount")
-          .withArgs("10000000000000000", "500000000000000000000");
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "WrongInvestmentAmount");
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log("0.00001bnb after:", indexSupplyAfter);
 
@@ -605,7 +652,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund(
           {
             _slippage: ["500", "500", "500"],
-            _lpSlippage: ["200", "200", "200"],
+            _lpSlippage: ["800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
@@ -622,7 +669,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should return false if both of the token in pool is not bnb", async () => {
-        expect(await exchange.isWETH(addresses.MAIN_LP_BUSD, wombatHandler.address)).to.be.false;
+        expect(await exchange.callStatic.isWETH(addresses.MAIN_LP_BUSD, wombatHandler.address)).to.be.false;
       });
 
       it("Invest 1BNB into Top10 fund", async () => {
@@ -631,7 +678,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund(
           {
             _slippage: ["700", "700", "700"],
-            _lpSlippage: ["200", "200", "200"],
+            _lpSlippage: ["800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
@@ -646,66 +693,6 @@ describe.only("Tests for MixedIndex", () => {
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
         // console.log("1bnb after:", indexSupplyAfter);
-      });
-
-      it("should be able to claim tokens for portfolio tokens ", async () => {
-        const _exchange = await indexSwap.claimTokens([
-          addresses.MAIN_LP_BUSD,
-          addresses.MAIN_LP_DAI,
-          addresses.Cake_BUSDLP_Address,
-        ]);
-      });
-
-      it("non owner should not be able to swap eth to lpToken", async () => {
-        await expect(
-          exchange.connect(nonOwner)._swapETHToToken(
-            {
-              _token: addresses.MAIN_LP_BUSD,
-              _to: addr1.address,
-              _slippage: "100",
-              _lpSlippage: "200",
-              _swapHandler: swapHandler.address,
-            },
-            {
-              value: "100000",
-            },
-          ),
-        ).to.be.revertedWithCustomError(exchange, "CallerNotIndexManager");
-      });
-
-      it("should be able to swap eth to lpToken and send lpToken to user", async () => {
-        const token = await ethers.getContractAt("VBep20Interface", addresses.MAIN_LP_BUSD);
-        const balanceBefore = await wombatHandler.getTokenBalance(addr1.address, addresses.MAIN_LP_BUSD);
-        // console.log(balanceBefore);
-        const swapResult = await exchange.connect(owner)._swapETHToToken(
-          {
-            _token: addresses.MAIN_LP_BUSD,
-            _to: addr1.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
-            value: "100000",
-          },
-        );
-        swapResult.wait();
-        const balance = await wombatHandler.getTokenBalance(addr1.address, addresses.MAIN_LP_BUSD);
-        // console.log(balance);
-        expect(Number(balance)).to.be.greaterThan(Number(balanceBefore));
-      });
-
-      it("non owner should not be able to swap lptoken to eth", async () => {
-        await expect(
-          exchange.connect(nonOwner)._swapTokenToETH({
-            _token: addresses.MAIN_LP_BUSD,
-            _swapAmount: "1000000000",
-            _lpSlippage: "200",
-            _to: addr1.address,
-            _slippage: "100",
-            _swapHandler: swapHandler.address,
-          }),
-        ).to.be.revertedWithCustomError(exchange, "CallerNotIndexManager");
       });
 
       it("Investment should fail when contract is paused", async () => {
@@ -741,35 +728,10 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should Update Weights and Rebalance", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-
-        await rebalancing.updateWeights(
-          [4667, 3333, 2000],
-          ["500", "500", "500"],
-          ["200", "200", "200"],
-          swapHandler.address,
-        );
-
-        const vETHBalance = await VBep20Interface.balanceOf(newSafeAddress);
-      });
-
-      it("should Update Weights and Rebalance", async () => {
-        await rebalancing.updateWeights(
-          [5000, 2000, 3000],
-          ["500", "500", "500"],
-          ["200", "200", "200"],
-          swapHandler.address,
-        );
-      });
-
-      it("should Update Weights and Rebalance", async () => {
         await rebalancing.updateWeights(
           [3333, 5667, 1000],
           ["500", "500", "500"],
-          ["200", "200", "200"],
+          ["800", "800", "800"],
           swapHandler.address,
         );
       });
@@ -783,8 +745,8 @@ describe.only("Tests for MixedIndex", () => {
             denorms: [2000, 5000, 1000, 1000],
             _slippageSell: ["200", "200", "200"],
             _slippageBuy: ["200", "200", "200", "200"],
-            _lpSlippageSell: ["200", "200"],
-            _lpSlippageBuy: ["200", "200", "200"],
+            _lpSlippageSell: ["200", "200", "200"],
+            _lpSlippageBuy: ["200", "200", "200", "200"],
           }),
         )
           .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
@@ -810,12 +772,17 @@ describe.only("Tests for MixedIndex", () => {
         const token = await ethers.getContractAt("VBep20Interface", addresses.Cake_BUSDLP_Address);
 
         await rebalancing.connect(nonOwner).updateTokens({
-          tokens: [addresses.MAIN_LP_BUSD, addresses.LP_BNBx, addresses.SIDE_LP_BUSD, addresses.Cake_BUSDLP_Address],
+          tokens: [
+            addresses.MAIN_LP_BUSD,
+            addresses.LP_BNBx,
+            addresses.BSwap_BTC_WBNBLP_Address,
+            addresses.Cake_BUSDLP_Address,
+          ],
           _swapHandler: swapHandler.address,
           denorms: [2000, 5000, 1000, 2000],
-          _slippageSell: ["200", "200", "200", "200"],
+          _slippageSell: ["200", "200", "200"],
           _slippageBuy: ["700", "700", "700", "700"],
-          _lpSlippageSell: ["200", "200", "200", "200"],
+          _lpSlippageSell: ["700", "700", "700"],
           _lpSlippageBuy: ["700", "700", "700", "700"],
         });
       });
@@ -853,7 +820,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should unpause", async () => {
-        await ethers.provider.send("evm_increaseTime", [600]);
+        await ethers.provider.send("evm_increaseTime", [1900]);
         await rebalancing.connect(addr1).setPause(false);
       });
 
@@ -979,7 +946,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund(
           {
             _slippage: ["300", "300", "300", "300"],
-            _lpSlippage: ["200", "200", "200", "200"],
+            _lpSlippage: ["800", "800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
@@ -1000,7 +967,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund(
           {
             _slippage: ["700", "700", "700", "700"],
-            _lpSlippage: ["200", "200", "200", "200"],
+            _lpSlippage: ["800", "800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
@@ -1016,12 +983,12 @@ describe.only("Tests for MixedIndex", () => {
         // console.log(indexSupplyAfter);
       });
 
-      it("should withdraw fund in BUSD and burn index token successfully", async () => {
+      it("should withdraw fund in ETH and burn index token successfully", async () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
         // console.log(amountIndexToken, "amountIndexToken");
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const busdtoken = ERC20.attach(iaddress.busdAddress);
-        const balanceBefore = await busdtoken.balanceOf(owner.address);
+        const ethtoken = ERC20.attach(iaddress.ethAddress);
+        const balanceBefore = await ethtoken.balanceOf(owner.address);
         const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
 
         txObject = await indexSwap.withdrawFund({
@@ -1030,10 +997,10 @@ describe.only("Tests for MixedIndex", () => {
           _lpSlippage: ["200", "200", "200", "200"],
           isMultiAsset: false,
           _swapHandler: swapHandler.address,
-          _token: iaddress.busdAddress,
+          _token: iaddress.ethAddress,
         });
 
-        const balanceAfter = await busdtoken.balanceOf(owner.address);
+        const balanceAfter = await ethtoken.balanceOf(owner.address);
         expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
 
         expect(txObject.confirmations).to.equal(1);
@@ -1045,7 +1012,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund(
           {
             _slippage: ["700", "900", "700", "700"],
-            _lpSlippage: ["200", "200", "200", "200"],
+            _lpSlippage: ["800", "800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
@@ -1066,7 +1033,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund(
           {
             _slippage: ["700", "900", "700", "700"],
-            _lpSlippage: ["200", "200", "200", "200"],
+            _lpSlippage: ["800", "800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
@@ -1088,7 +1055,7 @@ describe.only("Tests for MixedIndex", () => {
         txObject = await indexSwap.withdrawFund({
           tokenAmount: AMOUNT,
           _slippage: ["200", "800", "200", "200"],
-          _lpSlippage: ["200", "200", "200", "200"],
+          _lpSlippage: ["800", "800", "800", "800"],
           isMultiAsset: true,
           _swapHandler: swapHandler.address,
           _token: iaddress.wbnbAddress,

@@ -6,19 +6,21 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/uti
 import {ExchangeData} from "../ExternalSwapHandler/Helper/ExchangeData.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
+import {ApproveControl} from "../ApproveControl.sol";
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
+import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {ExternalSlippageControl} from "../ExternalSlippageControl.sol";
 
-contract ZeroExHandler is Initializable {
+contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl {
   using SafeERC20Upgradeable for IERC20Upgradeable;
-
-  address public WETH;
+  using SafeMathUpgradeable for uint;
   address public swapTarget;
+  IPriceOracle public oracle;
 
-  function init(address _WETH, address _swapTarget) external initializer {
+  function init(address _swapTarget, address _oracle) external initializer {
     swapTarget = _swapTarget;
-    WETH = _WETH;
+    oracle = IPriceOracle(_oracle);
   }
-
-  // function updateSwapTarget(address){}
 
   function swap(
     address sellTokenAddress,
@@ -41,26 +43,22 @@ contract ZeroExHandler is Initializable {
 
     uint256 tokensBefore = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
     (bool success, ) = swapTarget.call{value: protocolFee}(callData);
+    if (!success) {
+      revert ErrorLibrary.SwapFailed();
+    }
     uint256 tokensSwapped = 0;
-    if (success) {
-      tokensSwapped = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)) - tokensBefore;
-      if (tokensSwapped == 0) {
-        revert ErrorLibrary.ZeroTokensSwapped();
-      }
-      TransferHelper.safeTransfer(buyTokenAddress, _to, IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)));
-    }
-  }
 
-  function setAllowance(address _token, address _spender, uint256 _sellAmount) public {
-    uint256 _currentAllowance = IERC20Upgradeable(_token).allowance(address(this), _spender);
-    if (_currentAllowance != _sellAmount) {
-      IERC20Upgradeable(_token).safeDecreaseAllowance(_spender, _currentAllowance);
-      IERC20Upgradeable(_token).safeIncreaseAllowance(_spender, _sellAmount);
-    }
-  }
+    uint buyTokenBalance = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
 
-  function getETH() public view returns (address wbnb) {
-    wbnb = address(WETH);
+    tokensSwapped = buyTokenBalance - tokensBefore;
+    if (tokensSwapped == 0) {
+      revert ErrorLibrary.ZeroTokensSwapped();
+    }
+    uint priceSellToken = oracle.getPriceTokenUSD18Decimals(sellTokenAddress, sellAmount);
+    uint priceBuyToken = oracle.getPriceTokenUSD18Decimals(buyTokenAddress, buyTokenBalance);
+
+    validateSwap(priceSellToken, priceBuyToken);
+    TransferHelper.safeTransfer(buyTokenAddress, _to, IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)));
   }
 
   receive() external payable {}

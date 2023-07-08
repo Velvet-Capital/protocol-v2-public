@@ -29,7 +29,7 @@ import {FactoryInterface} from "../interfaces/FactoryInterface.sol";
 import {IMasterChef} from "./interfaces/IMasterChef.sol";
 
 import {Babylonian} from "@uniswap/lib/contracts/libraries/Babylonian.sol";
-
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 import {IHandler} from "../IHandler.sol";
 
 import {FullMath} from "../libraries/FullMath.sol";
@@ -41,9 +41,11 @@ import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   using SafeMathUpgradeable for uint256;
 
+  IPriceOracle public _oracle;
+
   address public constant routerAddress = 0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7;
-  RouterInterface router = RouterInterface(routerAddress);
-  uint256 public constant divisor_int = 10_000;
+  RouterInterface public router = RouterInterface(routerAddress);
+  uint256 public constant DIVISOR_INT = 10_000;
   address public constant MASTER_CHEF = 0x5c8D727b265DBAfaba67E050f2f739cAeEB4A6F9;
 
   mapping(address => uint256) pid;
@@ -58,8 +60,13 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     bool isWETH
   );
 
+  constructor(address _priceOracle) {
+    require(_priceOracle != address(0), "Oracle having zero address");
+    _oracle = IPriceOracle(_priceOracle);
+  }
+
   /**
-   * @notice This function adds liquidity to the ApeSwap protocol
+   * @notice This function adds liquidity to the PancakeSwap protocol
    * @param _lpAsset Address of the protocol asset to be deposited
    * @param _amount Amount that is to be deposited
    * @param _lpSlippage LP slippage value passed to the function
@@ -69,17 +76,24 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address _lpAsset,
     uint256[] memory _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
-    _deposit(_lpAsset, _amount, _lpSlippage, _to, address(router));
+    address[] memory t = getUnderlying(_lpAsset);
+    uint p1 = _oracle.getPriceTokenUSD18Decimals(t[0], 1000000000000000000);
+    uint p2 = _oracle.getPriceTokenUSD18Decimals(t[1], 1000000000000000000);
+    _deposit(_lpAsset, _amount, _lpSlippage, _to, address(router), user, p1, p2);
     emit Deposit(block.timestamp, msg.sender, _lpAsset, _amount, _to);
   }
 
   /**
-   * @notice This function remove liquidity from the ApeSwap protocol
+   * @notice This function remove liquidity from the PancakeSwap protocol
    */
   function redeem(FunctionParameters.RedeemData calldata inputData) public override {
-    _redeem(inputData, routerAddress);
+    address[] memory t = getUnderlying(inputData._yieldAsset);
+    uint p1 = _oracle.getPriceTokenUSD18Decimals(t[0], 1000000000000000000);
+    uint p2 = _oracle.getPriceTokenUSD18Decimals(t[1], 1000000000000000000);
+    _redeem(inputData, routerAddress, p1, p2);
     emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
@@ -113,6 +127,22 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   }
 
   /**
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   * @return finalLB value of the lp asset t
+   */
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint lB = _calculatePrice(t, address(_oracle));
+    uint256 balance = _getTokenBalance(_tokenHolder, t);
+    uint finalLB = lB.mul(balance).div(10 ** 18);
+    return finalLB;
+  }
+
+  /**
    * @notice This function allows to map token addresses to their protocol's pid value
    */
   function pidMap(address[] calldata _lpTokens, uint256[] calldata _pid) external onlyOwner {
@@ -143,10 +173,7 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address _token, address) public view returns (bytes memory, address) {
-    uint256 _pid = pid[_token];
-    return (abi.encodeWithSelector(IMasterChef.deposit.selector, _pid, 0), MASTER_CHEF);
-  }
+  function getClaimTokenCalldata(address _token, address) public view returns (bytes memory, address) {}
 
   receive() external payable {}
 }

@@ -13,33 +13,38 @@ import {
   baseHandler,
   venusHandler,
   wombatHandler,
-  beefyLPHandler,
   alpacaHandler,
-  biSwapLPHandler,
+  beefyHandler,
   apeSwapLendingHandler,
-  rebalanceLibrary,
 } from "./Deployments.test";
 
 import {
-  AssetManagerConfig,
-  Exchange,
   IndexSwap,
+  IndexSwap__factory,
+  Exchange,
+  Rebalancing__factory,
+  AccessController,
+  IndexFactory,
   PancakeSwapHandler,
-  PancakeSwapLPHandler,
-  PriceOracle,
-  RebalanceLibrary,
-  Rebalancing,
-  SlippageControl,
-  TokenRegistry,
-  Vault,
   VelvetSafeModule,
+  PriceOracle,
+  AssetManagerConfig,
+  TokenRegistry,
+  FeeModule,
+  OffChainIndexSwap,
+  RebalanceLibrary,
+  VelvetSafeModule__factory,
+  Exchange__factory,
+  AccessController__factory,
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
 
-import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@gnosis.pm/safe-core-sdk";
-import EthersAdapter from "@gnosis.pm/safe-ethers-lib";
-import { SafeTransactionDataPartial, GnosisSafeContract, SafeVersion } from "@gnosis.pm/safe-core-sdk-types";
+import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@safe-global/protocol-kit";
+import { EthersAdapter } from "@safe-global/protocol-kit";
+import { SafeTransactionDataPartial } from "@safe-global/safe-core-sdk-types";
+
+const keccak256 = require("keccak256");
 
 var chai = require("chai");
 //use default BigNumber
@@ -48,25 +53,57 @@ chai.use(require("chai-bignumber")());
 describe.only("Tests for MixedIndex", () => {
   let iaddress: IAddresses;
   let accounts;
-  let newSafeAddress: string;
-  let velvetSafeModule: VelvetSafeModule;
+  let priceOracle: PriceOracle;
+  let indexSwap: any;
+  let indexSwap1: any;
+  let indexSwap2: any;
+  let indexSwap3: any;
+  let indexSwap4: any;
+  let indexSwapContract: IndexSwap;
+  let indexFactory: IndexFactory;
+  let swapHandler1: PancakeSwapHandler;
+  let swapHandler: PancakeSwapHandler;
   let tokenRegistry: TokenRegistry;
   let assetManagerConfig: AssetManagerConfig;
-  let exchange: Exchange;
-  let priceOracle: PriceOracle;
-  let indexSwap: IndexSwap;
-  let rebalancing: Rebalancing;
-  let swapHandler: PancakeSwapHandler;
-  let lpHandler: PancakeSwapLPHandler;
-  let slippageController: SlippageControl;
+  let exchange: any;
+  let exchange1: Exchange;
+  let rebalancing: any;
+  let rebalancing1: any;
+  let accessController: any;
+  let accessController0: AccessController;
+  let accessController1: AccessController;
+  let feeModule0: FeeModule;
+  let feeModule1: FeeModule;
+  let feeModule2: FeeModule;
+  let rebalanceLibrary: RebalanceLibrary;
   let txObject;
-  let owner: SignerWithAddress;
+  let velvetSafeModule: VelvetSafeModule;
+  let gnosisSafeAddress: string;
+  let offChainIndexSwap: OffChainIndexSwap;
   let investor1: SignerWithAddress;
-  let nonOwner: SignerWithAddress;
-  let addr1: SignerWithAddress;
-  let addr2: SignerWithAddress;
+  let owner: SignerWithAddress;
   let treasury: SignerWithAddress;
+  let assetManagerTreasury: SignerWithAddress;
+  let nonOwner: SignerWithAddress;
+  let addr3: SignerWithAddress;
+  let addr2: SignerWithAddress;
+  let addr1: SignerWithAddress;
+  let assetManagerAdmin: SignerWithAddress;
+  let assetManager: SignerWithAddress;
+  let whitelistManagerAdmin: SignerWithAddress;
+  let whitelistManager: SignerWithAddress;
+  let velvetManager: SignerWithAddress;
   let addrs: SignerWithAddress[];
+  let indexInfo: any;
+  let indexInfo1: any;
+  let indexInfo2: any;
+  let indexInfo3: any;
+  let indexInfo4: any;
+  let pancakeLpHandler: any;
+  let apeSwapLPHandler: any;
+  let biSwapLPHandler: any;
+  let beefyLPHandler: any;
+  let lpHandler: any;
   //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
@@ -76,54 +113,76 @@ describe.only("Tests for MixedIndex", () => {
   const chainId: any = forkChainId ? forkChainId : 56;
   const addresses = chainIdToAddresses[chainId];
 
-  describe("Tests for MixedIndex with Vault safe", () => {
+  describe("Tests for MixedIndex ", () => {
     before(async () => {
       const PriceOracle = await ethers.getContractFactory("PriceOracle");
       priceOracle = await PriceOracle.deploy();
       await priceOracle.deployed();
 
-      const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
-      tokenRegistry = await TokenRegistry.deploy();
-      await tokenRegistry.deployed();
+      // const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
+      // pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
+      // await pancakeLpHandler.deployed();
+      // await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
+
+      const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
+      biSwapLPHandler = await BiSwapLPHandler.deploy(priceOracle.address);
+      await biSwapLPHandler.deployed();
+      await biSwapLPHandler.addOrUpdateProtocolSlippage("2500");
+
+      const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
+      apeSwapLPHandler = await ApeSwapLPHandler.deploy(priceOracle.address);
+      await apeSwapLPHandler.deployed();
+      await apeSwapLPHandler.addOrUpdateProtocolSlippage("2500");
+
+      const LpHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
+      lpHandler = await LpHandler.deploy(priceOracle.address);
+      await lpHandler.deployed();
+      lpHandler.addOrUpdateProtocolSlippage("2500");
+
+      const BeefyLPHandlerdefault = await ethers.getContractFactory("BeefyLPHandler");
+      beefyLPHandler = await BeefyLPHandlerdefault.deploy(lpHandler.address, priceOracle.address);
+      await beefyLPHandler.deployed();
 
       accounts = await ethers.getSigners();
-      [owner, investor1, nonOwner, addr1, addr2, treasury, ...addrs] = accounts;
+      [
+        owner,
+        investor1,
+        nonOwner,
+        treasury,
+        assetManagerTreasury,
+        addr1,
+        addr2,
+        addr3,
+        assetManager,
+        assetManagerAdmin,
+        whitelistManager,
+        whitelistManagerAdmin,
+        ...addrs
+      ] = accounts;
 
       iaddress = await tokenAddresses(priceOracle, true);
 
-      const ZeroExHandler = await ethers.getContractFactory("ZeroExHandler");
-      const zeroExHandler = await ZeroExHandler.deploy();
-      await zeroExHandler.deployed();
+      const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
 
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
-
-      const IndexOperations = await ethers.getContractFactory("IndexOperations", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      const indexOperations = await IndexOperations.deploy();
-      await indexOperations.deployed();
-
-      await tokenRegistry.initialize(
-        "100",
-        "1000",
-        "1000",
-        "10000000000000000",
-        "500000000000000000000",
-        treasury.address,
-        addresses.WETH_Address,
-        indexOperations.address,
-        "1",
+      const registry = await upgrades.deployProxy(
+        TokenRegistry,
+        [
+          "2500", // protocol fee
+          "30", // protocolFeeBottomConstraint
+          "1000", // max asset manager fee
+          "3000", // max performance fee
+          "500",
+          "500",
+          "10000000000000000",
+          "500000000000000000000",
+          treasury.address,
+          addresses.WETH_Address,
+          "1",
+        ],
+        { kind: "uups" },
       );
 
-      const Exchange = await ethers.getContractFactory("Exchange", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      exchange = await Exchange.deploy();
-      await exchange.deployed();
+      tokenRegistry = TokenRegistry.attach(registry.address);
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -131,13 +190,75 @@ describe.only("Tests for MixedIndex", () => {
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
 
-      const LpHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-      lpHandler = await LpHandler.connect(owner).deploy();
-      await lpHandler.deployed();
-      lpHandler.addOrUpdateProtocolSlippage("700");
+      const provider = ethers.getDefaultProvider();
 
-      let registry = await tokenRegistry.enableToken(
+      const RebalanceLibrary = await ethers.getContractFactory("RebalanceLibrary", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      rebalanceLibrary = await RebalanceLibrary.deploy();
+      await rebalanceLibrary.deployed();
+
+      const OffChainRebalance = await ethers.getContractFactory("OffChainRebalance", {
+        libraries: {
+          RebalanceLibrary: rebalanceLibrary.address,
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      const offChainRebalanceDefault = await OffChainRebalance.deploy();
+      await offChainRebalanceDefault.deployed();
+
+      const RebalanceAggregator = await ethers.getContractFactory("RebalanceAggregator", {
+        libraries: {
+          RebalanceLibrary: rebalanceLibrary.address,
+        },
+      });
+
+      const rebalanceAggregatorDefault = await RebalanceAggregator.deploy();
+      await rebalanceAggregatorDefault.deployed();
+
+      const Rebalancing = await ethers.getContractFactory("Rebalancing", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+          RebalanceLibrary: rebalanceLibrary.address,
+        },
+      });
+      const rebalancingDefult = await Rebalancing.deploy();
+      await rebalancingDefult.deployed();
+
+      const IndexSwap = await ethers.getContractFactory("IndexSwap", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      indexSwapContract = await IndexSwap.deploy();
+      await indexSwapContract.deployed();
+
+      const offChainIndex = await ethers.getContractFactory("OffChainIndexSwap", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      offChainIndexSwap = await offChainIndex.deploy();
+      await offChainIndexSwap.deployed();
+
+      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      swapHandler1 = await PancakeSwapHandler1.deploy();
+      await swapHandler1.deployed();
+
+      const Exchange = await ethers.getContractFactory("Exchange", {
+        libraries: {
+          IndexSwapLibrary: indexSwapLibrary.address,
+        },
+      });
+      exchange1 = await Exchange.deploy();
+      await exchange1.deployed();
+
+      let registry1 = await tokenRegistry.enableToken(
         [
+          priceOracle.address,
+          priceOracle.address,
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
@@ -173,6 +294,7 @@ describe.only("Tests for MixedIndex", () => {
           iaddress.wbnbAddress,
           iaddress.dogeAddress,
           iaddress.daiAddress,
+          addresses.USDT,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
           addresses.MAIN_LP_BUSD,
@@ -184,6 +306,7 @@ describe.only("Tests for MixedIndex", () => {
           addresses.ibBNB_Address,
           addresses.ibBNB_Address,
           addresses.vBNB_Address,
+          addresses.BSwap_BTC_WBNBLP_Address,
         ],
         [
           venusHandler.address,
@@ -191,6 +314,7 @@ describe.only("Tests for MixedIndex", () => {
           venusHandler.address,
           venusHandler.address,
           venusHandler.address,
+          baseHandler.address,
           baseHandler.address,
           baseHandler.address,
           baseHandler.address,
@@ -208,6 +332,7 @@ describe.only("Tests for MixedIndex", () => {
           alpacaHandler.address,
           alpacaHandler.address,
           venusHandler.address,
+          biSwapLPHandler.address,
         ],
         [
           [addresses.venus_RewardToken],
@@ -215,6 +340,7 @@ describe.only("Tests for MixedIndex", () => {
           [addresses.venus_RewardToken],
           [addresses.venus_RewardToken],
           [addresses.venus_RewardToken],
+          [addresses.base_RewardToken],
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
@@ -233,6 +359,7 @@ describe.only("Tests for MixedIndex", () => {
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
           [addresses.venus_RewardToken],
+          [addresses.biswap_RewardToken],
         ],
         [
           false,
@@ -246,6 +373,8 @@ describe.only("Tests for MixedIndex", () => {
           true,
           true,
           true,
+          true,
+          false,
           false,
           false,
           false,
@@ -260,11 +389,11 @@ describe.only("Tests for MixedIndex", () => {
           false,
         ],
       );
-      registry.wait();
+      registry1.wait();
       tokenRegistry.enableSwapHandlers([swapHandler.address]);
       await tokenRegistry.enablePermittedTokens(
-        [iaddress.wbnbAddress, iaddress.busdAddress, iaddress.ethAddress, iaddress.daiAddress],
-        [priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address],
+        [iaddress.wbnbAddress, iaddress.busdAddress, iaddress.ethAddress, iaddress.daiAddress, addresses.USDT],
+        [priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address],
       );
 
       tokenRegistry.addNonDerivative(wombatHandler.address);
@@ -282,10 +411,6 @@ describe.only("Tests for MixedIndex", () => {
         addresses.vDAI_Address,
         addresses.vDOGE_Address,
         addresses.vLINK_Address,
-        addresses.qBNB,
-        addresses.qETH,
-        addresses.qUSX,
-        addresses.qFIL,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
         addresses.WBNB_BUSDLP_Address,
@@ -297,6 +422,7 @@ describe.only("Tests for MixedIndex", () => {
         addresses.BSwap_WBNB_BUSDLP_Address,
         addresses.BSwap_BTC_WBNBLP_Address,
         addresses.BSwap_ETH_BTCLP_Address,
+        addresses.BSwap_BTC_WBNBLP_Address,
         addresses.ibBNB_Address,
         addresses.ibBUSD_Address,
         addresses.ibBTCB_Address,
@@ -306,23 +432,8 @@ describe.only("Tests for MixedIndex", () => {
       ];
 
       const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-      assetManagerConfig = await AssetManagerConfig.deploy();
+      const assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
-
-      await assetManagerConfig.init({
-        _managementFee: "100",
-        _performanceFee: "10",
-        _minInvestmentAmount: "10000000000000000",
-        _maxInvestmentAmount: "500000000000000000000",
-        _tokenRegistry: tokenRegistry.address,
-        _accessController: accessController.address,
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: whitelistedTokens,
-        _publicPortfolio: true,
-        _transferable: true,
-        _transferableToPublic: true,
-        _whitelistTokens: false,
-      });
 
       const FeeLibrary = await ethers.getContractFactory("FeeLibrary");
       const feeLibrary = await FeeLibrary.deploy();
@@ -340,113 +451,63 @@ describe.only("Tests for MixedIndex", () => {
       const VelvetSafeModule = await ethers.getContractFactory("VelvetSafeModule");
       velvetSafeModule = await VelvetSafeModule.deploy();
       await velvetSafeModule.deployed();
-      console.log("VelvetSafeModule deployed to: ", velvetSafeModule.address);
 
-      const ethAdapter = new EthersAdapter({
-        ethers,
-        signer: owner,
-      });
+      const IndexFactory = await ethers.getContractFactory("IndexFactory");
 
-      const id = await ethAdapter.getChainId();
-      const contractNetworks: ContractNetworksConfig = {
-        [id]: {
-          multiSendAddress: addresses.MULTI_SEND_ADDRESS,
-          safeMasterCopyAddress: addresses.SAFE_MASTER_COPY_ADDRESS,
-          safeProxyFactoryAddress: addresses.SAFE_PROXY_FACTORY_ADDRESS,
-        },
-      };
-
-      const safeFactory = await SafeFactory.create({
-        ethAdapter,
-        contractNetworks,
-        isL1SafeMasterCopy: true,
-      });
-
-      const owners = [owner.address];
-      const threshold = 1;
-      const safeAccountConfig: SafeAccountConfig = {
-        owners,
-        threshold,
-      };
-
-      const safeSdk: Safe = await safeFactory.deploySafe({ safeAccountConfig });
-      newSafeAddress = safeSdk.getAddress();
-      let safeAddress = newSafeAddress;
-      console.log("Gnosis Safe deployed to: ", newSafeAddress);
-
-      let ABI = ["function enableModule(address module)"];
-      let abiEncode = new ethers.utils.Interface(ABI);
-      let txData = abiEncode.encodeFunctionData("enableModule", [velvetSafeModule.address]);
-
-      const transaction: SafeTransactionDataPartial = {
-        to: newSafeAddress,
-        value: "0",
-        data: txData,
-        operation: 0,
-        safeTxGas: 0,
-        baseGas: 0,
-        gasPrice: 0,
-        gasToken: "0x0000000000000000000000000000000000000000",
-        refundReceiver: "0x0000000000000000000000000000000000000000",
-      };
-      const safeTransaction = await safeSdk.createTransaction(transaction);
-
-      const txHash = await safeSdk.getTransactionHash(safeTransaction);
-      const approveTxResponse = await safeSdk.approveTransactionHash(txHash);
-      await approveTxResponse.transactionResponse?.wait();
-
-      const executeTxResponse = await safeSdk.executeTransaction(safeTransaction);
-      await executeTxResponse.transactionResponse?.wait();
-
-      await exchange.init(
-        accessController.address,
-        velvetSafeModule.address,
-        priceOracle.address,
-        tokenRegistry.address,
-      );
-      const abiEncoder = ethers.utils.defaultAbiCoder;
-      await velvetSafeModule.setUp(
-        abiEncoder.encode(
-          ["address", "address", "address"],
-          [newSafeAddress, exchange.address, addresses.gnosisMultisendLibrary],
-        ),
+      const indexFactoryInstance = await upgrades.deployProxy(
+        IndexFactory,
+        [
+          {
+            _indexSwapLibrary: indexSwapLibrary.address,
+            _baseIndexSwapAddress: indexSwapContract.address,
+            _baseRebalancingAddres: rebalancingDefult.address,
+            _baseOffChainRebalancingAddress: offChainRebalanceDefault.address,
+            _baseRebalanceAggregatorAddress: rebalanceAggregatorDefault.address,
+            _baseExchangeHandlerAddress: exchange1.address,
+            _baseAssetManagerConfigAddress: assetManagerConfig.address,
+            _baseOffChainIndexSwapAddress: offChainIndexSwap.address,
+            _feeModuleImplementationAddress: feeModule.address,
+            _baseVelvetGnosisSafeModuleAddress: velvetSafeModule.address,
+            _gnosisSingleton: addresses.gnosisSingleton,
+            _gnosisFallbackLibrary: addresses.gnosisFallbackLibrary,
+            _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
+            _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
+            _priceOracle: priceOracle.address,
+            _tokenRegistry: tokenRegistry.address,
+            _velvetProtocolFee: "100",
+            _maxInvestmentAmount: "500000000000000000000",
+            _minInvestmentAmount: "10000000000000000",
+          },
+        ],
+        { kind: "uups" },
       );
 
-      const IndexSwap = await ethers.getContractFactory("IndexSwap", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
+      indexFactory = IndexFactory.attach(indexFactoryInstance.address);
+      console.log("indexFactory address:", indexFactory.address);
+      const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
+        name: "INDEXLY",
+        symbol: "IDX",
+        maxIndexInvestmentAmount: "500000000000000000000",
+        minIndexInvestmentAmount: "10000000000000000",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
+        _assetManagerTreasury: assetManagerTreasury.address,
+        _whitelistedTokens: whitelistedTokens,
+        _public: true,
+        _transferable: false,
+        _transferableToPublic: false,
+        _whitelistTokens: false,
       });
 
-      indexSwap = await IndexSwap.deploy();
-      await indexSwap.deployed();
-      indexSwap.init({
-        _name: "INDEXLY",
-        _symbol: "IDX",
-        _vault: newSafeAddress,
-        _module: newSafeAddress,
-        _oracle: priceOracle.address,
-        _accessController: accessController.address,
-        _tokenRegistry: tokenRegistry.address,
-        _exchange: exchange.address,
-        _iAssetManagerConfig: assetManagerConfig.address,
-        _feeModule: feeModule.address,
-      });
-
-      feeModule.init(indexSwap.address, assetManagerConfig.address, tokenRegistry.address, accessController.address);
-
-      rebalancing = await RebalancingDeploy(
-        indexSwap.address,
-        indexSwapLibrary.address,
-        tokenRegistry.address,
-        exchange.address,
-        accessController,
-        owner.address,
-        priceOracle,
-        assetManagerConfig,
-        feeModule,
-        indexOperations.address,
-      );
+      const indexAddress = await indexFactory.getIndexList(0);
+      indexInfo = await indexFactory.IndexSwapInfolList(0);
+      indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+      rebalancing = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo.rebalancing);
+      exchange = await ethers.getContractAt(Exchange__factory.abi, indexInfo.exchangeHandler);
+      accessController = await ethers.getContractAt(AccessController__factory.abi, await indexSwap.accessController());
+      console.log(await indexSwap.callStatic.accessController());
     });
 
     describe("Mixed Contracts", function () {
@@ -477,7 +538,7 @@ describe.only("Tests for MixedIndex", () => {
       it("initialize should revert if a non-approved token is being used for init", async () => {
         await expect(
           indexSwap.initToken(
-            [addresses.qFIL, addresses.BSwap_WBNB_BUSDLP_Address, addresses.mooBTCBUSDLP],
+            [addresses.ibBTCB_Address, addresses.BSwap_WBNB_BUSDLP_Address, addresses.mooBTCBUSDLP],
             [100, 1000, 10],
           ),
         ).to.be.revertedWithCustomError(indexSwapLibrary, "TokenNotApproved");
@@ -497,15 +558,15 @@ describe.only("Tests for MixedIndex", () => {
       it("Initialize IndexFund Tokens", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await indexSwap.initToken(
-          [iaddress.busdAddress, addresses.BSwap_WBNB_BUSDLP_Address, addresses.mooBTCBUSDLP],
+          [iaddress.wbnbAddress, addresses.BSwap_BTC_WBNBLP_Address, addresses.mooBTCBUSDLP],
           [5000, 2500, 2500],
         );
       });
 
       it("should confirm that the correct tokens are initialised", async () => {
         expect(await indexSwap.getTokens()).to.deep.equal([
-          iaddress.busdAddress,
-          addresses.BSwap_WBNB_BUSDLP_Address,
+          iaddress.wbnbAddress,
+          addresses.BSwap_BTC_WBNBLP_Address,
           addresses.mooBTCBUSDLP,
         ]);
       });
@@ -515,27 +576,105 @@ describe.only("Tests for MixedIndex", () => {
           lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address], [39, 0]),
         ).to.be.revertedWithCustomError(lpHandler, "InvalidLength");
       });
+      // it("should add an Admin role using the public accessController function", async () => {
+      //   expect(
+      //     await accessController.setRoleAdmin(
+      //       keccak256("WHITELIST_MANAGER"),
+      //       keccak256("WHITELIST_MANAGER_ADMIN")
+      //     )
+      //   );
+      // })
+
+      it("non-admin should not be able to call the access control setupRole function", async () => {
+        await expect(
+          accessController
+            .connect(nonOwner)
+            .setupRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", owner.address),
+        ).to.be.revertedWithCustomError(accessController, "CallerNotAdmin");
+      });
+
+      it("admin should be able to call the access control setupRole function", async () => {
+        await expect(
+          accessController
+            .connect(owner)
+            .setupRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", owner.address),
+        );
+      });
+
+      it("should update a price Oracle feed", async () => {
+        await expect(
+          priceOracle._updateFeed(
+            iaddress.wbnbAddress,
+            "0x0000000000000000000000000000000000000348",
+            "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE",
+          ),
+        );
+      });
+
+      it("should not be able to obtain the decimals of a token pair price feed where aggregator is zero address", async () => {
+        await priceOracle._addFeed(
+          [addresses.ibBNB_Address],
+          ["0x0000000000000000000000000000000000000348"],
+          [zeroAddress],
+        );
+
+        await expect(
+          priceOracle.decimals(addresses.ibBNB_Address, "0x0000000000000000000000000000000000000348"),
+        ).to.be.revertedWithCustomError(priceOracle, "FeedNotFound");
+      });
+
+      it("should not be able to add pid if arrray lengths don't match", async () => {
+        await expect(
+          lpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0, 12]),
+        ).to.be.revertedWithCustomError(lpHandler, "InvalidLength");
+
+        await expect(
+          apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0, 12]),
+        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
+      });
+
+      it("should not be able to delete pid if array lengths don't match", async () => {
+        await expect(
+          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0, 12]),
+        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
+
+        await expect(
+          lpHandler.connect(owner).removePidMap([addresses.Cake_WBNBLP_Address], [0, 12]),
+        ).to.be.revertedWithCustomError(lpHandler, "InvalidLength");
+      });
 
       it("should add pid", async () => {
-        await lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address], [39]);
+        await lpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0]);
       });
 
       it("should delete pid", async () => {
-        await lpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0]);
+        await lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address], [39]);
 
-        await expect(lpHandler.connect(owner).removePidMap([addresses.Cake_WBNBLP_Address], [0]));
+        expect(await lpHandler.connect(owner).removePidMap([addresses.Cake_BUSDLP_Address], [39]));
+      });
+      it("should fetch the router address of the pancake LP handler", async () => {
+        await expect(lpHandler.getRouterAddress());
+      });
+
+      it("should get the swap address from the pancake swap handler", async () => {
+        await expect(swapHandler.getSwapAddress("10000000", addresses.vETH_Address));
+      });
+
+      it("swap token to ETH should fail via the pancake swap handler should not work if passed slippage is less than divisor_int", async () => {
+        await expect(swapHandler.swapTokensToETH("10000000", 100, addresses.vETH_Address, owner.address)).to.be
+          .reverted;
       });
 
       it("should check if a token is enabled or not in the registry", async () => {
-        await expect(tokenRegistry.isEnabled(addresses.oBNB));
+        expect(await tokenRegistry.isEnabled(addresses.oBNB));
       });
 
       it("should disable a token in the registry", async () => {
-        await expect(tokenRegistry.disableToken(addresses.vDAI_Address));
+        expect(await tokenRegistry.disableToken(addresses.vDAI_Address));
       });
 
       it("should reiterate the WETH address of the token registry", async () => {
-        await expect(tokenRegistry.updateWETH(addresses.WETH_Address));
+        expect(await tokenRegistry.updateWETH(addresses.WETH_Address));
       });
 
       it("should not be able to enable a zero address permitted token in TokenRegistry", async () => {
@@ -583,7 +722,10 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should disable a permitted token in TokenRegistry", async () => {
-        await expect(tokenRegistry.disablePermittedTokens([iaddress.linkAddress]));
+        await expect(tokenRegistry.disablePermittedTokens([iaddress.linkAddress])).to.be.revertedWithCustomError(
+          tokenRegistry,
+          "AddressNotApproved",
+        );
       });
 
       it("isPermitted function from TokenRegistry should not return output for zero address", async () => {
@@ -598,7 +740,7 @@ describe.only("Tests for MixedIndex", () => {
         let oldHandlerAddress = tokenInfo1.handler;
 
         const LpHandler2 = await ethers.getContractFactory("PancakeSwapLPHandler");
-        const lpHandler2 = await LpHandler2.connect(owner).deploy();
+        const lpHandler2 = await LpHandler2.connect(owner).deploy(priceOracle.address);
         await lpHandler2.deployed();
         lpHandler2.addOrUpdateProtocolSlippage("700");
 
@@ -614,6 +756,12 @@ describe.only("Tests for MixedIndex", () => {
         let newHandlerAddress = tokenInfo2.handler;
 
         expect(oldHandlerAddress).to.be.not.equal(newHandlerAddress);
+      });
+
+      it("Non-primary tokens should not get enabled on the registry level", async () => {
+        await expect(
+          tokenRegistry.enablePermittedTokens([addresses.vBNB_Address], [priceOracle.address]),
+        ).to.be.revertedWithCustomError(tokenRegistry, "TokenNotPrimary");
       });
 
       it("asset manager should not be able to add token which is not approved in registry", async () => {
@@ -703,7 +851,7 @@ describe.only("Tests for MixedIndex", () => {
         ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidToken");
       });
 
-      it("asset manager should be able to add token which is approved in registry", async () => {
+      it("asset manager should be able to permit token which is approved in registry", async () => {
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
@@ -712,7 +860,133 @@ describe.only("Tests for MixedIndex", () => {
           iaddress.daiAddress,
           iaddress.busdAddress,
           iaddress.ethAddress,
+          addresses.USDT,
         ]);
+      });
+
+      it("should not be able to get underlying of a zero address Wombat lp token", async () => {
+        await expect(wombatHandler.getUnderlying(zeroAddress)).to.be.revertedWithCustomError(
+          wombatHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get token balance of a zero address Wombat lp token", async () => {
+        await expect(wombatHandler.getTokenBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
+          wombatHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get token balance of a zero address Wombat lp token holder", async () => {
+        await expect(wombatHandler.getTokenBalance(addresses.MAIN_LP_BUSD, zeroAddress)).to.be.revertedWithCustomError(
+          wombatHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying balance of a zero address Wombat lp token", async () => {
+        await expect(wombatHandler.getUnderlyingBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
+          wombatHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying balance of a zero address Wombat lp token holder", async () => {
+        await expect(
+          wombatHandler.getUnderlyingBalance(addresses.MAIN_LP_BUSD, zeroAddress),
+        ).to.be.revertedWithCustomError(wombatHandler, "InvalidAddress");
+      });
+
+      it("should not be able to get token balance of a zero address Alpaca token", async () => {
+        await expect(alpacaHandler.getTokenBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
+          alpacaHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying token of a zero address Alpaca token", async () => {
+        await expect(alpacaHandler.getUnderlying(zeroAddress)).to.be.revertedWithCustomError(
+          alpacaHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying balance of a zero address Alpaca token holder", async () => {
+        await expect(
+          alpacaHandler.getUnderlyingBalance(zeroAddress, addresses.ibBNB_Address),
+        ).to.be.revertedWithCustomError(alpacaHandler, "InvalidAddress");
+      });
+
+      it("should not be able to get underlying balance of a zero address Alpaca token", async () => {
+        await expect(alpacaHandler.getUnderlyingBalance(owner.address, zeroAddress)).to.be.revertedWithCustomError(
+          alpacaHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying token of a zero address Beefy token", async () => {
+        await expect(beefyHandler.getUnderlying(zeroAddress)).to.be.reverted;
+      });
+
+      it("should not be able to get token balance of a zero address Beefy token", async () => {
+        await expect(beefyHandler.getTokenBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
+          beefyHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying balance of a zero address Beefy moo token", async () => {
+        await expect(beefyHandler.getUnderlyingBalance(zeroAddress, owner.address)).to.be.reverted;
+      });
+
+      it("should not be able to get underlying balance of a zero address Beefy moo token holder", async () => {
+        await expect(beefyHandler.getUnderlyingBalance(addresses.mooValasBUSD, zeroAddress)).to.be.reverted;
+      });
+
+      it("should be able to get underlying balance of a Beefy LP token", async () => {
+        await expect(beefyHandler.getUnderlyingBalance(owner.address, addresses.mooWOMBUSDLP));
+      });
+
+      it("should not be able to get underlying token of a non-Venus token via the Venus handler", async () => {
+        await expect(venusHandler.getUnderlying(addresses.mooValasBUSD)).to.be.revertedWithCustomError(
+          venusHandler,
+          "NotVToken",
+        );
+      });
+
+      it("should not be able to get underlying balance of a zero address Venus token", async () => {
+        await expect(venusHandler.getUnderlyingBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
+          venusHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying balance of a zero address Venus token holder", async () => {
+        await expect(
+          venusHandler.getUnderlyingBalance(addresses.vETH_Address, zeroAddress),
+        ).to.be.revertedWithCustomError(venusHandler, "InvalidAddress");
+      });
+
+      it("should not be able to get token balance of a zero address Venus token", async () => {
+        await expect(venusHandler.getTokenBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
+          venusHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get token balance of a zero address Venus token holder", async () => {
+        await expect(venusHandler.getTokenBalance(addresses.vETH_Address, zeroAddress)).to.be.revertedWithCustomError(
+          venusHandler,
+          "InvalidAddress",
+        );
+      });
+
+      it("should not be able to get underlying token of a zero address Venus token", async () => {
+        await expect(venusHandler.getUnderlying(zeroAddress)).to.be.revertedWithCustomError(
+          venusHandler,
+          "InvalidAddress",
+        );
       });
 
       it("Invest 1BNB into Top10 fund", async () => {
@@ -741,31 +1015,24 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Invest 10BUSD into Top10 fund", async () => {
-        const zeroAddress = "0x0000000000000000000000000000000000000000";
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const busdtoken = ERC20.attach(iaddress.busdAddress);
         const ethtoken = ERC20.attach(iaddress.ethAddress);
         const btctoken = ERC20.attach(iaddress.btcAddress);
         const wbnbtoken = ERC20.attach(iaddress.wbnbAddress);
-        const swapResult = await exchange.connect(owner)._swapETHToToken(
-          {
-            _token: iaddress.busdAddress,
-            _to: owner.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
-            value: "10000000000000000000",
-          },
-        );
+        const swapResult = await swapHandler
+          .connect(owner)
+          .swapETHToTokens("200", iaddress.busdAddress, owner.address, {
+            value: "1000000000000000000",
+          });
+        console.log("Balance Of USEr", await busdtoken.balanceOf(owner.address));
         await busdtoken.approve(indexSwap.address, "10000000000000000000");
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("10busd before", indexSupplyBefore);
         await indexSwap.investInFund({
           _slippage: ["300", "300", "300"],
           _lpSlippage: ["200", "200", "200"],
-          _to: nonOwner.address,
+          _to: owner.address,
           _tokenAmount: "10000000000000000000",
           _swapHandler: swapHandler.address,
           _token: iaddress.busdAddress,
@@ -793,9 +1060,7 @@ describe.only("Tests for MixedIndex", () => {
               value: "10000000000000",
             },
           ),
-        )
-          .to.be.revertedWithCustomError(indexSwapLibrary, "WrongInvestmentAmount")
-          .withArgs("10000000000000000", "500000000000000000000");
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "WrongInvestmentAmount");
 
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log(indexSupplyAfter);
@@ -851,7 +1116,7 @@ describe.only("Tests for MixedIndex", () => {
           "VBep20Interface",
           "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
         );
-        const vETHBalanceAfter = await VBep20Interface.balanceOf(newSafeAddress);
+        const vETHBalanceAfter = await VBep20Interface.balanceOf(indexSwap.vault());
       });
 
       it("Investment should fail when contract is paused", async () => {
@@ -935,7 +1200,7 @@ describe.only("Tests for MixedIndex", () => {
           swapHandler.address,
         );
 
-        const vETHBalance = await VBep20Interface.balanceOf(newSafeAddress);
+        const vETHBalance = await VBep20Interface.balanceOf(indexSwap.vault());
       });
 
       it("should Update Weights and Rebalance", async () => {
@@ -1039,7 +1304,7 @@ describe.only("Tests for MixedIndex", () => {
         tokenRegistry.enableSwapHandlers([swapHandler.address]);
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.qFIL, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.ibBTCB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1057,9 +1322,9 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("new asset manager should update tokens", async () => {
-        const zeroAddress = "0x0000000000000000000000000000000000000000";
-        let beforeTokenXBalance;
-        let beforeVaultValue;
+        // const zeroAddress = "0x0000000000000000000000000000000000000000";
+        // let beforeTokenXBalance;
+        // let beforeVaultValue;
         await tokenRegistry.enableSwapHandlers([swapHandler.address]);
 
         await rebalancing.connect(nonOwner).updateTokens({
@@ -1106,7 +1371,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should unpause", async () => {
-        await ethers.provider.send("evm_increaseTime", [600]);
+        await ethers.provider.send("evm_increaseTime", [1900]);
         await rebalancing.connect(addr1).setPause(false);
       });
 
@@ -1140,7 +1405,7 @@ describe.only("Tests for MixedIndex", () => {
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           }),
-        ).to.be.revertedWithCustomError(indexSwap, "InvalidSlippageLength");
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidSlippageLength");
       });
 
       it("should fail withdraw when balance falls below min investment amount", async () => {
@@ -1181,9 +1446,45 @@ describe.only("Tests for MixedIndex", () => {
           .withArgs("10000000000000000");
       });
 
-      it("should withdraw fund and burn index token successfully", async () => {
+      it("should fail withdraw fund when the output token is not permitted in the asset manager config and is not WETH", async () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        //console.log(amountIndexToken, "amountIndexToken");
+        // console.log(amountIndexToken, "amountIndexToken");
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+        await expect(
+          indexSwap.withdrawFund({
+            tokenAmount: AMOUNT,
+            _slippage: ["200", "200", "300"],
+            _lpSlippage: ["200", "200", "200"],
+            isMultiAsset: false,
+            _swapHandler: swapHandler.address,
+            _token: iaddress.dogeAddress,
+          }),
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidToken");
+      });
+
+      it("should fail withdraw when the protocol is paused", async () => {
+        await tokenRegistry.setProtocolPause(true);
+        const amountIndexToken = await indexSwap.balanceOf(owner.address);
+        // console.log(amountIndexToken, "amountIndexToken");
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+        await expect(
+          indexSwap.withdrawFund({
+            tokenAmount: AMOUNT,
+            _slippage: ["200", "200", "300"],
+            _lpSlippage: ["200", "200", "200"],
+            isMultiAsset: false,
+            _swapHandler: swapHandler.address,
+            _token: iaddress.dogeAddress,
+          }),
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "ProtocolIsPaused");
+      });
+
+      it("should withdraw fund and burn index token successfully", async () => {
+        await tokenRegistry.setProtocolPause(false);
+        const amountIndexToken = await indexSwap.balanceOf(owner.address);
+        // console.log(amountIndexToken, "amountIndexToken");
         const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
 
         txObject = await indexSwap.withdrawFund({
@@ -1192,7 +1493,7 @@ describe.only("Tests for MixedIndex", () => {
           _lpSlippage: ["200", "200", "200"],
           isMultiAsset: false,
           _swapHandler: swapHandler.address,
-          _token: iaddress.wbnbAddress,
+          _token: addresses.USDT,
         });
 
         expect(txObject.confirmations).to.equal(1);
@@ -1288,8 +1589,8 @@ describe.only("Tests for MixedIndex", () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
         // console.log(amountIndexToken, "amountIndexToken");
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const busdtoken = ERC20.attach(iaddress.busdAddress);
-        const balanceBefore = await busdtoken.balanceOf(owner.address);
+        const ethtoken = ERC20.attach(iaddress.ethAddress);
+        const balanceBefore = await ethtoken.balanceOf(owner.address);
         const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
         console.log("balanceBefore", balanceBefore);
         txObject = await indexSwap.withdrawFund({
@@ -1298,10 +1599,10 @@ describe.only("Tests for MixedIndex", () => {
           _lpSlippage: ["200", "200", "200"],
           isMultiAsset: false,
           _swapHandler: swapHandler.address,
-          _token: iaddress.busdAddress,
+          _token: iaddress.ethAddress,
         });
 
-        const balanceAfter = await busdtoken.balanceOf(owner.address);
+        const balanceAfter = await ethtoken.balanceOf(owner.address);
         expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
 
         expect(txObject.confirmations).to.equal(1);
@@ -1325,8 +1626,6 @@ describe.only("Tests for MixedIndex", () => {
 
         const indexSupplyAfter = await indexSwap.totalSupply();
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-
-        // console.log(indexSupplyAfter);
       });
 
       it("should withdraw tokens directly instead of BNB", async () => {
@@ -1342,50 +1641,6 @@ describe.only("Tests for MixedIndex", () => {
           _token: iaddress.wbnbAddress,
         });
       });
-
-      // it("should claims tokens to reward vault", async () => {
-      //   await ethers.provider.send("evm_increaseTime", [31556926]);
-      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-      //   const tokens = [
-      //     addresses.oBNB,
-      //     addresses.BSwap_WBNB_BUSDLP_Address,
-      //     addresses.mooBTCBUSDLP,
-      //     addresses.ibBNB_Address,
-      //     addresses.vBTC_Address,
-      //     addresses.vBNB_Address,
-      //     addresses.MAIN_LP_BUSD,
-      //     addresses.Cake_BUSDLP_Address,
-      //     iaddress.busdAddress,
-      //     iaddress.btcAddress,
-      //     addresses.vETH_Address,
-      //   ];
-      //   for (let i = 0; i < tokens.length; i++) {
-      //     let rewardTokens = (await tokenRegistry.getTokenInformation(tokens[i])).rewardTokens;
-      //     for (let j = 0; j < rewardTokens.length; j++) {
-      //       if (rewardTokens[j] != zeroAddress) {
-      //         console.log("rewardTokens",rewardTokens[j]);
-      //         let balanceBefore = await ERC20.attach(rewardTokens[j]).balanceOf(rewardVault.address);
-      //         let vaultBefore =  await ERC20.attach(rewardTokens[j]).balanceOf(newSafeAddress);
-      //         console.log("balanceBefore", balanceBefore);
-      //         console.log("vaultBefore", vaultBefore);
-      //       }
-      //     }
-      //   }
-      //   await indexSwap.claimTokens(tokens);
-      //   console.log("---------------AFTER CLAIMING---------------");
-      //   for (let i = 0; i < tokens.length; i++) {
-      //     let rewardTokens = (await tokenRegistry.getTokenInformation(tokens[i])).rewardTokens;
-      //     for (let j = 0; j < rewardTokens.length; j++) {
-      //       if (rewardTokens[j] != zeroAddress) {
-      //         console.log("rewardTokens",rewardTokens[j]);
-      //         let balanceAfter = await ERC20.attach(rewardTokens[j]).balanceOf(rewardVault.address);
-      //         let vaultAfter =  await ERC20.attach(rewardTokens[j]).balanceOf(newSafeAddress);
-      //         console.log("balanceAfter", balanceAfter);
-      //         console.log("vaultAfter", vaultAfter);
-      //       }
-      //     }
-      //   }
-      // });
     });
   });
 });
