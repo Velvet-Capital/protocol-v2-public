@@ -217,7 +217,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     uint256[] calldata _slippage,
     uint256[] calldata _lpSlippage,
     address _swapHandler
-  ) external virtual onlyAssetManager {
+  ) external virtual nonReentrant onlyAssetManager {
     address[] memory tokens = index.getTokens();
     validateUpdate(_swapHandler);
     if (denorms.length != tokens.length) {
@@ -236,7 +236,9 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
    * @param inputData The input calldata passed to the function
 
    */
-  function updateTokens(FunctionParameters.UpdateTokens calldata inputData) external virtual onlyAssetManager {
+  function updateTokens(
+    FunctionParameters.UpdateTokens calldata inputData
+  ) external virtual nonReentrant onlyAssetManager {
     uint256 totalWeight = 0;
     address[] memory _tokens = index.getTokens();
     validateUpdate(inputData._swapHandler);

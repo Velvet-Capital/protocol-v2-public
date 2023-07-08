@@ -38,7 +38,9 @@ import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
 
-contract Exchange is Initializable, UUPSUpgradeable {
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
+
+contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
   IAccessController internal accessController;
   IVelvetSafeModule internal safe;
   IPriceOracle internal oracle;
@@ -123,7 +125,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
    * @param _index The index to claim for
    * @param _tokens The derivative tokens to claim for
    */
-  function claimTokens(IIndexSwap _index, address[] calldata _tokens) external onlyIndexManager {
+  function claimTokens(IIndexSwap _index, address[] calldata _tokens) external nonReentrant onlyIndexManager {
     for (uint256 i = 0; i < _tokens.length; i++) {
       address _token = _tokens[i];
       IHandler handler = IHandler(getTokenInfo(_token).handler);
@@ -144,7 +146,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
    * @param amount Amount of the token to be pulled
    * @param to Address where the pulled token has to be sent
    */
-  function _pullFromVault(address token, uint256 amount, address to) external onlyIndexManager {
+  function _pullFromVault(address token, uint256 amount, address to) external nonReentrant onlyIndexManager {
     IHandler handler = IHandler(getTokenInfo(token).handler);
 
     if (tokenRegistry.checkNonDerivative(address(handler))) {
@@ -170,7 +172,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
   /**
    * @notice Transfer tokens from vault to a specific address
    */
-  function _pullFromVaultRewards(address token, uint256 amount, address to) external onlyIndexManager {
+  function _pullFromVaultRewards(address token, uint256 amount, address to) external nonReentrant onlyIndexManager {
     _safeTokenTransfer(token, amount, to);
   }
 
@@ -530,7 +532,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
    */
   function _swapTokenToTokens(
     FunctionParameters.SwapTokenToTokensData memory inputData
-  ) external payable virtual onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
+  ) external payable virtual nonReentrant onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
     IIndexSwap _index = IIndexSwap(inputData._index);
     address[] memory _tokens = _index.getTokens();
     for (uint256 i = 0; i < _tokens.length; i++) {
@@ -594,7 +596,7 @@ contract Exchange is Initializable, UUPSUpgradeable {
    */
   function swapOffChainTokens(
     ExchangeData.IndexOperationData memory inputdata
-  ) external virtual onlyIndexManager returns (uint256, uint256) {
+  ) external virtual nonReentrant onlyIndexManager returns (uint256, uint256) {
     IndexSwapLibrary._whitelistAndHandlerCheck(inputdata._token, inputdata.inputData._offChainHandler, inputdata.index);
     address vault = inputdata.index.vault();
     //Checks if token is non primary

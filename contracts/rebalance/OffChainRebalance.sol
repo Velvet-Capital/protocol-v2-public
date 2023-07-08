@@ -272,7 +272,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   function externalRebalance(
     FunctionParameters.ZeroExData calldata inputData,
     uint256[] calldata _lpSlippage
-  ) external onlyAssetManager {
+  ) external nonReentrant onlyAssetManager {
     if (Steps.SecondSell != step) {
       revert ErrorLibrary.InvalidExecution();
     }
@@ -324,7 +324,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     address[] calldata _sellToken,
     bytes[] calldata _sellSwapData,
     address _offChainHandler
-  ) external virtual onlyAssetManager {
+  ) external virtual nonReentrant onlyAssetManager {
     if (Steps.FirstEnable != step) {
       revert ErrorLibrary.InvalidExecution();
     }
@@ -393,7 +393,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     bytes[] calldata swapData,
     address offChainHandler,
     uint256[] memory lpSlippage
-  ) external virtual onlyAssetManager {
+  ) external virtual nonReentrant onlyAssetManager {
     address[] memory tokens = getTokens();
     setPaused(true);
     IndexSwapLibrary.checkPrimaryAndHandler(tokenRegistry, tokens, offChainHandler);
@@ -421,7 +421,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     uint256[] calldata _lpSlippage,
     bytes[] calldata swapData,
     address offChainHandler
-  ) external virtual onlyAssetManager {
+  ) external virtual nonReentrant onlyAssetManager {
     setPaused(true);
     IndexSwapLibrary.checkPrimaryAndHandler(tokenRegistry, getTokens(), offChainHandler);
     address[] memory sellTokens;
@@ -470,7 +470,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   /**
    * @notice The function reverts back WETH back to vault,updating the tokenList and weights accordingly,if only 2 transaction out of 3 is executed(ExternalSell)
    */
-  function revertSellTokens() external onlyAssetManager {
+  function revertSellTokens() external nonReentrant onlyAssetManager {
     _revertSell();
   }
 
@@ -491,7 +491,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
    * @notice The function reverts back the token to the vault again to old state,if only 1 transaction out of 3 is executed(enebaleRebalance)
    * @param _lpSlippage array of lpSlippage
    */
-  function revertEnableRebalancing(uint256[] calldata _lpSlippage) external onlyAssetManager {
+  function revertEnableRebalancing(uint256[] calldata _lpSlippage) external nonReentrant onlyAssetManager {
     _revertEnableRebalancing(_lpSlippage);
   }
 
@@ -523,13 +523,13 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     emit REVERT_ENABLE_REBALANCING(msg.sender);
   }
 
-  function revertEnableRebalancingByUser(uint256[] calldata _lpSlippage) external {
+  function revertEnableRebalancingByUser(uint256[] calldata _lpSlippage) external nonReentrant {
     if (isUserEnabled()) {
       _revertEnableRebalancing(_lpSlippage);
     }
   }
 
-  function revertSellByUser() external {
+  function revertSellByUser() external nonReentrant {
     if (isUserEnabled()) {
       _revertSell();
     }

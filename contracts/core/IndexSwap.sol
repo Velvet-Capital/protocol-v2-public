@@ -188,7 +188,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   /**
    * @notice This function burns the specific amount of shares of a particular address
    */
-  function burnShares(address _to, uint256 _amount) public virtual onlyMinter {
+  function burnShares(address _to, uint256 _amount) public virtual nonReentrant onlyMinter {
     _burn(_to, _amount);
   }
 
@@ -440,7 +440,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param _to The address to which the index tokens are minted.
    * @param _mintAmount The amount of index tokens to mint.
    */
-  function mintInvest(address _to, uint256 _mintAmount) external onlyMinter {
+  function mintInvest(address _to, uint256 _mintAmount) external nonReentrant onlyMinter {
     _mintInvest(_to, _mintAmount);
   }
 
@@ -451,7 +451,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param _mintAmount The amount of index tokens to burn.
    * @return exitFee The exit fee charged for the burn operation.
    */
-  function burnWithdraw(address _to, uint256 _mintAmount) external onlyMinter returns (uint256 exitFee) {
+  function burnWithdraw(address _to, uint256 _mintAmount) external nonReentrant onlyMinter returns (uint256 exitFee) {
     exitFee = _burnWithdraw(_to, _mintAmount);
   }
 
@@ -480,7 +480,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will pause the InvestInFund() and Withdrawal() called by the rebalancing contract.
     @param _state The state is bool value which needs to input by the Index Manager.
   */
-  function setPaused(bool _state) external virtual onlyRebalancerContract {
+  function setPaused(bool _state) external virtual nonReentrant onlyRebalancerContract {
     _setPaused(_state);
   }
 
@@ -493,7 +493,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will set lastRebalanced time called by the rebalancing contract.
     @param _time The time is block.timestamp, the moment when rebalance is done
   */
-  function setLastRebalance(uint256 _time) external virtual onlyRebalancerContract {
+  function setLastRebalance(uint256 _time) external virtual nonReentrant onlyRebalancerContract {
     _setLastRebalance(_time);
   }
 
@@ -505,7 +505,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will update the redeemed value
     @param _state The state is bool value which needs to input by the Index Manager.
   */
-  function setRedeemed(bool _state) external virtual onlyRebalancerContract {
+  function setRedeemed(bool _state) external virtual nonReentrant onlyRebalancerContract {
     _setRedeemed(_state);
   }
 
@@ -519,7 +519,10 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param tokens The updated token list of the portfolio
    * @param denorms The new weights for for the portfolio
    */
-  function updateRecords(address[] calldata tokens, uint96[] calldata denorms) external virtual onlyRebalancerContract {
+  function updateRecords(
+    address[] calldata tokens,
+    uint96[] calldata denorms
+  ) external virtual nonReentrant onlyRebalancerContract {
     uint256 totalWeight = 0;
     for (uint256 i = 0; i < tokens.length; i++) {
       uint96 _denorm = denorms[i];

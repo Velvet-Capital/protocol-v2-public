@@ -16,7 +16,9 @@ import {IAssetManagerConfig} from "../registry/IAssetManagerConfig.sol";
 
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
+
+contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
   using SafeMathUpgradeable for uint256;
 
   uint256 internal constant MIN_FEE_MINT = 100000000000000;
@@ -94,7 +96,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   /**
    * @notice This function charges the management fee as per the vault balance in BNB
    */
-  function chargeFees() external virtual notPaused {
+  function chargeFees() external virtual nonReentrant notPaused {
     (, uint256 vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, index.getTokens());
     uint256 vaultBalanceInBNB = IPriceOracle(index.oracle()).getUsdEthPrice(vaultBalance);
     _chargeManagementFees(vaultBalanceInBNB);
@@ -146,7 +148,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @notice The function charges fees and is called by the IndexSwap contract
    *         The vault values has already been calculated and can be passed
    */
-  function chargeFeesFromIndex(uint256 _vaultBalance) external virtual onlyIndexManager notPaused {
+  function chargeFeesFromIndex(uint256 _vaultBalance) external virtual nonReentrant onlyIndexManager notPaused {
     _chargeManagementFees(_vaultBalance);
   }
 
@@ -254,7 +256,10 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   /**
    * @notice This function is used to chage the "entry fee" based on the protocol and the asset-manager fee
    */
-  function chargeEntryFee(uint256 _mintAmount, uint256 _fee) external virtual onlyIndexManager returns (uint256) {
+  function chargeEntryFee(
+    uint256 _mintAmount,
+    uint256 _fee
+  ) external virtual nonReentrant onlyIndexManager returns (uint256) {
     uint256 _entryFee = FeeLibrary.calculateEntryAndExitFee(_fee, _mintAmount);
     (uint256 protocolFee, uint256 assetManagerFee) = FeeLibrary.feeSplitter(_entryFee, tokenRegistry.protocolFee());
 
@@ -274,7 +279,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function chargeExitFee(
     uint256 _mintAmount,
     uint256 _fee
-  ) external virtual onlyIndexManager returns (uint256, uint256, uint256) {
+  ) external virtual nonReentrant onlyIndexManager returns (uint256, uint256, uint256) {
     uint256 _exitFee = FeeLibrary.calculateEntryAndExitFee(_fee, _mintAmount);
     (uint256 protocolFee, uint256 assetManagerFee) = FeeLibrary.feeSplitter(_exitFee, tokenRegistry.protocolFee());
 

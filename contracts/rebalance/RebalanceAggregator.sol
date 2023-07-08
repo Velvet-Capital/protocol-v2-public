@@ -130,7 +130,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @param _token address of token to redeem
    * @param _amount amount of token to redeem
    */
-  function redeemRewardToken(address _token, uint256 _amount) external virtual onlyAssetManager {
+  function redeemRewardToken(address _token, uint256 _amount) external virtual nonReentrant onlyAssetManager {
     if (getProtocolState() == true) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
@@ -147,7 +147,11 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @param swapAmounts This is amount of tokens to be redeemed
    * @param token This is the address of the redeeming token
    */
-  function redeem(uint256 swapAmounts, uint256 _lpSlippage, address token) external virtual onlyAssetManager {
+  function redeem(
+    uint256 swapAmounts,
+    uint256 _lpSlippage,
+    address token
+  ) external virtual nonReentrant onlyAssetManager {
     _validateProtocolAndRedeemState();
     if (index.getRecord(token).denorm == 0) {
       revert ErrorLibrary.TokenNotIndexToken();
@@ -190,7 +194,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @param _data This is a struct of params required
    */
 
-  function metaAggregatorSwap(ExchangeData.ExSwapData memory _data) external virtual onlyAssetManager {
+  function metaAggregatorSwap(ExchangeData.ExSwapData memory _data) external virtual nonReentrant onlyAssetManager {
     validateSwap(_data.portfolioToken);
     if (getRedeemed() == false) {
       revert ErrorLibrary.NotRedeemed();
@@ -243,7 +247,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @notice The function is used for only base token prtfolio, used to redeem and swap base token
    * @param inputData address of sellToken,buyToken,swpaHandler, amount of sellAmout,protocolFee and callData in struct
    */
-  function swapPrimaryToken(ExchangeData.ExSwapData memory inputData) external virtual onlyAssetManager {
+  function swapPrimaryToken(ExchangeData.ExSwapData memory inputData) external virtual nonReentrant onlyAssetManager {
     validateSwap(inputData.portfolioToken);
     if (getRedeemed() == true) {
       revert ErrorLibrary.AlreadyOngoingOperation();
@@ -353,7 +357,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     address[] memory buyTokenAddress,
     uint256[] memory sellAmount,
     uint256[] memory slippage
-  ) external virtual onlyAssetManager {
+  ) external virtual nonReentrant onlyAssetManager {
     _validateProtocolAndRedeemState();
 
     // Check if the token arrays have the same length
@@ -476,7 +480,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @notice The function reverts back the token to the vault again to old state,if tokens are redeemed after 1st function is executed(redeem)
    * @param _lpSlippage slippage for lpTokens
    */
-  function revertRedeem(uint256 _lpSlippage) external onlyAssetManager {
+  function revertRedeem(uint256 _lpSlippage) external nonReentrant onlyAssetManager {
     if (getRedeemed() == false) {
       revert ErrorLibrary.NotRedeemed();
     }
@@ -503,7 +507,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
   /**
    * @notice The function allows user to revert redeem ,after 15 minutes of pause or lastRebalance is greater then pause
    */
-  function revertSellByUser(uint256 _lpSlippage) external {
+  function revertSellByUser(uint256 _lpSlippage) external nonReentrant {
     uint256 _lastPaused = index.getLastPaused();
     if (block.timestamp >= (_lastPaused + 15 minutes)) {
       _revert(_lpSlippage);
@@ -515,7 +519,11 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @param _lpSlippage slippage for lpTokens
    * @param token address of token to revert
    */
-  function _revertRebalance(uint256[] memory amounts, uint256 _lpSlippage, address token) external onlyIndexManager {
+  function _revertRebalance(
+    uint256[] memory amounts,
+    uint256 _lpSlippage,
+    address token
+  ) external nonReentrant onlyIndexManager {
     _revertRedeem(amounts, _lpSlippage, token);
   }
 
