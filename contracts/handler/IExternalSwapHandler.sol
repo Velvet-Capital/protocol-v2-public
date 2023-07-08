@@ -14,6 +14,4 @@ interface IExternalSwapHandler {
   ) external payable;
 
   function setAllowance(address _token, address _spender, uint _sellAmount) external;
-
-  function getETH() external view returns (address wbnb);
 }

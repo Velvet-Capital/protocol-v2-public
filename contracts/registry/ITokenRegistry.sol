@@ -39,9 +39,15 @@ interface ITokenRegistry {
 
   function protocolFee() external returns (uint256);
 
+  function protocolFeeBottomConstraint() external returns (uint256);
+
   function maxManagementFee() external returns (uint256);
 
   function maxPerformanceFee() external returns (uint256);
+
+  function maxEntryFee() external returns (uint256);
+
+  function maxExitFee() external returns (uint256);
 
   function MIN_VELVET_INVESTMENTAMOUNT() external returns (uint256);
 

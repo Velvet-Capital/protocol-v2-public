@@ -32,7 +32,8 @@ contract BaseHandler is IHandler {
     address _vAsset,
     uint256[] memory _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {}
 
   /**
@@ -76,6 +77,8 @@ contract BaseHandler is IHandler {
   }
 
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
 
   function getRouterAddress() public view returns (address) {}
 

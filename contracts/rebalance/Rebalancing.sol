@@ -48,20 +48,19 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
   IPriceOracle public oracle;
 
-  uint256 internal lastRebalanced;
-
-  uint256 public lastPaused;
-
   event UpdatedWeights(uint256 time, uint96[] indexed newDenorms);
   event UpdatedTokens(uint256 time, address[] indexed newTokens, uint96[] indexed newDenorms);
   event SetPause(uint256 indexed time, bool indexed state);
 
-  constructor() {}
+  constructor() {
+    _disableInitializers();
+  }
 
   function init(address _index, address _accessController) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
-    if (_index == address(0) || _accessController == address(0)) {
+    address zeroAddress = address(0);
+    if (_index == zeroAddress || _accessController == zeroAddress) {
       revert ErrorLibrary.InvalidAddress();
     }
     index = IIndexSwap(_index);
@@ -83,24 +82,24 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     @notice The function will pause the InvestInFund() and Withdrawal().
     @param _state The state is bool value which needs to input by the Index Manager.
     */
-  function setPause(bool _state) public virtual {
+  function setPause(bool _state) external virtual nonReentrant {
     if (_state) {
       if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
         revert ErrorLibrary.OnlyAssetManagerCanCallUnpause();
       }
-      index.setPaused(_state);
-      lastPaused = block.timestamp;
+      _setPaused(_state);
     } else {
       if (index.getRedeemed() != false) {
         revert ErrorLibrary.TokensNotStaked();
       }
-      if (lastRebalanced > lastPaused || block.timestamp >= (lastPaused + 10 minutes)) {
-        index.setPaused(_state);
+      uint256 _lastPaused = index.getLastPaused();
+      if (block.timestamp >= (_lastPaused + 15 minutes)) {
+        _setPaused(_state);
       } else {
         if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
           revert ErrorLibrary.TenMinutesPassOrRebalancingHasToBeCalled();
         }
-        index.setPaused(_state);
+        _setPaused(_state);
       }
     }
     emit SetPause(block.timestamp, _state);
@@ -123,7 +122,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     address[] memory tokens = index.getTokens();
     for (uint256 i = 0; i < tokens.length; i++) {
       if (_newWeights[i] < _oldWeights[i]) {
-        uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, tokens[i]);
+        uint256 tokenBalance = getTokenBalance(tokens[i]);
 
         uint256 weightDiff = _oldWeights[i].sub(_newWeights[i]);
         uint256 swapAmount = tokenBalance.mul(weightDiff).div(_oldWeights[i]);
@@ -160,8 +159,16 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
           revert ErrorLibrary.DivBy0Sumweight();
         }
         uint256 swapAmount = totalBNBAmount.mul(weightToSwap).div(sumWeightsToSwap);
-        exchange._swapETHToToken{value: swapAmount}(
-          FunctionParameters.SwapETHToTokenData(tokens[i], index.vault(), _swapHandler, _slippage[i], _lpSlippage[i])
+        address _vault = index.vault();
+        exchange.swapETHToToken{value: swapAmount}(
+          FunctionParameters.SwapETHToTokenPublicData(
+            tokens[i],
+            _vault,
+            _swapHandler,
+            _vault,
+            _slippage[i],
+            _lpSlippage[i]
+          )
         );
       }
     }
@@ -174,7 +181,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     uint256[] calldata _slippage,
     uint256[] calldata _lpSlippage,
     address _swapHandler
-  ) internal virtual onlyAssetManager nonReentrant {
+  ) internal virtual {
     if (index.totalSupply() <= 0) {
       revert ErrorLibrary.InvalidAmount();
     }
@@ -186,7 +193,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
     (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(index), tokens);
 
-    uint256 contractBalanceInUSD = IndexSwapLibrary._getTokenPriceETHUSD(oracle, address(this).balance);
+    uint256 contractBalanceInUSD = oracle.getUsdEthPrice(address(this).balance);
     vaultBalance = vaultBalance.add(contractBalanceInUSD);
 
     for (uint256 i = 0; i < tokens.length; i++) {
@@ -197,7 +204,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     uint256 sumWeightsToSwap = sellTokens(oldWeights, newWeights, _slippage, _lpSlippage, _swapHandler);
     buyTokens(oldWeights, newWeights, sumWeightsToSwap, _slippage, _lpSlippage, _swapHandler);
 
-    lastRebalanced = block.timestamp;
+    index.setLastRebalance(block.timestamp);
     index.setRedeemed(false);
   }
 
@@ -210,19 +217,14 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     uint256[] calldata _slippage,
     uint256[] calldata _lpSlippage,
     address _swapHandler
-  ) public virtual onlyAssetManager {
+  ) external virtual nonReentrant onlyAssetManager {
     address[] memory tokens = index.getTokens();
+    validateUpdate(_swapHandler);
     if (denorms.length != tokens.length) {
       revert ErrorLibrary.LengthsDontMatch();
     }
     if (tokens.length != _slippage.length || tokens.length != _lpSlippage.length) {
       revert ErrorLibrary.InvalidSlippageLength();
-    }
-    if (tokenRegistry.getProtocolState() == true) {
-      revert ErrorLibrary.ProtocolIsPaused();
-    }
-    if (!(tokenRegistry.isSwapHandlerEnabled(_swapHandler))) {
-      revert ErrorLibrary.SwapHandlerNotEnabled();
     }
     index.updateRecords(tokens, denorms);
     rebalance(_slippage, _lpSlippage, _swapHandler);
@@ -231,41 +233,44 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
   /**
    * @notice The function rebalances the portfolio to the updated tokens with the updated weights
-   * @param inputData The
+   * @param inputData The input calldata passed to the function
 
    */
-  function updateTokens(FunctionParameters.UpdateTokens calldata inputData) public virtual onlyAssetManager {
+  function updateTokens(
+    FunctionParameters.UpdateTokens calldata inputData
+  ) external virtual nonReentrant onlyAssetManager {
     uint256 totalWeight = 0;
-    address[] memory tokens = index.getTokens();
-    RebalanceLibrary.updateTokensCheckBefore(
-      address(index),
-      address(tokenRegistry),
-      inputData._swapHandler,
-      inputData.tokens,
-      inputData._slippageSell,
-      inputData._slippageBuy,
-      inputData._lpSlippageSell,
-      inputData._lpSlippageBuy
-    );
+    address[] memory _tokens = index.getTokens();
+    validateUpdate(inputData._swapHandler);
+    if (
+      _tokens.length != inputData._slippageSell.length ||
+      inputData.tokens.length != inputData._slippageBuy.length ||
+      _tokens.length != inputData._lpSlippageSell.length ||
+      inputData.tokens.length != inputData._lpSlippageBuy.length
+    ) {
+      revert ErrorLibrary.InvalidSlippageLength();
+    }
+
     for (uint256 i = 0; i < inputData.tokens.length; i++) {
       RebalanceLibrary.updateTokensCheck(address(tokenRegistry), address(assetManagerConfig), inputData.tokens[i]);
 
       totalWeight = totalWeight.add(inputData.denorms[i]);
     }
-    if (totalWeight != index.TOTAL_WEIGHT()) {
-      revert ErrorLibrary.InvalidWeights({totalWeight: index.TOTAL_WEIGHT()});
+    uint256 weight = index.TOTAL_WEIGHT();
+    if (totalWeight != weight) {
+      revert ErrorLibrary.InvalidWeights({totalWeight: weight});
     }
 
     uint256[] memory newDenorms = RebalanceLibrary.evaluateNewDenorms(index, inputData.tokens, inputData.denorms);
 
     if (index.totalSupply() > 0) {
       // sell - swap to BNB
-      for (uint256 i = 0; i < tokens.length; i++) {
+      for (uint256 i = 0; i < _tokens.length; i++) {
+        address _token = _tokens[i];
         if (newDenorms[i] == 0) {
-          uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, tokens[i]);
-
+          uint256 tokenBalance = getTokenBalance(_token);
           _pullAndSwap(
-            tokens[i],
+            _token,
             tokenBalance,
             address(this),
             inputData._slippageSell[i],
@@ -273,14 +278,11 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
             inputData._swapHandler
           );
         }
-        index.deleteRecord(tokens[i]);
+        index.deleteRecord(_token);
       }
     }
 
     _updateTokenListAndRecords(inputData.tokens, inputData.denorms);
-
-    index.updateRecords(inputData.tokens, inputData.denorms);
-
     rebalance(inputData._slippageBuy, inputData._lpSlippageBuy, inputData._swapHandler);
 
     emit UpdatedTokens(block.timestamp, inputData.tokens, inputData.denorms);
@@ -296,10 +298,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
   /**
    * @notice This function update records with new tokenlist and weights
    */
-  function _updateTokenListAndRecords(
-    address[] memory _tokens,
-    uint96[] memory _denorms
-  ) public virtual onlyAssetManager {
+  function _updateTokenListAndRecords(address[] memory _tokens, uint96[] memory _denorms) internal virtual {
     index.updateTokenList(_tokens);
     index.updateRecords(_tokens, _denorms);
   }
@@ -319,6 +318,20 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     exchange._swapTokenToETH(
       FunctionParameters.SwapTokenToETHData(_token, _to, _swapHandler, _amount, _slippage, _lpSlippage)
     );
+  }
+
+  function _setPaused(bool _state) internal {
+    index.setPaused(_state);
+  }
+
+  function validateUpdate(address _swapHandler) internal {
+    if (tokenRegistry.getProtocolState() == true) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
+    if (!(tokenRegistry.isSwapHandlerEnabled(_swapHandler))) {
+      revert ErrorLibrary.SwapHandlerNotEnabled();
+    }
+    if (index.getRedeemed()) revert ErrorLibrary.AlreadyOngoingOperation();
   }
 
   // important to receive ETH

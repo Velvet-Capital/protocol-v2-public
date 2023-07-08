@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 import {AccessController} from "./access/AccessController.sol";
-import {Vault} from "./vault/Vault.sol";
 import {IIndexSwap} from "./core/IIndexSwap.sol";
 import {IOffChainIndexSwap} from "./core/IOffChainIndexSwap.sol";
 import {IAssetManagerConfig} from "./registry/IAssetManagerConfig.sol";
@@ -20,8 +19,9 @@ import {IVelvetSafeModule} from "./vault/IVelvetSafeModule.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {VelvetSafeModule} from "./vault/VelvetSafeModule.sol";
 import {GnosisDeployer} from "contracts/library/GnosisDeployer.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 
-contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
   address public indexSwapLibrary;
   address internal baseIndexSwapAddress;
   address internal baseRebalancingAddress;
@@ -64,9 +64,28 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   }
 
   IndexSwaplInfo[] public IndexSwapInfolList;
+  //Events
   event IndexInfo(uint256 time, IndexSwaplInfo indexData, uint256 indexed indexId, address _owner);
-  event IndexCreationState(bool state);
+  event IndexCreationState(uint256 time, bool state);
+  event UpgradeIndexSwap(uint256 time, address newImplementation);
+  event UpgradeExchange(uint256 time, address newImplementation);
+  event UpgradeAssetManagerConfig(uint256 time, address newImplementation);
+  event UpgradeOffchainRebalance(uint256 time, address newImplementation);
+  event UpgradeOffChainIndex(uint256 time, address newImplementation);
+  event UpgradeFeeModule(uint256 time, address newImplementation);
+  event UpgradeRebalanceAggregator(uint256 time, address newImplementation);
+  event UpgradeRebalance(uint256 time, address newImplementation);
+  event UpdateGnosisAddresses(
+    uint256 time,
+    address newGnosisSingleton,
+    address newGnosisFallbackLibrary,
+    address newGnosisMultisendLibrary,
+    address newGnosisSafeProxyFactory
+  );
 
+  /**
+   * @notice This function is used to initialise the IndexFactory while deployment
+   */
   function initialize(FunctionParameters.IndexFactoryInitData memory initData) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
@@ -115,7 +134,9 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @notice This function enables to create a new non custodial portfolio
    * @param initData Accepts the input data from the user
    */
-  function createIndexNonCustodial(FunctionParameters.IndexCreationInitData memory initData) public virtual {
+  function createIndexNonCustodial(
+    FunctionParameters.IndexCreationInitData memory initData
+  ) public virtual nonReentrant {
     address[] memory _owner = new address[](1);
     _owner[0] = address(0x0000000000000000000000000000000000000000);
     _createIndex(initData, false, _owner, 1);
@@ -131,7 +152,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     FunctionParameters.IndexCreationInitData memory initData,
     address[] memory _owners,
     uint256 _threshold
-  ) public virtual {
+  ) public virtual nonReentrant {
     if (_owners.length == 0) {
       revert ErrorLibrary.NoOwnerPassed();
     }
@@ -179,6 +200,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         FunctionParameters.AssetManagerConfigInitData({
           _managementFee: initData._managementFee,
           _performanceFee: initData._performanceFee,
+          _entryFee: initData._entryFee,
+          _exitFee: initData._exitFee,
           _minInvestmentAmount: initData.minIndexInvestmentAmount,
           _maxInvestmentAmount: initData.maxIndexInvestmentAmount,
           _tokenRegistry: tokenRegistry,
@@ -246,18 +269,31 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       abi.encodeWithSelector(IRebalancing.init.selector, IIndexSwap(address(indexSwap)), address(accessController))
     );
 
+    ERC1967Proxy rebalanceAggregator = new ERC1967Proxy(
+      baseRebalanceAggregatorAddress,
+      abi.encodeWithSelector(
+        IRebalanceAggregator.init.selector,
+        address(indexSwap),
+        address(accessController),
+        address(_exchangeHandler),
+        tokenRegistry,
+        address(_assetManagerConfig),
+        vaultAddress
+      )
+    );
+
     ERC1967Proxy offChainRebalancing = new ERC1967Proxy(
       baseOffChainRebalancingAddress,
       abi.encodeWithSelector(
         IOffChainRebalance.init.selector,
         IIndexSwap(address(indexSwap)),
-        address(accessController)
+        address(accessController),
+        address(_exchangeHandler),
+        tokenRegistry,
+        address(_assetManagerConfig),
+        vaultAddress,
+        address(rebalanceAggregator)
       )
-    );
-
-    ERC1967Proxy rebalanceAggregator = new ERC1967Proxy(
-      baseRebalanceAggregatorAddress,
-      abi.encodeWithSelector(IRebalanceAggregator.init.selector, address(indexSwap), address(accessController))
     );
 
     IndexSwapInfolList.push(
@@ -314,6 +350,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeIndexSwap(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseIndexSwapAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeIndexSwap(block.timestamp, _newImpl);
   }
 
   /**
@@ -322,6 +359,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeExchange(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseExchangeHandlerAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeExchange(block.timestamp, _newImpl);
   }
 
   /**
@@ -330,6 +368,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeAssetManagerConfig(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseAssetManagerConfigAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeAssetManagerConfig(block.timestamp, _newImpl);
   }
 
   /**
@@ -338,6 +377,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeOffchainRebalance(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseOffChainRebalancingAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeOffchainRebalance(block.timestamp, _newImpl);
   }
 
   /**
@@ -346,6 +386,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeOffChainIndex(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseOffChainIndexSwapAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeOffChainIndex(block.timestamp, _newImpl);
   }
 
   /**
@@ -354,6 +395,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeFeeModule(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setFeeModuleImplementationAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeFeeModule(block.timestamp, _newImpl);
   }
 
   /**
@@ -362,6 +404,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeRebalanceAggregator(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setRebalanceAggregatorAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeRebalanceAggregator(block.timestamp, _newImpl);
   }
 
   /**
@@ -370,6 +413,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   function upgradeRebalance(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseRebalancingAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
+    emit UpgradeRebalance(block.timestamp, _newImpl);
   }
 
   /**
@@ -392,37 +436,61 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    */
   function setIndexCreationState(bool _state) public virtual onlyOwner {
     indexCreationPause = _state;
-    emit IndexCreationState(_state);
+    emit IndexCreationState(block.timestamp, _state);
   }
 
+  /**
+   * @notice This function is used to set the base indexswap address
+   */
   function _setBaseIndexSwapAddress(address _indexSwap) internal {
     baseIndexSwapAddress = _indexSwap;
   }
 
+  /**
+   * @notice This function is used to set the base exchange handler address
+   */
   function _setBaseExchangeHandlerAddress(address _exchange) internal {
     baseExchangeHandlerAddress = _exchange;
   }
 
+  /**
+   * @notice This function is used to set the base asset manager config address
+   */
   function _setBaseAssetManagerConfigAddress(address _config) internal {
     baseAssetManagerConfigAddress = _config;
   }
 
+  /**
+   * @notice This function is used to set the base offchain-rebalance address
+   */
   function _setBaseOffChainRebalancingAddress(address _offchainRebalance) internal {
     baseOffChainRebalancingAddress = _offchainRebalance;
   }
 
+  /**
+   * @notice This function is used to set the base offchain-indexswap address
+   */
   function _setBaseOffChainIndexSwapAddress(address _offchainIndexSwap) internal {
     baseOffChainIndexSwapAddress = _offchainIndexSwap;
   }
 
+  /**
+   * @notice This function is used to set the fee module implementation address
+   */
   function _setFeeModuleImplementationAddress(address _feeModule) internal {
     feeModuleImplementationAddress = _feeModule;
   }
 
+  /**
+   * @notice This function is used to set the base rebalance aggregator address
+   */
   function _setRebalanceAggregatorAddress(address _rebalanceAggregator) internal {
     baseRebalanceAggregatorAddress = _rebalanceAggregator;
   }
 
+  /**
+   * @notice This function is used to set the base rebalancing address
+   */
   function _setBaseRebalancingAddress(address _rebalance) internal {
     baseRebalancingAddress = _rebalance;
   }
@@ -444,6 +512,14 @@ contract IndexFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     gnosisFallbackLibrary = _newGnosisFallbackLibrary;
     gnosisMultisendLibrary = _newGnosisMultisendLibrary;
     gnosisSafeProxyFactory = _newGnosisSafeProxyFactory;
+
+    emit UpdateGnosisAddresses(
+      block.timestamp,
+      _newGnosisSingleton,
+      _newGnosisFallbackLibrary,
+      _newGnosisMultisendLibrary,
+      _newGnosisSafeProxyFactory
+    );
   }
 
   /**

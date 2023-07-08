@@ -1,6 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, upgrades, waffle } from "hardhat";
+import "@nomicfoundation/hardhat-chai-matchers";
+import { ethers, upgrades } from "hardhat";
 import { BigNumber, Contract } from "ethers";
 import {
   tokenAddresses,
@@ -8,7 +9,6 @@ import {
   RebalancingDeploy,
   venusHandler,
   baseHandler,
-  liqeeHandler,
   beefyHandler,
   wombatHandler,
   indexSwapLibrary,
@@ -33,14 +33,10 @@ import {
   OffChainIndexSwap,
   IIndexSwap,
   IERC20Upgradeable,
-  IndexOperations,
   VelvetSafeModule,
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
-import { TokenAmount } from "@uniswap/sdk";
-import { off } from "process";
-import { stat } from "fs";
 
 var chai = require("chai");
 const axios = require("axios");
@@ -56,7 +52,6 @@ describe.only("Tests for OffChainIndex", () => {
   let iaddress: IAddresses;
   let indexSwapContract: IndexSwap;
   let offChainIndexSwap: OffChainIndexSwap;
-  let indexOperations: IndexOperations;
   let indexFactory: IndexFactory;
   let swapHandler: PancakeSwapHandler;
   let swapHandler1: PancakeSwapHandler;
@@ -85,11 +80,15 @@ describe.only("Tests for OffChainIndex", () => {
   const chainId: any = forkChainId ? forkChainId : 56;
   const addresses = chainIdToAddresses[chainId];
 
+  function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   describe.only("Tests for OffChainIndex contract", () => {
     before(async () => {
       accounts = await ethers.getSigners();
 
-      [owner, investor1, nonOwner, treasury, addr1, addr2, ...addrs] = accounts;
+      [owner, investor1, nonOwner, treasury, addr1, addr2, addr3, ...addrs] = accounts;
 
       const provider = ethers.getDefaultProvider();
 
@@ -107,31 +106,22 @@ describe.only("Tests for OffChainIndex", () => {
       zeroExHandler = await ZeroExHandlerDefault.deploy();
       await zeroExHandler.deployed();
 
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
-
-      const IndexOperations = await ethers.getContractFactory("IndexOperations", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      const indexOperations = await IndexOperations.deploy();
-      await indexOperations.deployed();
-
-      console.log("indexOperations:", indexOperations.address);
       await tokenRegistry.initialize(
-        "100",
-        "1000",
-        "1000",
+        "2500", // protocol fee
+        "30", // protocolFeeBottomConstraint
+        "1000", // max asset manager fee
+        "3000", // max performance fee
+        "500",
+        "500",
         "10000000000000000",
         "500000000000000000000",
         nonOwner.address,
         addresses.WETH_Address,
-        indexOperations.address,
         "1",
       );
 
       const LpHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-      lpHandler = await LpHandler.deploy();
+      lpHandler = await LpHandler.deploy(priceOracle.address);
       await lpHandler.deployed();
       lpHandler.addOrUpdateProtocolSlippage("700");
 
@@ -173,8 +163,10 @@ describe.only("Tests for OffChainIndex", () => {
       const assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
       await assetManagerConfig.init({
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "100",
+        _exitFee: "100",
         _minInvestmentAmount: "10000000000000000",
         _maxInvestmentAmount: "500000000000000000000",
         _tokenRegistry: tokenRegistry.address,
@@ -237,7 +229,6 @@ describe.only("Tests for OffChainIndex", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-          priceOracle.address,
         ],
         [
           iaddress.busdAddress,
@@ -254,7 +245,6 @@ describe.only("Tests for OffChainIndex", () => {
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
           addresses.MAIN_LP_BUSD,
-          addresses.qBNB,
           addresses.mooValasBUSD,
           addresses.MAIN_LP_DAI,
         ],
@@ -273,7 +263,6 @@ describe.only("Tests for OffChainIndex", () => {
           lpHandler.address,
           lpHandler.address,
           wombatHandler.address,
-          liqeeHandler.address,
           beefyHandler.address,
           wombatHandler.address,
         ],
@@ -292,29 +281,10 @@ describe.only("Tests for OffChainIndex", () => {
           [addresses.cake_RewardToken],
           [addresses.cake_RewardToken],
           [addresses.wombat_RewardToken],
-          [addresses.liqee_RewardToken],
           [],
           [addresses.wombat_RewardToken],
         ],
-        [
-          true,
-          true,
-          true,
-          true,
-          true,
-          true,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-          false,
-        ],
+        [true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false],
       );
       registry.wait();
 
@@ -332,7 +302,8 @@ describe.only("Tests for OffChainIndex", () => {
       zeroExHandler = await ZeroExHandler.deploy();
       await zeroExHandler.deployed();
 
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
+      zeroExHandler.init("0xdef1c0ded9bec7f1a1670819833240f027b25eff", priceOracle.address);
+      await zeroExHandler.addOrUpdateProtocolSlippage("100");
 
       // Grant owner asset manager role
       await accessController.setupRole(
@@ -357,10 +328,6 @@ describe.only("Tests for OffChainIndex", () => {
         addresses.vDAI_Address,
         addresses.vDOGE_Address,
         addresses.vLINK_Address,
-        addresses.qBNB,
-        addresses.qETH,
-        addresses.qUSX,
-        addresses.qFIL,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
         addresses.WBNB_BUSDLP_Address,
@@ -434,8 +401,10 @@ describe.only("Tests for OffChainIndex", () => {
           symbol: "IDX",
           maxIndexInvestmentAmount: "500000000000000000000",
           minIndexInvestmentAmount: "10000000000000000",
-          _managementFee: "100",
-          _performanceFee: "10",
+          _managementFee: "200",
+          _performanceFee: "2500",
+          _entryFee: "0",
+          _exitFee: "0",
           _assetManagerTreasury: treasury.address,
           _whitelistedTokens: whitelistedTokens,
           _public: true,
@@ -452,8 +421,10 @@ describe.only("Tests for OffChainIndex", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: owner.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -499,11 +470,11 @@ describe.only("Tests for OffChainIndex", () => {
       it("Initialize IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([iaddress.wbnbAddress, iaddress.btcAddress], [5000, 5000]);
+        await index.initToken([iaddress.wbnbAddress, addresses.vBTC_Address], [5000, 5000]);
       });
 
       it("should add pid", async () => {
-        await lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address, addresses.Cake_WBNBLP_Address], [39, 2]);
+        await lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address, addresses.Cake_WBNBLP_Address], [39, 0]);
       });
       it("Initialize 2nd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(1);
@@ -512,11 +483,11 @@ describe.only("Tests for OffChainIndex", () => {
           .connect(nonOwner)
           .initToken(
             [
-              iaddress.busdAddress,
+              addresses.vBNB_Address,
               iaddress.btcAddress,
-              iaddress.ethAddress,
+              addresses.Cake_WBNBLP_Address,
               iaddress.wbnbAddress,
-              iaddress.dogeAddress,
+              iaddress.ethAddress,
             ],
             [3000, 3000, 2000, 1000, 1000],
           );
@@ -557,7 +528,7 @@ describe.only("Tests for OffChainIndex", () => {
         await indexSwap1.connect(addr1).investInFund(
           {
             _slippage: ["300", "300", "300", "300", "300"],
-            _lpSlippage: ["200", "200", "200", "200", "200"],
+            _lpSlippage: ["200", "200", "200", "200", "300"],
             _to: nonOwner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler1.address,
@@ -573,278 +544,6 @@ describe.only("Tests for OffChainIndex", () => {
         // console.log(indexSupplyAfter);
         // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 1 BNB into 1st Top10 fund", async () => {
-        const indexAddress = await indexFactory.getIndexList(0);
-        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
-
-        await indexSwap.investInFund(
-          {
-            _slippage: ["300", "300"],
-            _lpSlippage: ["200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 1 BNB in 1st Index fund", async () => {
-        var tokens = await indexSwap.getTokens();
-
-        var sellAmount;
-
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
-        var buyTokenSwapData = [];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
-        await sellAmount.wait();
-        //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
-
-        // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
-          for (let j = 0; j < getUnderlyingTokens.length; j++) {
-            if (getUnderlyingTokens[j] != wbnb) {
-              const params = {
-                sellToken: wbnb,
-                buyToken: getUnderlyingTokens[j].toString(),
-                sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
-              };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
-              });
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push(response.data.data.toString());
-              buyTokenAmountContract.push(buyVal.toString());
-            } else {
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push("0x");
-              buyTokenAmountContract.push(buyVal.toString());
-            }
-          }
-        }
-        const fund = await offChainIndex.investInFundOffChain(
-          {
-            sellTokenAddress: wbnb,
-            _buyToken: buyUnderlyingTokensContract,
-            buyAmount: buyTokenAmountContract,
-            protocolFee: [0, 0, 0],
-            _buySwapData: buyTokenSwapData,
-            _offChainHandler: zeroExHandler.address,
-          },
-          "1000000000000000000",
-          ["200", "200"],
-          owner.address,
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        await fund.wait();
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-      });
-
-      it("Invest 2 BNB in 1st Index fund", async () => {
-        var tokens = await indexSwap.getTokens();
-        var sellAmount;
-
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
-        var buyTokenSwapData = [];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        await sellAmount.wait();
-        //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-
-        // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
-          for (let j = 0; j < getUnderlyingTokens.length; j++) {
-            if (getUnderlyingTokens[j] != wbnb) {
-              const params = {
-                sellToken: wbnb,
-                buyToken: getUnderlyingTokens[j].toString(),
-                sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
-              };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
-              });
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push(response.data.data.toString());
-              buyTokenAmountContract.push(buyVal.toString());
-            } else {
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push("0x");
-              buyTokenAmountContract.push(buyVal.toString());
-            }
-          }
-        }
-        const fund = await offChainIndex.investInFundOffChain(
-          {
-            sellTokenAddress: wbnb,
-            _buyToken: buyUnderlyingTokensContract,
-            buyAmount: buyTokenAmountContract,
-            protocolFee: [0, 0, 0],
-            _buySwapData: buyTokenSwapData,
-            _offChainHandler: zeroExHandler.address,
-          },
-          "2000000000000000000",
-          ["200", "200", "200"],
-          owner.address,
-          {
-            value: "2000000000000000000",
-          },
-        );
-
-        await fund.wait();
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-      });
-
-      it("Invest 2 BNB into Top10 2nd fund", async () => {
-        const indexAddress = await indexFactory.getIndexList(1);
-        const indexSwap1 = indexSwap.attach(indexAddress);
-        const exchange = (await indexFactory.IndexSwapInfolList(1)).exchangeHandler;
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-
-        await indexSwap1.connect(addr1).investInFund(
-          {
-            _slippage: ["300", "300", "300", "300", "300"],
-            _lpSlippage: ["200", "200", "200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "2000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: iaddress.wbnbAddress,
-          },
-
-          {
-            value: "2000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 2 BNB in 2nd Index fund", async () => {
-        var tokens = await indexSwap1.getTokens();
-        var sellAmount;
-
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
-        var buyTokenSwapData = [];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-        // console.log("2 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        await sellAmount.wait();
-        //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
-          for (let j = 0; j < getUnderlyingTokens.length; j++) {
-            if (getUnderlyingTokens[j] != wbnb) {
-              const params = {
-                sellToken: wbnb,
-                buyToken: getUnderlyingTokens[j].toString(),
-                sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
-              };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
-              });
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push(response.data.data.toString());
-              buyTokenAmountContract.push(buyVal.toString());
-            } else {
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push("0x");
-              buyTokenAmountContract.push(buyVal.toString());
-            }
-          }
-        }
-        const fund = await offChainIndex.connect(addr2).investInFundOffChain(
-          {
-            sellTokenAddress: wbnb,
-            _buyToken: buyUnderlyingTokensContract,
-            buyAmount: buyTokenAmountContract,
-            protocolFee: [0, 0, 0, 0, 0, 0],
-            _buySwapData: buyTokenSwapData,
-            _offChainHandler: zeroExHandler.address,
-          },
-          "2000000000000000000",
-          ["200", "200", "200", "200", "200", "200"],
-          nonOwner.address,
-          {
-            value: "2000000000000000000",
-          },
-        );
-
-        await fund.wait();
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
       it("Invest 10 BUSD in 1st Index fund", async () => {
@@ -872,18 +571,11 @@ describe.only("Tests for OffChainIndex", () => {
           "10000000000000000000",
         );
         const busdtoken = ERC20.attach(iaddress.busdAddress);
-        const swapResult = await exchange._swapETHToToken(
-          {
-            _token: iaddress.busdAddress,
-            _to: owner.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
+        const swapResult = await swapHandler
+          .connect(owner)
+          .swapETHToTokens("200", iaddress.busdAddress, owner.address, {
+            value: "1000000000000000000",
+          });
         await busdtoken.approve(offChainIndex.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap.iAssetManagerConfig();
@@ -907,11 +599,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: sellTokenAddress,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -965,29 +660,14 @@ describe.only("Tests for OffChainIndex", () => {
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "100000000000000000");
         const ethToken = ERC20.attach(iaddress.ethAddress);
         // console.log("ethAddreess",iaddress.ethAddress);
-        const swapResult = await exchange._swapETHToToken(
-          {
-            _token: iaddress.ethAddress,
-            _to: owner.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
+        const swapResult = await swapHandler.connect(owner).swapETHToTokens("200", iaddress.ethAddress, owner.address, {
+          value: "10000000000000000000",
+        });
         await ethToken.approve(offChainIndex.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
-        // await assetManagerConfig.setPermittedTokens([
-        //   iaddress.wbnbAddress,
-        //   iaddress.btcAddress,
-        //   iaddress.busdAddress,
-        //   iaddress.ethAddress,
-        // ]);
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -1000,11 +680,13 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: sellTokenAddress,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1058,18 +740,9 @@ describe.only("Tests for OffChainIndex", () => {
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000000");
         const btcToken = ERC20.attach(iaddress.btcAddress);
-        const swapResult = await exchange._swapETHToToken(
-          {
-            _token: iaddress.btcAddress,
-            _to: owner.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
-            value: "10000000000000000000",
-          },
-        );
+        const swapResult = await swapHandler.connect(owner).swapETHToTokens("200", iaddress.btcAddress, owner.address, {
+          value: "10000000000000000000",
+        });
         await btcToken.approve(offChainIndex.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap.iAssetManagerConfig();
@@ -1087,11 +760,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: sellTokenAddress,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "3500457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1119,6 +795,186 @@ describe.only("Tests for OffChainIndex", () => {
         await fund.wait();
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log(indexSupplyAfter);
+        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      });
+
+      it("Invest 1 BNB into 1st Top10 fund", async () => {
+        const indexAddress = await indexFactory.getIndexList(0);
+        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        // console.log("1 bnb before", indexSupplyBefore);
+
+        await indexSwap.investInFund(
+          {
+            _slippage: ["300", "300"],
+            _lpSlippage: ["200", "200"],
+            _to: owner.address,
+            _tokenAmount: "1000000000000000000",
+            _swapHandler: swapHandler1.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "1000000000000000000",
+          },
+        );
+
+        const indexSupplyAfter = await indexSwap.totalSupply();
+        // console.log(indexSupplyAfter);
+        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
+      });
+
+      it("Invest 2 BNB in 1st Index fund", async () => {
+        var tokens = await indexSwap.getTokens();
+        var sellAmount;
+
+        var buyUnderlyingTokensContract = [];
+        var buyTokenAmountContract = [];
+        var buyTokenSwapData = [];
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        // console.log("1 bnb before", indexSupplyBefore);
+        const indexAddress = await indexFactory.getIndexList(0);
+        const index = indexSwap.attach(indexAddress);
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
+        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+        //Mining the tx
+        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        await sellAmount.wait();
+        //Static call for return
+        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+
+        // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
+          for (let j = 0; j < getUnderlyingTokens.length; j++) {
+            if (getUnderlyingTokens[j] != wbnb) {
+              const params = {
+                sellToken: wbnb,
+                buyToken: getUnderlyingTokens[j].toString(),
+                sellAmount: buyVal.toString(),
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
+              };
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
+              await delay(2000);
+              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
+              buyTokenSwapData.push(response.data.data.toString());
+              buyTokenAmountContract.push(buyVal.toString());
+            } else {
+              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
+              buyTokenSwapData.push("0x");
+              buyTokenAmountContract.push(buyVal.toString());
+            }
+          }
+        }
+        const fund = await offChainIndex.investInFundOffChain(
+          {
+            sellTokenAddress: wbnb,
+            _buyToken: buyUnderlyingTokensContract,
+            buyAmount: buyTokenAmountContract,
+            protocolFee: [0, 0, 0],
+            _buySwapData: buyTokenSwapData,
+            _offChainHandler: zeroExHandler.address,
+          },
+          "2000000000000000000",
+          ["200", "200", "200"],
+          owner.address,
+          {
+            value: "2000000000000000000",
+          },
+        );
+
+        await fund.wait();
+
+        const indexSupplyAfter = await indexSwap.totalSupply();
+        // console.log(indexSupplyAfter);
+        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      });
+
+      it("Invest 2 BNB in 2nd Index fund", async () => {
+        var tokens = await indexSwap1.getTokens();
+        var sellAmount;
+
+        var buyUnderlyingTokensContract = [];
+        var buyTokenAmountContract = [];
+        var buyTokenSwapData = [];
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const indexSupplyBefore = await indexSwap1.totalSupply();
+        // console.log("2 bnb before", indexSupplyBefore);
+        const indexAddress = await indexFactory.getIndexList(1);
+        const index = indexSwap1.attach(indexAddress);
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
+        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+        //Mining the tx
+        sellAmount = await offChainIndex
+          .connect(addr2)
+          .calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        await sellAmount.wait();
+        //Static call for return
+        const result = await offChainIndex
+          .connect(addr2)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
+          for (let j = 0; j < getUnderlyingTokens.length; j++) {
+            if (getUnderlyingTokens[j] != wbnb) {
+              const params = {
+                sellToken: wbnb,
+                buyToken: getUnderlyingTokens[j].toString(),
+                sellAmount: buyVal.toString(),
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
+              };
+              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+                "0x-api-key": process.env.ZEROX_KEY,
+              });
+              await delay(2000);
+              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
+              buyTokenSwapData.push(response.data.data.toString());
+              buyTokenAmountContract.push(buyVal.toString());
+            } else {
+              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
+              buyTokenSwapData.push("0x");
+              buyTokenAmountContract.push(buyVal.toString());
+            }
+          }
+        }
+        const fund = await offChainIndex.connect(addr2).investInFundOffChain(
+          {
+            sellTokenAddress: wbnb,
+            _buyToken: buyUnderlyingTokensContract,
+            buyAmount: buyTokenAmountContract,
+            protocolFee: [0, 0, 0, 0, 0, 0],
+            _buySwapData: buyTokenSwapData,
+            _offChainHandler: zeroExHandler.address,
+          },
+          "2000000000000000000",
+          ["200", "200", "200", "200", "200"],
+          nonOwner.address,
+          {
+            value: "2000000000000000000",
+          },
+        );
+
+        await fund.wait();
+
+        const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
@@ -1140,26 +996,20 @@ describe.only("Tests for OffChainIndex", () => {
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "10000000000000000000");
+        sellAmount = await offChainIndex
+          .connect(nonOwner)
+          .calculateSwapAmountsOffChain(indexAddress, "10000000000000000000");
         await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(
-          indexAddress,
-          "10000000000000000000",
-        );
+        const result = await offChainIndex
+          .connect(nonOwner)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000000000");
         const busdtoken = ERC20.attach(iaddress.busdAddress);
-        const swapResult = await exchange._swapETHToToken(
-          {
-            _token: iaddress.busdAddress,
-            _to: nonOwner.address,
-            _slippage: "200",
-            _lpSlippage: "200",
-            _swapHandler: swapHandler.address,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
+        const swapResult = await swapHandler
+          .connect(owner)
+          .swapETHToTokens("200", iaddress.busdAddress, nonOwner.address, {
+            value: "1000000000000000000",
+          });
         await busdtoken.connect(nonOwner).approve(offChainIndex.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap1.iAssetManagerConfig();
@@ -1178,11 +1028,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: sellTokenAddress,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1203,222 +1056,13 @@ describe.only("Tests for OffChainIndex", () => {
             _offChainHandler: zeroExHandler.address,
           },
           "10000000000000000000",
-          ["200", "200", "200", "200", "200"],
+          ["200", "200", "200", "200", "300"],
           nonOwner.address,
         );
 
         await fund.wait();
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-      });
-
-      it("should withdraw fund and burn index token successfully for 1st Index", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-
-        const tokenamount = await offChainIndex.calulateWithdrawAmount(AMOUNT);
-        var tokens = await indexSwap.getTokens();
-
-        var buyTokenAddress = wbnb;
-
-        var sellTokenAmountContract = [];
-        var sellTokenSwapData = [];
-
-        for (let i = 0; i < tokens.length; i++) {
-          if (tokens[i] != buyTokenAddress) {
-            const params = {
-              sellToken: tokens[i].toString(),
-              buyToken: buyTokenAddress,
-              sellAmount: tokenamount[i].toString(),
-              slippagePercentage: 0.02,
-            };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-              "0x-api-key": process.env.ZEROX_KEY,
-            });
-            sellTokenSwapData.push(response.data.data.toString());
-            sellTokenAmountContract.push(tokenamount[i].toString());
-          } else {
-            sellTokenSwapData.push("0x");
-            sellTokenAmountContract.push(tokenamount[i].toString());
-          }
-        }
-        const balanceBefore = await owner.getBalance();
-        await offChainIndex.withdraw({
-          tokenAmount: AMOUNT,
-          buyToken: buyTokenAddress,
-          sellAmount: sellTokenAmountContract,
-          protocolFee: [0, 0, 0, 0, 0, 0],
-          buySwapData: sellTokenSwapData,
-          offChainHandler: zeroExHandler.address,
-        });
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const balanceAfter = await owner.getBalance();
-        console.log("Balace Diff", BigNumber.from(balanceAfter).sub(BigNumber.from(balanceBefore)));
-        console.log(
-          "Wbnb balance of contract",
-          await ERC20.attach(iaddress.wbnbAddress).balanceOf(offChainIndex.address),
-        );
-      });
-
-      it("should withdraw fund and burn index token successfully for 2nd Index in BUSD", async () => {
-        const amountIndexToken = await indexSwap1.balanceOf(nonOwner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-        var sellAmount;
-
-        var allUnderlying: string[] = [];
-        var sellTokensContract = [];
-        var sellTokenAmountContract = [];
-        var sellTokenSwapData = [];
-        var underlyingTokenBalances = [];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        var buyTokenAddress = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
-
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex.connect(nonOwner).redeemTokens({
-          tokenAmount: AMOUNT,
-          _lpSlippage: ["200", "200", "200", "200", "200"],
-          token: iaddress.busdAddress,
-        });
-        await sellAmount.wait();
-
-        const abiCoder = ethers.utils.defaultAbiCoder;
-        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userData(nonOwner.address))[3]);
-        var tokens = userTokens[0];
-
-        type Map = {
-          [key: string]: BigNumber;
-        };
-        let m: Map = {};
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          let getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-
-          var result = await offChainIndex.getTokenAmounts(owner.address, tokens[i]);
-          for (var j = 0; j < result.length; j++) {
-            m[getUnderlyingTokens[j]] = BigNumber.from(m[getUnderlyingTokens[j]] || 0).add(BigNumber.from(result[j]));
-          }
-        }
-        //Static call for return
-        const config = await indexSwap1.iAssetManagerConfig();
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig = AssetManagerConfig.attach(config);
-        for (let key in m) {
-          if (key != buyTokenAddress) {
-            const params = {
-              sellToken: key.toString(),
-              buyToken: buyTokenAddress,
-              sellAmount: m[key].toString(),
-              slippagePercentage: 0.02,
-            };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-              "0x-api-key": process.env.ZEROX_KEY,
-            });
-            sellTokensContract.push(key);
-            sellTokenSwapData.push(response.data.data.toString());
-            sellTokenAmountContract.push(m[key].toString());
-          } else {
-            sellTokensContract.push(key);
-            sellTokenSwapData.push("0x");
-            sellTokenAmountContract.push(m[key].toString());
-          }
-        }
-        const fund = await offChainIndex.connect(nonOwner).withdrawOffChain({
-          sellTokenAddress: sellTokensContract,
-          sellAmount: sellTokenAmountContract,
-          protocolFee: [0, 0, 0, 0, 0],
-          buySwapData: sellTokenSwapData,
-          offChainHandler: zeroExHandler.address,
-        });
-
-        await fund.wait();
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log(indexSupplyAfter);
-
-        expect(Number(indexSupplyBefore)).to.be.greaterThan(Number(indexSupplyAfter));
-        for (let j = 0; j < sellTokensContract.length; j++) {
-          expect(await offChainIndex.userUnderlyingAmounts(nonOwner.address, sellTokensContract[j])).to.be.equal(0);
-        }
-      });
-
-      it("Invest 2 BNB in 2nd Index fund", async () => {
-        var tokens = await indexSwap1.getTokens();
-        var sellAmount;
-
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
-        var buyTokenSwapData = [];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-        // console.log("2 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        await sellAmount.wait();
-        //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
-          for (let j = 0; j < getUnderlyingTokens.length; j++) {
-            if (getUnderlyingTokens[j] != wbnb) {
-              const params = {
-                sellToken: wbnb,
-                buyToken: getUnderlyingTokens[j].toString(),
-                sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
-              };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
-              });
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push(response.data.data.toString());
-              buyTokenAmountContract.push(buyVal.toString());
-            } else {
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push("0x");
-              buyTokenAmountContract.push(buyVal.toString());
-            }
-          }
-        }
-        const fund = await offChainIndex.connect(nonOwner).investInFundOffChain(
-          {
-            sellTokenAddress: wbnb,
-            _buyToken: buyUnderlyingTokensContract,
-            buyAmount: buyTokenAmountContract,
-            protocolFee: [0, 0, 0, 0, 0, 0],
-            _buySwapData: buyTokenSwapData,
-            _offChainHandler: zeroExHandler.address,
-          },
-          "2000000000000000000",
-          ["200", "200", "200", "200", "200", "200"],
-          nonOwner.address,
-          {
-            value: "2000000000000000000",
-          },
-        );
-
-        await fund.wait();
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
@@ -1439,10 +1083,14 @@ describe.only("Tests for OffChainIndex", () => {
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "10000000000000000");
+        sellAmount = await offChainIndex
+          .connect(nonOwner)
+          .calculateSwapAmountsOffChain(indexAddress, "10000000000000000");
         await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000000");
+        const result = await offChainIndex
+          .connect(nonOwner)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000000");
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -1455,11 +1103,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: wbnb,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1480,7 +1131,7 @@ describe.only("Tests for OffChainIndex", () => {
             _offChainHandler: zeroExHandler.address,
           },
           "10000000000000000",
-          ["200", "200", "200", "200", "200"],
+          ["200", "200", "200", "200", "300"],
           nonOwner.address,
           {
             value: "10000000000000000",
@@ -1494,140 +1145,63 @@ describe.only("Tests for OffChainIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("Invest 1 BNB in 1st Index fund", async () => {
-        var tokens = await indexSwap.getTokens();
+      it("Invest 1 BNB into 1st Top10 fund", async () => {
+        const indexAddress = await indexFactory.getIndexList(0);
+        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        // console.log("1 bnb before", indexSupplyBefore);
 
+        const tokens = await indexSwap.getTokens();
+
+        const v = await indexSwap.vault();
+
+        await indexSwap.investInFund(
+          {
+            _slippage: ["300", "300"],
+            _lpSlippage: ["200", "200"],
+            _to: owner.address,
+            _tokenAmount: "1000000000000000000",
+            _swapHandler: swapHandler1.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "1000000000000000000",
+          },
+        );
+
+        const indexSupplyAfter = await indexSwap.totalSupply();
+        // console.log(indexSupplyAfter);
+        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
+      });
+
+      it("redeem should fail if a non-permitted and non-WETH token is passed as the out asset", async () => {
+        const amountIndexToken = await indexSwap.balanceOf(owner.address);
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
         var sellAmount;
 
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
-        var buyTokenSwapData = [];
+        var allUnderlying: string[] = [];
+        var sellTokensContract = [];
+        var sellTokenAmountContract = [];
+        var sellTokenSwapData = [];
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
+        console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+        const ownerBalanceBefore = await owner.getBalance();
         //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
-        await sellAmount.wait();
-        //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
-
-        // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
-          for (let j = 0; j < getUnderlyingTokens.length; j++) {
-            if (getUnderlyingTokens[j] != wbnb) {
-              const params = {
-                sellToken: wbnb,
-                buyToken: getUnderlyingTokens[j].toString(),
-                sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
-              };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
-              });
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push(response.data.data.toString());
-              buyTokenAmountContract.push(buyVal.toString());
-            } else {
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push("0x");
-              buyTokenAmountContract.push(buyVal.toString());
-            }
-          }
-        }
-        const fund = await offChainIndex.investInFundOffChain(
-          {
-            sellTokenAddress: wbnb,
-            _buyToken: buyUnderlyingTokensContract,
-            buyAmount: buyTokenAmountContract,
-            protocolFee: [0, 0, 0],
-            _buySwapData: buyTokenSwapData,
-            _offChainHandler: zeroExHandler.address,
-          },
-          "1000000000000000000",
-          ["200", "200", "200"],
-          owner.address,
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        await fund.wait();
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+        await expect(
+          offChainIndex.redeemTokens({
+            tokenAmount: AMOUNT,
+            _lpSlippage: ["200", "200", "200", "200", "200"],
+            token: iaddress.dogeAddress,
+          }),
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidToken");
       });
-
-      it("Invest 1 BNB into 1st Top10 fund", async () => {
-        const indexAddress = await indexFactory.getIndexList(0);
-        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
-
-        const tokens = await indexSwap.getTokens();
-
-        const v = await indexSwap.vault();
-
-        await indexSwap.investInFund(
-          {
-            _slippage: ["300", "300"],
-            _lpSlippage: ["200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 1 BNB into 1st Top10 fund", async () => {
-        const indexAddress = await indexFactory.getIndexList(0);
-        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
-
-        const tokens = await indexSwap.getTokens();
-
-        const v = await indexSwap.vault();
-
-        await indexSwap.investInFund(
-          {
-            _slippage: ["300", "300"],
-            _lpSlippage: ["200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it;
 
       it("should withdraw properly with rebalance in between", async () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
@@ -1641,7 +1215,7 @@ describe.only("Tests for OffChainIndex", () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("1 bnb before", indexSupplyBefore);
+        console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
@@ -1656,9 +1230,8 @@ describe.only("Tests for OffChainIndex", () => {
         await sellAmount.wait();
 
         const abiCoder = ethers.utils.defaultAbiCoder;
-        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userData(owner.address))[3]);
+        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userWithdrawData(owner.address))[3]);
         var tokens = userTokens[0];
-
         type Map = {
           [key: string]: BigNumber;
         };
@@ -1681,11 +1254,14 @@ describe.only("Tests for OffChainIndex", () => {
 
         for (let key in m) {
           if (key != wbnb) {
+            await delay(2000);
             const params = {
               sellToken: key.toString(),
               buyToken: wbnb,
               sellAmount: m[key].toString(),
-              slippagePercentage: 0.02,
+              slippagePercentage: 1,
+              gasPrice: "4000457106",
+              gas: "350000",
             };
             const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
               "0x-api-key": process.env.ZEROX_KEY,
@@ -1703,7 +1279,7 @@ describe.only("Tests for OffChainIndex", () => {
         console.log("--------Updating Tokens------");
 
         await rebalancing.updateTokens({
-          tokens: [iaddress.wbnbAddress, addresses.MAIN_LP_BUSD, addresses.vBNB_Address],
+          tokens: [iaddress.wbnbAddress, addresses.Cake_WBNBLP_Address, addresses.vBNB_Address],
           _swapHandler: swapHandler.address,
           denorms: [2000, 6000, 2000],
           _slippageSell: ["200", "200"],
@@ -1723,14 +1299,16 @@ describe.only("Tests for OffChainIndex", () => {
 
         await fund.wait();
         const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
+        console.log(indexSupplyAfter);
         const ownerBalanceAfter = await owner.getBalance();
         expect(Number(indexSupplyBefore)).to.be.greaterThan(Number(indexSupplyAfter));
-        // console.log("Owner Balance Diff",BigNumber.from(ownerBalanceAfter).sub(BigNumber.from(ownerBalanceBefore)))
+        console.log("Owner Balance Diff", BigNumber.from(ownerBalanceAfter).sub(BigNumber.from(ownerBalanceBefore)));
         expect(Number(ownerBalanceAfter)).to.be.greaterThan(Number(ownerBalanceBefore));
 
         for (let j = 0; j < sellTokensContract.length; j++) {
-          expect(await offChainIndex.userUnderlyingAmounts(owner.address, sellTokensContract[j])).to.be.equal(0);
+          expect(Number(await offChainIndex.userUnderlyingAmounts(owner.address, sellTokensContract[j]))).to.be.equal(
+            Number(0),
+          );
         }
       });
 
@@ -1739,11 +1317,6 @@ describe.only("Tests for OffChainIndex", () => {
         indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
         const indexSupplyBefore = await indexSwap.totalSupply();
         console.log("1 bnb before", indexSupplyBefore);
-
-        const tokens = await indexSwap.getTokens();
-
-        const v = await indexSwap.vault();
-
         await indexSwap.connect(nonOwner).investInFund(
           {
             _slippage: ["300", "300", "300"],
@@ -1764,89 +1337,18 @@ describe.only("Tests for OffChainIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Invest 2 BNB in 2nd Index fund", async () => {
-        var tokens = await indexSwap1.getTokens();
-        var sellAmount;
-
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
-        var buyTokenSwapData = [];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-        // console.log("2 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        await sellAmount.wait();
-        //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const handlerAddress = tokenInfo[2];
-          const handler = await ethers.getContractAt("IHandler", handlerAddress);
-          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
-          const buyVal = BigNumber.from(result[i]).div(getUnderlyingTokens.length);
-          for (let j = 0; j < getUnderlyingTokens.length; j++) {
-            if (getUnderlyingTokens[j] != wbnb) {
-              const params = {
-                sellToken: wbnb,
-                buyToken: getUnderlyingTokens[j].toString(),
-                sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
-              };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
-              });
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push(response.data.data.toString());
-              buyTokenAmountContract.push(buyVal.toString());
-            } else {
-              buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
-              buyTokenSwapData.push("0x");
-              buyTokenAmountContract.push(buyVal.toString());
-            }
-          }
-        }
-        const fund = await offChainIndex.connect(nonOwner).investInFundOffChain(
-          {
-            sellTokenAddress: wbnb,
-            _buyToken: buyUnderlyingTokensContract,
-            buyAmount: buyTokenAmountContract,
-            protocolFee: [0, 0, 0, 0, 0, 0],
-            _buySwapData: buyTokenSwapData,
-            _offChainHandler: zeroExHandler.address,
-          },
-          "2000000000000000000",
-          ["200", "200", "200", "200", "200", "200"],
-          nonOwner.address,
-          {
-            value: "2000000000000000000",
-          },
-        );
-
-        await fund.wait();
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-      });
-
       it("should Update Weights and Rebalance for 2nd Index", async () => {
         await rebalancing1
           .connect(nonOwner)
           .updateWeights(
-            [4667, 1333, 1000, 1000, 2000],
-            ["200", "200", "200", "200", "200"],
-            ["200", "200", "200", "200", "200"],
+            [4667, 1333, 2000, 1000, 1000],
+            ["200", "200", "200", "200", "300"],
+            ["200", "200", "200", "200", "300"],
             swapHandler.address,
           );
       });
 
-      it("Invest 2 BNB in 2nd Index fund", async () => {
+      it("Invest 1 BNB in 2nd Index fund", async () => {
         var tokens = await indexSwap1.getTokens();
         var sellAmount;
 
@@ -1861,10 +1363,14 @@ describe.only("Tests for OffChainIndex", () => {
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        sellAmount = await offChainIndex
+          .connect(addr2)
+          .calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
         await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        const result = await offChainIndex
+          .connect(addr2)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -1877,11 +1383,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: wbnb,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -1901,11 +1410,11 @@ describe.only("Tests for OffChainIndex", () => {
             _buySwapData: buyTokenSwapData,
             _offChainHandler: zeroExHandler.address,
           },
-          "2000000000000000000",
-          ["200", "200", "200", "200", "200", "200"],
+          "1000000000000000000",
+          ["200", "200", "200", "200", "200"],
           nonOwner.address,
           {
-            value: "2000000000000000000",
+            value: "1000000000000000000",
           },
         );
 
@@ -1934,11 +1443,13 @@ describe.only("Tests for OffChainIndex", () => {
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex
-          .connect(nonOwner)
+          .connect(addr2)
           .calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
         await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
+        const result = await offChainIndex
+          .connect(addr2)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
 
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         for (let i = 0; i < tokens.length; i++) {
@@ -1953,11 +1464,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: wbnb,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -2026,8 +1540,17 @@ describe.only("Tests for OffChainIndex", () => {
         });
         await sellAmount.wait();
 
+        const amountIndexToken = await indexSwap.balanceOf(owner.address);
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+        sellAmount = await offChainIndex.redeemTokens({
+          tokenAmount: AMOUNT,
+          _lpSlippage: ["200", "200", "200"],
+          token: wbnb,
+        });
+        await sellAmount.wait();
+
         const abiCoder = ethers.utils.defaultAbiCoder;
-        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userData(nonOwner.address))[3]);
+        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userWithdrawData(nonOwner.address))[3]);
         var tokens = userTokens[0];
 
         //Static call for return
@@ -2057,7 +1580,9 @@ describe.only("Tests for OffChainIndex", () => {
               sellToken: key.toString(),
               buyToken: wbnb,
               sellAmount: m2[key].toString(),
-              slippagePercentage: 0.02,
+              slippagePercentage: 1,
+              gasPrice: "4000457106",
+              gas: "350000",
             };
             const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
               "0x-api-key": process.env.ZEROX_KEY,
@@ -2085,21 +1610,16 @@ describe.only("Tests for OffChainIndex", () => {
 
         expect(Number(indexSupplyBefore)).to.be.greaterThan(Number(indexSupplyAfter));
         for (let j = 0; j < sellTokensContract.length; j++) {
-          expect(await offChainIndex.userUnderlyingAmounts(nonOwner.address, sellTokensContract[j])).to.be.equal(0);
+          expect(
+            Number(await offChainIndex.userUnderlyingAmounts(nonOwner.address, sellTokensContract[j])),
+          ).to.be.equal(Number(0));
         }
         expect(Number(user2BNBBalanceAfter)).to.be.greaterThan(Number(user2BNBBalanceBefore));
 
         const ownerBALANCEBefore = await owner.getBalance();
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-        sellAmount = await offChainIndex.redeemTokens({
-          tokenAmount: AMOUNT,
-          _lpSlippage: ["200", "200", "200"],
-          token: wbnb,
-        });
         await sellAmount.wait();
 
-        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userData(owner.address))[3]);
+        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userWithdrawData(owner.address))[3]);
         var tokens = userTokens[0];
 
         type Map = {
@@ -2125,7 +1645,9 @@ describe.only("Tests for OffChainIndex", () => {
               sellToken: key.toString(),
               buyToken: wbnb,
               sellAmount: m[key].toString(),
-              slippagePercentage: 0.02,
+              slippagePercentage: 1,
+              gasPrice: "4000457106",
+              gas: "350000",
             };
             const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
               "0x-api-key": process.env.ZEROX_KEY,
@@ -2152,7 +1674,9 @@ describe.only("Tests for OffChainIndex", () => {
 
         expect(Number(ownerBALANCEAFTER)).to.be.greaterThan(Number(ownerBALANCEBefore));
         for (let j = 0; j < sellTokensContract2.length; j++) {
-          expect(await offChainIndex.userUnderlyingAmounts(owner.address, sellTokensContract2[j])).to.be.equal(0);
+          expect(Number(await offChainIndex.userUnderlyingAmounts(owner.address, sellTokensContract2[j]))).to.be.equal(
+            Number(0),
+          );
         }
       });
 
@@ -2171,10 +1695,14 @@ describe.only("Tests for OffChainIndex", () => {
         let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        sellAmount = await offChainIndex
+          .connect(addr2)
+          .calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
         await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        const result = await offChainIndex
+          .connect(addr2)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -2187,11 +1715,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: wbnb,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 0.01,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -2213,7 +1744,7 @@ describe.only("Tests for OffChainIndex", () => {
           },
           "2000000000000000000",
           ["200", "200", "200", "200", "200", "200"],
-          owner.address,
+          addr2.address,
           {
             value: "2000000000000000000",
           },
@@ -2222,12 +1753,44 @@ describe.only("Tests for OffChainIndex", () => {
         await fund.wait();
 
         const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log("diff",BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
+      it("addr2 should emergency withdraw", async () => {
+        const amountIndexToken = await indexSwap1.balanceOf(addr2.address);
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken);
+        var sellAmount;
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const indexSupplyBefore = await indexSwap1.totalSupply();
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
+        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+
+        let balanceBefore = [];
+        for (let i = 0; i < indexSwap1.getTokens(); i++) {
+          balanceBefore[i] = await ERC20.attach(indexSwap1.getTokens()[i]).balanceOf(addr2.address);
+        }
+        sellAmount = await offChainIndex.connect(addr2).redeemTokens({
+          tokenAmount: AMOUNT,
+          _lpSlippage: ["200", "200", "200", "200", "200"],
+          token: wbnb,
+        });
+        await sellAmount.wait();
+
+        await offChainIndex.connect(addr2).triggerMultipleTokenWithdrawal();
+        const indexSupplyAfter = await indexSwap1.totalSupply();
+        let balanceAfter = [];
+        for (let i = 0; i < indexSwap1.getTokens(); i++) {
+          balanceAfter[i] = await ERC20.attach(indexSwap1.getTokens()[i]).balanceOf(addr2.address);
+          expect(Number(balanceAfter[i])).to.be.greaterThan(Number(balanceBefore[i]));
+        }
+
+        expect(Number(indexSupplyBefore)).to.be.greaterThan(Number(indexSupplyAfter));
+      });
+
       it("owner should invest using offchain", async () => {
-        var tokens = await indexSwap1.getTokens();
+        var tokens = await indexSwap.getTokens();
         var sellAmount;
 
         var buyUnderlyingTokensContract = [];
@@ -2235,16 +1798,20 @@ describe.only("Tests for OffChainIndex", () => {
         var buyTokenSwapData = [];
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-        const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        const indexAddress = await indexFactory.getIndexList(0);
+        const index = indexSwap.attach(indexAddress);
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
         const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
-        sellAmount = await offChainIndex.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        sellAmount = await offChainIndex
+          .connect(owner)
+          .calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
         await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        const result = await offChainIndex
+          .connect(owner)
+          .callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -2257,11 +1824,14 @@ describe.only("Tests for OffChainIndex", () => {
                 sellToken: wbnb,
                 buyToken: getUnderlyingTokens[j].toString(),
                 sellAmount: buyVal.toString(),
-                slippagePercentage: 0.02,
+                slippagePercentage: 1,
+                gasPrice: "4000457106",
+                gas: "350000",
               };
               const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
                 "0x-api-key": process.env.ZEROX_KEY,
               });
+              await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
               buyTokenSwapData.push(response.data.data.toString());
               buyTokenAmountContract.push(buyVal.toString());
@@ -2291,9 +1861,163 @@ describe.only("Tests for OffChainIndex", () => {
 
         await fund.wait();
 
-        const indexSupplyAfter = await indexSwap1.totalSupply();
+        const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log("diff",BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      });
+
+      it("owner should triggerMultiple TokenWithdrawal withdraw", async () => {
+        const amountIndexToken = await indexSwap.balanceOf(owner.address);
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken);
+        var sellAmount;
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
+        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+
+        let balanceBefore = [];
+        for (let i = 0; i < indexSwap.getTokens(); i++) {
+          balanceBefore[i] = await ERC20.attach(indexSwap.getTokens()[i]).balanceOf(owner.address);
+        }
+        sellAmount = await offChainIndex.connect(owner).redeemTokens({
+          tokenAmount: AMOUNT,
+          _lpSlippage: ["200", "200", "200", "200", "200"],
+          token: wbnb,
+        });
+        await sellAmount.wait();
+
+        await offChainIndex.connect(owner).triggerMultipleTokenWithdrawal();
+        const indexSupplyAfter = await indexSwap.totalSupply();
+        let balanceAfter = [];
+        for (let i = 0; i < indexSwap.getTokens(); i++) {
+          balanceAfter[i] = await ERC20.attach(indexSwap.getTokens()[i]).balanceOf(owner.address);
+          expect(Number(balanceAfter[i])).to.be.greaterThan(Number(balanceBefore[i]));
+        }
+
+        expect(Number(indexSupplyBefore)).to.be.greaterThan(Number(indexSupplyAfter));
+      });
+
+      it("No owner should triggerMultiple TokenWithdrawal withdraw", async () => {
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
+        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+
+        await expect(offChainIndex.connect(addr3).triggerMultipleTokenWithdrawal()).to.be.revertedWithCustomError(
+          offChainIndex,
+          "TokensNotRedeemed",
+        );
+      });
+
+      it("Invest 1 BNB into 1st Top10 fund", async () => {
+        const indexAddress = await indexFactory.getIndexList(0);
+        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        console.log("1 bnb before", indexSupplyBefore);
+        await indexSwap.connect(nonOwner).investInFund(
+          {
+            _slippage: ["300", "300", "300"],
+            _lpSlippage: ["200", "200", "200"],
+            _to: owner.address,
+            _tokenAmount: "1000000000000000000",
+            _swapHandler: swapHandler1.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "1000000000000000000",
+          },
+        );
+
+        const indexSupplyAfter = await indexSwap.totalSupply();
+        // console.log(indexSupplyAfter);
+        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
+      });
+
+      it("Withdraw should fail if the protocol is paused", async () => {
+        const amountIndexToken = await indexSwap.balanceOf(owner.address);
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+        var sellAmount;
+
+        var allUnderlying: string[] = [];
+        var sellTokensContract = [];
+        var sellTokenAmountContract = [];
+        var sellTokenSwapData = [];
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        console.log("1 bnb before", indexSupplyBefore);
+        const indexAddress = await indexFactory.getIndexList(0);
+        const index = indexSwap.attach(indexAddress);
+        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
+        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
+        const ownerBalanceBefore = await owner.getBalance();
+        //Mining the tx
+        sellAmount = await offChainIndex.redeemTokens({
+          tokenAmount: AMOUNT,
+          _lpSlippage: ["200", "200", "200", "200", "200"],
+          token: wbnb,
+        });
+        await sellAmount.wait();
+
+        const abiCoder = ethers.utils.defaultAbiCoder;
+        var userTokens = abiCoder.decode(["address[]"], (await offChainIndex.userWithdrawData(owner.address))[3]);
+        var tokens = userTokens[0];
+        type Map = {
+          [key: string]: BigNumber;
+        };
+        let m: Map = {};
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          let getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          var result = await offChainIndex.getTokenAmounts(owner.address, tokens[i]);
+          for (var j = 0; j < result.length; j++) {
+            m[getUnderlyingTokens[j]] = BigNumber.from(m[getUnderlyingTokens[j]] || 0).add(BigNumber.from(result[j]));
+          }
+        }
+        //Static call for return
+        const config = await indexSwap1.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+
+        for (let key in m) {
+          if (key != wbnb) {
+            await delay(2000);
+            const params = {
+              sellToken: key.toString(),
+              buyToken: wbnb,
+              sellAmount: m[key].toString(),
+              slippagePercentage: 0.1,
+              gasPrice: "2000457106",
+              gas: "200000",
+            };
+            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
+              "0x-api-key": process.env.ZEROX_KEY,
+            });
+            sellTokensContract.push(key);
+            sellTokenSwapData.push(response.data.data.toString());
+            sellTokenAmountContract.push(m[key].toString());
+          } else {
+            sellTokensContract.push(key);
+            sellTokenSwapData.push("0x");
+            sellTokenAmountContract.push(m[key].toString());
+          }
+        }
+
+        await tokenRegistry.setProtocolPause(true);
+
+        console.log("--------Withdrawing----------");
+        await expect(
+          offChainIndex.withdrawOffChain({
+            sellTokenAddress: sellTokensContract,
+            sellAmount: sellTokenAmountContract,
+            protocolFee: [0, 0],
+            buySwapData: sellTokenSwapData,
+            offChainHandler: zeroExHandler.address,
+          }),
+        ).to.be.revertedWithCustomError(indexSwapLibrary, "ProtocolIsPaused");
       });
     });
   });

@@ -20,4 +20,6 @@ interface IPool {
   ) external returns (uint256 amount);
 
   function quotePotentialWithdraw(address token, uint256 liquidity) external returns (uint256 amount, uint256 fee);
+
+  function quotePotentialDeposit(address token, uint256 liquidity) external returns (uint256 amount, uint256 fee);
 }

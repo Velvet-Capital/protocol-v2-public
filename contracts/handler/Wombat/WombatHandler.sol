@@ -36,7 +36,7 @@ contract WombatHandler is IHandler, SlippageControl {
   using SafeMathUpgradeable for uint256;
 
   address public constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
-  IWombat MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
+  IWombat public MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
 
   address public constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
 
@@ -61,7 +61,8 @@ contract WombatHandler is IHandler, SlippageControl {
     address _lpAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
+    address _to,
+    address user
   ) public payable override {
     if (_lpAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
@@ -75,7 +76,7 @@ contract WombatHandler is IHandler, SlippageControl {
       IPool(asset.pool()).deposit(
         address(underlyingToken),
         _amount[0],
-        getSlippage(_amount[0], _lpSlippage),
+        getInternalSlippage(_amount[0], _lpAsset, _lpSlippage, true),
         _to,
         block.timestamp,
         true
@@ -87,7 +88,7 @@ contract WombatHandler is IHandler, SlippageControl {
 
       IWombatRouter(WOMBAT_ROUTER).addLiquidityNative{value: _amount[0]}(
         IPool(asset.pool()),
-        getSlippage(_amount[0], _lpSlippage),
+        getInternalSlippage(_amount[0], _lpAsset, _lpSlippage, true),
         _to,
         block.timestamp,
         true
@@ -116,7 +117,7 @@ contract WombatHandler is IHandler, SlippageControl {
       IPool(token.pool()).withdraw(
         address(underlyingToken),
         inputData._amount,
-        getSlippage(inputData._amount, inputData._lpSlippage),
+        getInternalSlippage(inputData._amount, inputData._yieldAsset, inputData._lpSlippage, false),
         inputData._to,
         block.timestamp
       );
@@ -127,7 +128,7 @@ contract WombatHandler is IHandler, SlippageControl {
       IWombatRouter(WOMBAT_ROUTER).removeLiquidityNative(
         IPool(token.pool()),
         inputData._amount,
-        getSlippage(inputData._amount, inputData._lpSlippage),
+        getInternalSlippage(inputData._amount, inputData._yieldAsset, inputData._lpSlippage, false),
         inputData._to,
         block.timestamp
       );
@@ -186,6 +187,8 @@ contract WombatHandler is IHandler, SlippageControl {
     return tokenBalance;
   }
 
+  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+
   function encodeData(address t, uint256 _amount) public view returns (bytes memory) {
     IAsset asset = IAsset(t);
     return abi.encodeWithSelector(IWombat.withdraw.selector, MasterWombat.getAssetPid(address(asset)), _amount);
@@ -198,6 +201,35 @@ contract WombatHandler is IHandler, SlippageControl {
   function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
     uint256 pid = MasterWombat.getAssetPid(address(_token));
     return (abi.encodeWithSelector(IWombat.deposit.selector, pid, 0), address(MasterWombat));
+  }
+
+  /**
+   * @notice This function returns the slippage required by the Wombat Handler
+   * @param _amount This amount needed to be checked
+   * @param _token Address of the token needed
+   * @param _slippage Slippage required to be checked
+   * @param _deposit Type of operation done here, can be deposit or redeem
+   * @return slippageAmount amount calculated after slippage
+   */
+  function getInternalSlippage(
+    uint _amount,
+    address _token,
+    uint _slippage,
+    bool _deposit
+  ) internal returns (uint slippageAmount) {
+    IAsset asset = IAsset(_token);
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_token)[0]);
+    if (_deposit) {
+      (uint liquidity, ) = IPool(asset.pool()).quotePotentialDeposit(address(underlyingToken), _amount);
+      slippageAmount = (liquidity.mul((HUNDRED_PERCENT.mul(100)).div(HUNDRED_PERCENT + _slippage))).div(
+        HUNDRED_PERCENT
+      );
+    } else {
+      (uint returnAmount, ) = IPool(asset.pool()).quotePotentialWithdraw(address(underlyingToken), _amount);
+      slippageAmount = (returnAmount.mul((HUNDRED_PERCENT.mul(100)).div(HUNDRED_PERCENT + _slippage))).div(
+        HUNDRED_PERCENT
+      );
+    }
   }
 
   receive() external payable {}

@@ -5,6 +5,11 @@ import {IIndexSwap} from "../core/IIndexSwap.sol";
 import {IExchange} from "../core/IExchange.sol";
 import {IndexSwapLibrary, IAssetManagerConfig, ITokenRegistry, ErrorLibrary} from "../core/IndexSwapLibrary.sol";
 import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {IHandler, FunctionParameters} from "../handler/IHandler.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/interfaces/IERC20Upgradeable.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {IExternalSwapHandler} from "../handler/IExternalSwapHandler.sol";
 
 library RebalanceLibrary {
   using SafeMathUpgradeable for uint256;
@@ -61,8 +66,8 @@ library RebalanceLibrary {
    * @param index Index address whose tokens weight needs to be found
    */
 
-  function getCurrentWeights(IIndexSwap index, address[] calldata tokens) external returns (uint256[] memory) {
-    uint256[] memory oldWeights = new uint256[](tokens.length);
+  function getCurrentWeights(IIndexSwap index, address[] calldata tokens) external returns (uint96[] memory) {
+    uint96[] memory oldWeights = new uint96[](tokens.length);
     uint256 vaultBalance = 0;
 
     uint256[] memory tokenBalanceInUSD = new uint256[](tokens.length);
@@ -70,9 +75,9 @@ library RebalanceLibrary {
     (tokenBalanceInUSD, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, tokens);
 
     for (uint256 i = 0; i < tokens.length; i++) {
-      oldWeights[i] = (vaultBalance == 0)
-        ? vaultBalance
-        : tokenBalanceInUSD[i].mul(index.TOTAL_WEIGHT()).div(vaultBalance);
+      oldWeights[i] = uint96(
+        (vaultBalance == 0) ? vaultBalance : tokenBalanceInUSD[i].mul(index.TOTAL_WEIGHT()).div(vaultBalance)
+      );
     }
     return oldWeights;
   }
@@ -90,14 +95,16 @@ library RebalanceLibrary {
 
     (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, tokens);
     for (uint256 i = 0; i < tokens.length; i++) {
+      address _token = tokens[i];
       uint256 oldWeight = (vaultBalance == 0)
         ? vaultBalance
         : tokenBalanceInBNB[i].mul(index.TOTAL_WEIGHT()).div(vaultBalance);
-      if (newWeights[i] < oldWeight) {
-        uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, tokens[i]);
-        uint256 weightDiff = oldWeight.sub(newWeights[i]);
+      uint256 _newWeight = newWeights[i];
+      if (_newWeight < oldWeight) {
+        uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, _token);
+        uint256 weightDiff = oldWeight.sub(_newWeight);
         swapAmounts[i] = tokenBalance.mul(weightDiff).div(oldWeight);
-        sellTokens[i] = tokens[i];
+        sellTokens[i] = _token;
       }
     }
     return (sellTokens, swapAmounts);
@@ -184,6 +191,9 @@ library RebalanceLibrary {
         }
         if (_tokens[i] == portfolioToken) {
           bTokenIndex = i;
+          if (oldWeights[i] == 0) {
+            count++;
+          }
         }
       }
 
@@ -192,6 +202,9 @@ library RebalanceLibrary {
         oldWeights[bTokenIndex] = oldWeights[bTokenIndex] + uint96(diff);
       }
 
+      if (oldWeights[bTokenIndex] == 0) {
+        revert ErrorLibrary.BalanceTooSmall();
+      }
       uint256 j = 0;
 
       address[] memory tempTokens = new address[](count);
@@ -229,30 +242,27 @@ library RebalanceLibrary {
     }
   }
 
-  function updateTokensCheckBefore(
-    address index,
-    address tokenRegistry,
-    address _swapHandler,
-    address[] memory tokens,
-    uint256[] calldata _slippageSell,
-    uint256[] calldata _slippageBuy,
-    uint256[] calldata _lpSlippageSell,
-    uint256[] calldata _lpSlippageBuy
-  ) external {
-    if (
-      !(IIndexSwap(index).getTokens().length == _slippageSell.length && tokens.length == _slippageBuy.length) &&
-      IIndexSwap(index).getTokens().length == _lpSlippageSell.length &&
-      tokens.length == _lpSlippageBuy.length
-    ) {
-      revert ErrorLibrary.InvalidSlippageLength();
+  /**
+   * @notice This function gets the underlying balances of the input token
+   */
+  function checkUnderlyingBalances(
+    address _token,
+    IHandler _handler,
+    address _contract
+  ) external view returns (uint256[] memory) {
+    address[] memory underlying = _handler.getUnderlying(_token);
+    uint256[] memory balances = new uint256[](underlying.length);
+    for (uint256 i = 0; i < underlying.length; i++) {
+      balances[i] = IERC20Upgradeable(underlying[i]).balanceOf(_contract);
     }
+    return balances;
+  }
 
-    if (ITokenRegistry(tokenRegistry).getProtocolState() == true) {
-      revert ErrorLibrary.ProtocolIsPaused();
-    }
-    if (!(ITokenRegistry(tokenRegistry).isSwapHandlerEnabled(_swapHandler))) {
-      revert ErrorLibrary.SwapHandlerNotEnabled();
-    }
+  /**
+   * @notice This function gets the underlying balance of a specific underyling token
+   */
+  function checkUnderlyingBalance(address _token, address _contract) external view returns (uint256) {
+    return IERC20Upgradeable(_token).balanceOf(_contract);
   }
 
   function checkPrimary(IIndexSwap index, address[] calldata tokens) external view {
@@ -290,6 +300,103 @@ library RebalanceLibrary {
     }
     if (!(!config.whitelistTokens() || config.whitelistedToken(token))) {
       revert ErrorLibrary.TokenNotWhitelisted();
+    }
+  }
+
+  function getOldWeights(IIndexSwap index, address[] calldata tokens) external view returns (uint96[] memory) {
+    uint96[] memory oldWeight = new uint96[](tokens.length);
+    for (uint i = 0; i < tokens.length; i++) {
+      oldWeight[i] = index.getRecord(tokens[i]).denorm;
+    }
+    return oldWeight;
+  }
+
+  function beforeRevertCheck(IIndexSwap index) external view {
+    if (!(index.paused())) {
+      revert ErrorLibrary.ContractNotPaused();
+    }
+    if (index.getRedeemed() != true) {
+      revert ErrorLibrary.TokensStaked();
+    }
+  }
+
+  function getEthBalance(
+    address _eth,
+    address[] memory _underlying,
+    uint256[] calldata _amount
+  ) external returns (uint256, uint256) {
+    if (_underlying[0] == _eth) {
+      IWETH(_eth).withdraw(_amount[0]);
+      return (_amount[0], 1);
+    }
+    IWETH(_eth).withdraw(_amount[1]);
+    return (_amount[1], 0);
+  }
+
+  function _swap(
+    address[] memory sellTokens,
+    address offChainHandler,
+    bytes[] calldata swapData,
+    uint256 _index,
+    address WETH,
+    address _contract
+  ) external returns (uint256) {
+    for (uint256 i = 0; i < sellTokens.length; i++) {
+      address _token = sellTokens[i];
+      if (_token != address(0) && _token != WETH) {
+        uint256 _balance = IERC20Upgradeable(_token).balanceOf(_contract);
+        IndexSwapLibrary._transferAndSwapUsingOffChainHandler(
+          _token,
+          WETH,
+          _balance,
+          _contract,
+          swapData[_index],
+          offChainHandler,
+          0
+        );
+        _index++;
+      }
+    }
+    return _index;
+  }
+
+  /**
+   * @notice This function transfers the tokens to the offChain handler and makes the external swap possible
+   */
+  function _transferAndSwapUsingOffChainHandler(
+    address _sellToken,
+    address _buyToken,
+    uint256 transferAmount,
+    address _to,
+    bytes memory _swapData,
+    address _offChainHandler,
+    uint256 _protocolFee
+  ) external {
+    TransferHelper.safeTransfer(_sellToken, _offChainHandler, transferAmount);
+    IExternalSwapHandler(_offChainHandler).swap(_sellToken, _buyToken, transferAmount, _protocolFee, _swapData, _to);
+  }
+
+  function validateEnableRebalance(IIndexSwap _index, ITokenRegistry _registry) external {
+    if (_registry.getProtocolState() == true) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
+    if (_index.paused()) {
+      revert ErrorLibrary.ContractPaused();
+    }
+  }
+
+  function validateUpdateRecord(
+    address[] memory _newTokens,
+    IAssetManagerConfig config,
+    ITokenRegistry registry
+  ) external {
+    for (uint256 i = 0; i < _newTokens.length; i++) {
+      if ((config.whitelistTokens() && !config.whitelistedToken(_newTokens[i]))) {
+        revert ErrorLibrary.TokenNotWhitelisted();
+      }
+      if (!registry.isEnabled(_newTokens[i])) {
+        revert ErrorLibrary.InvalidToken();
+      }
     }
   }
 }

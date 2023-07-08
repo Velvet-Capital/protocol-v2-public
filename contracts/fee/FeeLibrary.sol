@@ -45,7 +45,6 @@ library FeeLibrary {
     uint256 _fee
   ) public pure returns (uint256 tokensToMint, uint256 currentPrice) {
     currentPrice = _vaultBalance.mul(10 ** 18).div(_totalSupply);
-
     uint256 feeForIntervall;
 
     if (currentPrice > _highWaterMark) {
@@ -55,5 +54,27 @@ library FeeLibrary {
     }
 
     tokensToMint = feeForIntervall.mul(_totalSupply).div(_vaultBalance.sub(feeForIntervall));
+  }
+
+  /**
+   * @notice This function calculates entry and exit fee based on the investment/withdrawal amount
+   */
+  function calculateEntryAndExitFee(uint256 _fee, uint256 _tokenAmount) public pure returns (uint256) {
+    return _tokenAmount.mul(_fee).div(TOTAL_WEIGHT);
+  }
+
+  /**
+   * @notice This function calculates a cut of management fees that's going to our protocol, e.g. we're taking a 25% cut of the management fees as protocol fees
+   */
+  function feeSplitter(
+    uint256 _fee,
+    uint256 _protocolFee
+  ) public pure returns (uint256 protocolFee, uint256 assetManagerFee) {
+    if (_fee == 0) {
+      return (0, 0);
+    }
+    // we take a percentage as protocol fee, e.g. 25%
+    protocolFee = _fee.mul(_protocolFee).div(10_000);
+    assetManagerFee = _fee.sub(protocolFee);
   }
 }

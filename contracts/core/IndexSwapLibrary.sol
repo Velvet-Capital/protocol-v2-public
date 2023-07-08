@@ -30,6 +30,8 @@ import {IHandler, FunctionParameters} from "../handler/IHandler.sol";
 
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
+import {IWETH} from "../interfaces/IWETH.sol";
+
 library IndexSwapLibrary {
   using SafeMathUpgradeable for uint256;
 
@@ -42,26 +44,23 @@ library IndexSwapLibrary {
   function getTokenAndVaultBalance(
     IIndexSwap _index,
     address[] memory _tokens
-  ) internal returns (uint256[] memory tokenXBalance, uint256 vaultValue) {
+  ) internal returns (uint256[] memory, uint256) {
     uint256[] memory tokenBalanceInUSD = new uint256[](_tokens.length);
     uint256 vaultBalance = 0;
-
+    ITokenRegistry registry = ITokenRegistry(_index.tokenRegistry());
+    address vault = _index.vault();
     if (_index.totalSupply() > 0) {
       for (uint256 i = 0; i < _tokens.length; i++) {
         uint256[] memory tokenBalance;
         uint256 tokenBalanceUSD;
-        IExchange exchange = IExchange(_index.exchange());
-        address[] memory underlying = getUnderlying(_index.tokenRegistry(), _tokens[i]);
-        tokenBalance = getUnderlyingBalance(_index, _tokens[i]);
-
-        tokenBalanceUSD = 0;
-        for (uint256 j = 0; j < tokenBalance.length; j++) {
-          if (tokenBalance[j] > 0) {
-            tokenBalanceUSD += IPriceOracle(exchange.oracle()).getPriceTokenUSD18Decimals(
-              underlying[j],
-              tokenBalance[j]
-            );
-          }
+        address _token = _tokens[i];
+        IHandler handler = IHandler(registry.getTokenInformation(_token).handler);
+        address[] memory underlying = handler.getUnderlying(_token);
+        if (underlying.length > 1) {
+          tokenBalanceUSD = handler.getFairLpPrice(vault, _token);
+        } else {
+          tokenBalance = handler.getUnderlyingBalance(vault, _token);
+          tokenBalanceUSD += IPriceOracle(_index.oracle()).getPriceTokenUSD18Decimals(underlying[0], tokenBalance[0]);
         }
         tokenBalanceInUSD[i] = tokenBalanceUSD;
         vaultBalance = vaultBalance.add(tokenBalanceUSD);
@@ -84,13 +83,15 @@ library IndexSwapLibrary {
     IIndexSwap _index,
     uint256 tokenAmount,
     uint256[] memory tokenBalanceInUSD,
-    uint256 vaultBalance
+    uint256 vaultBalance,
+    address[] memory _tokens
   ) internal view returns (uint256[] memory) {
-    uint256[] memory amount = new uint256[](_index.getTokens().length);
+    uint256[] memory amount = new uint256[](_tokens.length);
     if (_index.totalSupply() > 0) {
-      for (uint256 i = 0; i < _index.getTokens().length; i++) {
-        require(tokenBalanceInUSD[i].mul(tokenAmount) >= vaultBalance, "incorrect token amount");
-        amount[i] = tokenBalanceInUSD[i].mul(tokenAmount).div(vaultBalance);
+      for (uint256 i = 0; i < _tokens.length; i++) {
+        uint256 balance = tokenBalanceInUSD[i];
+        require(balance.mul(tokenAmount) >= vaultBalance, "incorrect token amount");
+        amount[i] = balance.mul(tokenAmount).div(vaultBalance);
       }
     }
     return amount;
@@ -126,46 +127,10 @@ library IndexSwapLibrary {
   }
 
   /**
-   * @notice This function calls the _pullFromVault() function of Exchange
-   */
-  function _pullFromVault(IIndexSwap _index, address _token, uint256 _amount, address _to) internal {
-    IExchange(_index.exchange())._pullFromVault(_token, _amount, _to);
-  }
-
-  /**
    * @notice This function calls the _pullFromVault() function of the IndexSwapLibrary
    */
-  function pullFromVault(IIndexSwap _index, address _token, uint256 _amount, address _to) external {
-    _pullFromVault(_index, _token, _amount, _to);
-  }
-
-  /**
-   * @notice This function transfers the tokens to the handler and then redeems it via the same handler
-   */
-  function transferAndRedeem(
-    address token,
-    IHandler handler,
-    uint256 swapAmount,
-    uint256 _lpSlippage,
-    address to,
-    bool isETH
-  ) external {
-    TransferHelper.safeTransfer(token, address(handler), swapAmount);
-    handler.redeem(FunctionParameters.RedeemData(swapAmount, _lpSlippage, to, token, isETH));
-  }
-
-  /**
-   * @notice This function returns the BNB price for given amount in USD
-   */
-  function _getTokenPriceUSDETH(IPriceOracle oracle, uint256 amount) external view returns (uint256 amountInBNB) {
-    amountInBNB = oracle.getUsdEthPrice(amount);
-  }
-
-  /**
-   * @notice This function returns the USD price for given amount in BNB
-   */
-  function _getTokenPriceETHUSD(IPriceOracle oracle, uint256 amount) external view returns (uint256 amountInBNB) {
-    amountInBNB = oracle.getEthUsdPrice(amount);
+  function pullFromVault(IExchange _exchange, address _token, uint256 _amount, address _to) external {
+    _exchange._pullFromVault(_token, _amount, _to);
   }
 
   /**
@@ -186,20 +151,37 @@ library IndexSwapLibrary {
   /**
    * @notice This function helps in multi-asset withdrawal from a portfolio
    */
-  function withdrawMultiAsset(address _token, uint256 _tokenBalance) external {
-    _pullFromVault(IIndexSwap(address(this)), _token, _tokenBalance, msg.sender);
+  function withdrawMultiAssetORWithdrawToken(
+    address _tokenRegistry,
+    address _exchange,
+    address _token,
+    uint256 _tokenBalance
+  ) external {
+    if (_token == ITokenRegistry(_tokenRegistry).getETH()) {
+      IExchange(_exchange)._pullFromVault(_token, _tokenBalance, address(this));
+      IWETH(ITokenRegistry(_tokenRegistry).getETH()).withdraw(_tokenBalance);
+      (bool success, ) = payable(msg.sender).call{value: _tokenBalance}("");
+      require(success, "Transfer ETH failed");
+    } else {
+      IExchange(_exchange)._pullFromVault(_token, _tokenBalance, msg.sender);
+    }
   }
 
   /**
    * @notice This function puts some checks before an investment operation
    */
-  function beforeInvestment(uint256 _slippageLength, uint256 _lpSlippageLength, address _to) internal {
-    IAssetManagerConfig _assetManagerConfig = IAssetManagerConfig(IIndexSwap(address(this)).iAssetManagerConfig());
-    address[] memory _tokens = IIndexSwap(address(this)).getTokens();
+  function beforeInvestment(
+    IIndexSwap _index,
+    uint256 _slippageLength,
+    uint256 _lpSlippageLength,
+    address _to
+  ) external {
+    IAssetManagerConfig _assetManagerConfig = IAssetManagerConfig(_index.iAssetManagerConfig());
+    address[] memory _tokens = _index.getTokens();
     if (!(_assetManagerConfig.publicPortfolio() || _assetManagerConfig.whitelistedUsers(_to))) {
       revert ErrorLibrary.UserNotAllowedToInvest();
     }
-    if (ITokenRegistry(IIndexSwap(address(this)).tokenRegistry()).getProtocolState() == true) {
+    if (ITokenRegistry(_index.tokenRegistry()).getProtocolState() == true) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
     if (_slippageLength != _tokens.length || _lpSlippageLength != _tokens.length) {
@@ -230,7 +212,7 @@ library IndexSwapLibrary {
    * @notice This function pulls from the vault, sends the tokens to the handler and then redeems it via the handler
    */
   function _pullAndRedeem(
-    IIndexSwap _index,
+    IExchange _exchange,
     address _token,
     address _to,
     uint256 _amount,
@@ -238,35 +220,26 @@ library IndexSwapLibrary {
     bool isPrimary,
     IHandler _handler
   ) internal {
-    _pullFromVault(_index, _token, _amount, _to);
+    _exchange._pullFromVault(_token, _amount, _to);
     if (!isPrimary) {
       TransferHelper.safeTransfer(_token, address(_handler), _amount);
       _handler.redeem(
-        FunctionParameters.RedeemData(
-          _amount,
-          _lpSlippage,
-          _to,
-          _token,
-          IExchange(_index.exchange()).isWETH(_token, address(_handler))
-        )
+        FunctionParameters.RedeemData(_amount, _lpSlippage, _to, _token, _exchange.isWETH(_token, address(_handler)))
       );
     }
   }
 
   /**
-   * @notice This function checks the underlying balance with the help of the handler
+   * @notice This function returns the rate of the Index token based on the Vault  and token balance
    */
-  function checkUnderlyingBalance(
-    address _token,
-    IHandler _handler,
-    address _contract
-  ) internal view returns (uint256[] memory) {
-    address[] memory underlying = _handler.getUnderlying(_token);
-    uint256[] memory balances = new uint256[](underlying.length);
-    for (uint256 i = 0; i < underlying.length; i++) {
-      balances[i] = IERC20Upgradeable(underlying[i]).balanceOf(_contract);
+  function getIndexTokenRateBNB(IIndexSwap _index) external returns (uint256) {
+    (, uint256 totalVaultBalance) = getTokenAndVaultBalance(_index, _index.getTokens());
+    uint256 vaultBalanceInBNB = IPriceOracle(_index.oracle()).getUsdEthPrice(totalVaultBalance);
+    uint256 _totalSupply = _index.totalSupply();
+    if (_totalSupply > 0 && totalVaultBalance > 0) {
+      return (vaultBalanceInBNB.mul(10 ** 18)).div(_totalSupply);
     }
-    return balances;
+    return 10 ** 18;
   }
 
   /**
@@ -286,45 +259,42 @@ library IndexSwapLibrary {
    */
   function calculateSwapAmountsOffChain(IIndexSwap _index, uint256 tokenAmount) external returns (uint256[] memory) {
     uint256 vaultBalance = 0;
-    uint256 len = IIndexSwap(_index).getTokens().length;
+    address[] memory _tokens = _index.getTokens();
+    uint256 len = _tokens.length;
     uint256[] memory amount = new uint256[](len);
     uint256[] memory tokenBalanceInUSD = new uint256[](len);
-    (tokenBalanceInUSD, vaultBalance) = getTokenAndVaultBalance(IIndexSwap(_index), IIndexSwap(_index).getTokens());
+    (tokenBalanceInUSD, vaultBalance) = getTokenAndVaultBalance(_index, _tokens);
     if (_index.totalSupply() == 0) {
       for (uint256 i = 0; i < len; i++) {
-        uint256 _denorm = _index.getRecord(_index.getTokens()[i]).denorm;
+        uint256 _denorm = _index.getRecord(_tokens[i]).denorm;
         amount[i] = tokenAmount.mul(_denorm).div(10_000);
       }
     } else {
-      amount = calculateSwapAmounts(IIndexSwap(_index), tokenAmount, tokenBalanceInUSD, vaultBalance);
+      for (uint256 i = 0; i < len; i++) {
+        uint256 balance = tokenBalanceInUSD[i];
+        require(balance.mul(tokenAmount) >= vaultBalance, "incorrect token amount");
+        amount[i] = balance.mul(tokenAmount).div(vaultBalance);
+      }
     }
     return (amount);
   }
 
-  function calculateWithdrawAmount(IIndexSwap index, uint256 _tokenAmount) external view returns (uint256[] memory) {
-    uint256 supply = index.totalSupply();
-    address[] memory _tokens = index.getTokens();
-    uint256[] memory _tokenAmounts = new uint256[](_tokens.length);
-    for (uint i = 0; i < _tokens.length; i++) {
-      IHandler handler = IHandler(ITokenRegistry(index.tokenRegistry()).getTokenInformation(_tokens[i]).handler);
-      uint256 tokenBalance = handler.getTokenBalance(index.vault(), _tokens[i]);
-      _tokenAmounts[i] = tokenBalance.mul(_tokenAmount).div(supply);
-    }
-    return _tokenAmounts;
-  }
-
-  function beforeCheck(IIndexSwap _index, uint256 _tokenAmount) external {
+  /**
+   * @notice This function makes the inital checks before executing an off-chain investment
+   */
+  function beforeCheck(IIndexSwap _index, uint256[] calldata _lpSlippage, address _to) external {
     if (ITokenRegistry(_index.tokenRegistry()).getProtocolState() == true) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
-    if (
-      !(_tokenAmount <= IAssetManagerConfig(_index.iAssetManagerConfig()).MAX_INVESTMENTAMOUNT() &&
-        _tokenAmount >= IAssetManagerConfig(_index.iAssetManagerConfig()).MIN_INVESTMENTAMOUNT())
-    ) {
-      revert ErrorLibrary.WrongInvestmentAmount({
-        minInvestment: IAssetManagerConfig(_index.iAssetManagerConfig()).MIN_INVESTMENTAMOUNT(),
-        maxInvestment: IAssetManagerConfig(_index.iAssetManagerConfig()).MAX_INVESTMENTAMOUNT()
-      });
+    IAssetManagerConfig _assetManagerConfig = IAssetManagerConfig(_index.iAssetManagerConfig());
+    if (!(_assetManagerConfig.publicPortfolio() || _assetManagerConfig.whitelistedUsers(_to))) {
+      revert ErrorLibrary.UserNotAllowedToInvest();
+    }
+    if (_lpSlippage.length == 0) {
+      revert ErrorLibrary.InvalidSlippageLength();
+    }
+    if (_index.getTokens().length == 0) {
+      revert ErrorLibrary.NotInitialized();
     }
   }
 
@@ -338,12 +308,13 @@ library IndexSwapLibrary {
     if (_tokenAmount > _index.balanceOf(msg.sender)) {
       revert ErrorLibrary.CallerNotHavingGivenTokenAmount();
     }
-    if (ITokenRegistry(_index.tokenRegistry()).getProtocolState() == true) {
+    address registry = _index.tokenRegistry();
+    if (ITokenRegistry(registry).getProtocolState() == true) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
     if (
       IAssetManagerConfig(_index.iAssetManagerConfig()).isTokenPermitted(_token) == false &&
-      _token != ITokenRegistry(_index.tokenRegistry()).getETH()
+      _token != ITokenRegistry(registry).getETH()
     ) {
       revert ErrorLibrary.InvalidToken();
     }
@@ -355,14 +326,25 @@ library IndexSwapLibrary {
   function beforeWithdrawCheck(
     uint256 _slippage,
     uint256 _lpSlippage,
+    address token,
     address owner,
     IIndexSwap index,
     uint256 tokenAmount
-  ) external view {
+  ) external {
+    ITokenRegistry registry = ITokenRegistry(index.tokenRegistry());
+    address[] memory _tokens = index.getTokens();
+    if (registry.getProtocolState() == true) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
+
+    if (!IAssetManagerConfig(index.iAssetManagerConfig()).isTokenPermitted(token) && token != registry.getETH()) {
+      revert ErrorLibrary.InvalidToken();
+    }
+
     if (tokenAmount > index.balanceOf(owner)) {
       revert ErrorLibrary.CallerNotHavingGivenTokenAmount();
     }
-    if (_slippage != index.getTokens().length || _lpSlippage != index.getTokens().length) {
+    if (_slippage != _tokens.length || _lpSlippage != _tokens.length) {
       revert ErrorLibrary.InvalidSlippageLength();
     }
   }
@@ -371,15 +353,25 @@ library IndexSwapLibrary {
    * @notice This function checks if the investment value is correct or not
    */
   function _checkInvestmentValue(uint256 _tokenAmount, IAssetManagerConfig _assetManagerConfig) external view {
-    if (
-      !(_tokenAmount <= _assetManagerConfig.MAX_INVESTMENTAMOUNT() &&
-        _tokenAmount >= _assetManagerConfig.MIN_INVESTMENTAMOUNT())
-    ) {
-      revert ErrorLibrary.WrongInvestmentAmount({
-        minInvestment: _assetManagerConfig.MIN_INVESTMENTAMOUNT(),
-        maxInvestment: _assetManagerConfig.MAX_INVESTMENTAMOUNT()
-      });
+    uint256 max = _assetManagerConfig.MAX_INVESTMENTAMOUNT();
+    uint256 min = _assetManagerConfig.MIN_INVESTMENTAMOUNT();
+    if (!(_tokenAmount <= max && _tokenAmount >= min)) {
+      revert ErrorLibrary.WrongInvestmentAmount({minInvestment: max, maxInvestment: min});
     }
+  }
+
+  /**
+   * @notice This function adds sanity check to the fee value as well as the _to address
+   */
+  function mintAndBurnCheck(
+    uint256 _fee,
+    address _to,
+    address _tokenRegistry,
+    address _assetManagerConfig
+  ) external returns (bool) {
+    return (_fee > 0 &&
+      !(_to == IAssetManagerConfig(_assetManagerConfig).assetManagerTreasury() ||
+        _to == ITokenRegistry(_tokenRegistry).velvetTreasury()));
   }
 
   /**
@@ -403,10 +395,8 @@ library IndexSwapLibrary {
    * @notice This function takes care of the checks required before init of the index
    */
   function _beforeInitCheck(IIndexSwap index, address token, uint96 denorm) external {
-    if (
-      !(!IAssetManagerConfig(index.iAssetManagerConfig()).whitelistTokens() ||
-        IAssetManagerConfig(index.iAssetManagerConfig()).whitelistedToken(token))
-    ) {
+    IAssetManagerConfig config = IAssetManagerConfig(index.iAssetManagerConfig());
+    if ((config.whitelistTokens() && !config.whitelistedToken(token))) {
       revert ErrorLibrary.TokenNotWhitelisted();
     }
     if (denorm <= 0) {
@@ -424,33 +414,17 @@ library IndexSwapLibrary {
    * @notice This function checks if the whitelisted tokens and handler information is correct for the inti index or not
    */
   function _whitelistAndHandlerCheck(address _token, address _offChainHandler, IIndexSwap index) external {
-    if (
-      !(!IAssetManagerConfig(index.iAssetManagerConfig()).whitelistTokens() ||
-        IAssetManagerConfig(index.iAssetManagerConfig()).whitelistedToken(_token))
-    ) {
+    IAssetManagerConfig config = IAssetManagerConfig(index.iAssetManagerConfig());
+    if ((config.whitelistTokens() && !config.whitelistedToken(_token))) {
       revert ErrorLibrary.TokenNotWhitelisted();
     }
-    if (!(ITokenRegistry(index.tokenRegistry()).isExternalSwapHandler(_offChainHandler))) {
+    ITokenRegistry registry = ITokenRegistry(index.tokenRegistry());
+    if (!(registry.isExternalSwapHandler(_offChainHandler))) {
       revert ErrorLibrary.OffHandlerNotValid();
     }
-  }
-
-  /**
-   * @notice This function gets the underlying balance via the handler
-   */
-  function getUnderlyingBalance(IIndexSwap _index, address t) internal returns (uint256[] memory) {
-    IHandler handler = IHandler(ITokenRegistry(_index.tokenRegistry()).getTokenInformation(t).handler);
-    uint256[] memory tokenBalance = handler.getUnderlyingBalance(_index.vault(), t);
-    return tokenBalance;
-  }
-
-  /**
-   * @notice This function gets the underlying token address via the handler
-   */
-  function getUnderlying(address _tokenRegistry, address t) internal view returns (address[] memory) {
-    IHandler handler = IHandler(ITokenRegistry(_tokenRegistry).getTokenInformation(t).handler);
-    address[] memory underlying = handler.getUnderlying(t);
-    return underlying;
+    if (!(registry.isEnabled(_token))) {
+      revert ErrorLibrary.TokenNotEnabled();
+    }
   }
 
   /**
@@ -476,15 +450,28 @@ library IndexSwapLibrary {
     tokenBalance = handler.getTokenBalance(_index.vault(), t);
   }
 
-  function checkPrimary(IIndexSwap index, address[] calldata tokens) external view {
+  /**
+   * @notice This function checks if the token is primary and also if the external swap handler is valid
+   */
+  function checkPrimaryAndHandler(ITokenRegistry registry, address[] calldata tokens, address handler) external view {
+    if (!(registry.isExternalSwapHandler(handler))) {
+      revert ErrorLibrary.OffHandlerNotValid();
+    }
     for (uint i = 0; i < tokens.length; i++) {
-      if (ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary == false) {
+      if (registry.getTokenInformation(tokens[i]).primary == false) {
         revert ErrorLibrary.NotPrimaryToken();
       }
     }
   }
 
-  function beforeWithdrawOffChain(bool status, ITokenRegistry tokenRegistry, address handler) external view {
+  /**
+   * @notice This function makes the necessary checks before an off-chain withdrawal
+   */
+  function beforeWithdrawOffChain(bool status, ITokenRegistry tokenRegistry, address handler) external {
+    if (tokenRegistry.getProtocolState() == true) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
+
     if (status == false) {
       revert ErrorLibrary.TokensNotRedeemed();
     }
@@ -493,9 +480,66 @@ library IndexSwapLibrary {
     }
   }
 
+  /**
+   * @notice This function charges the fees from the index via the Fee Module
+   */
   function chargeFees(IIndexSwap index, IFeeModule feeModule) external returns (uint256 vaultBalance) {
     (, vaultBalance) = getTokenAndVaultBalance(index, index.getTokens());
     uint256 vaultBalanceInBNB = IPriceOracle(index.oracle()).getUsdEthPrice(vaultBalance);
     feeModule.chargeFeesFromIndex(vaultBalanceInBNB);
+  }
+
+  /**
+   * @notice Checks for the cooldown period to be correct as per the block timestamp
+   */
+  function checkCoolDownPeriod(uint256 time, ITokenRegistry registry) external view {
+    if (block.timestamp.sub(time) < registry.COOLDOWN_PERIOD()) {
+      revert ErrorLibrary.CoolDownPeriodNotPassed();
+    }
+  }
+
+  /**
+   * @notice Checks for transfer restrictions
+   */
+  function _beforeTokenTransfer(address from, address to, IAssetManagerConfig config) external {
+    if (from == address(0) || to == address(0)) {
+      return;
+    }
+    if (!(config.transferableToPublic() || (config.transferable() && config.whitelistedUsers(to)))) {
+      revert ErrorLibrary.Transferprohibited();
+    }
+  }
+
+  /**
+   * @notice Returns the token balance in BNB
+   * @param _token Address of the token whose balance is required
+   * @param _tokenAmount Amount of the token
+   * @param _oracle Oracle Address
+   * @return tokenBalanceInBNB Final token balance in BNB
+   */
+  function getTokenBalanceInBNB(
+    address _token,
+    uint256 _tokenAmount,
+    IPriceOracle _oracle
+  ) external view returns (uint256 tokenBalanceInBNB) {
+    // _oracle.getPriceTokenUSD18Decimals(_token, _tokenAmount);
+    uint256 tokenBalanceInUSD = _oracle.getPriceTokenUSD18Decimals(_token, _tokenAmount);
+    tokenBalanceInBNB = _oracle.getUsdEthPrice(tokenBalanceInUSD);
+  }
+
+  /**
+   * @notice This function gets the underlying balances of the input token
+   */
+  function checkUnderlyingBalances(
+    address _token,
+    IHandler _handler,
+    address _contract
+  ) external view returns (uint256[] memory) {
+    address[] memory underlying = _handler.getUnderlying(_token);
+    uint256[] memory balances = new uint256[](underlying.length);
+    for (uint256 i = 0; i < underlying.length; i++) {
+      balances[i] = IERC20Upgradeable(underlying[i]).balanceOf(_contract);
+    }
+    return balances;
   }
 }

@@ -15,12 +15,10 @@ import {
   Rebalancing,
   AccessController,
   IndexFactory,
-  Vault,
   VelvetSafeModule,
   OffChainRebalance__factory,
   AssetManagerConfig,
   FeeModule,
-  LiqeeHandler,
   PancakeSwapLPHandler,
   WombatHandler,
   BeefyLPHandler,
@@ -29,7 +27,6 @@ import {
   AlpacaHandler,
   ApeSwapLendingHandler,
   BeefyHandler,
-  IndexOperations,
   SlippageControl,
   RebalanceLibrary,
 } from "../typechain";
@@ -45,7 +42,6 @@ let tokenRegistry: TokenRegistry;
 let indexSwapLibrary: IndexSwapLibrary;
 let baseHandler: BaseHandler;
 let venusHandler: VenusHandler;
-let liqeeHandler: LiqeeHandler;
 let pancakeLpHandler: PancakeSwapLPHandler;
 let biSwapLPHandler: BiSwapLPHandler;
 let apeSwapLPHandler: ApeSwapLPHandler;
@@ -67,7 +63,9 @@ let btcAddress: string;
 let dogeAddress: string;
 let linkAddress: string;
 let cakeAddress: string;
+let usdtAddress: string;
 let accounts;
+let priceOracle: any;
 let velvetSafeModule: VelvetSafeModule;
 
 const forkChainId: any = process.env.FORK_CHAINID;
@@ -83,6 +81,7 @@ export type IAddresses = {
   dogeAddress: string;
   linkAddress: string;
   cakeAddress: string;
+  usdtAddress: string;
 };
 
 export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean): Promise<IAddresses> {
@@ -140,6 +139,9 @@ export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean)
   );
   cakeAddress = cakeInstance.address;
 
+  const usdtInstance = new ethers.Contract(addresses.USDT, IERC20Upgradeable__factory.abi, ethers.getDefaultProvider());
+  usdtAddress = usdtInstance.address;
+
   Iaddress = {
     wbnbAddress,
     busdAddress,
@@ -149,6 +151,7 @@ export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean)
     dogeAddress,
     linkAddress,
     cakeAddress,
+    usdtAddress,
   };
 
   if (!addFeed) return Iaddress;
@@ -167,6 +170,8 @@ export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean)
       dogeInstance.address,
       linkInstance.address,
       cakeInstance.address,
+      usdtAddress,
+      "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63",
     ],
     [
       "0x0000000000000000000000000000000000000348",
@@ -178,6 +183,8 @@ export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean)
       wbnbInstance.address,
       ethInstance.address,
       wbnbInstance.address,
+      "0x0000000000000000000000000000000000000348",
+      "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
@@ -195,6 +202,8 @@ export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean)
       "0x3AB0A0d137D4F946fBB19eecc6e92E64660231C8",
       "0xca236E327F629f9Fc2c30A4E95775EbF0B89fac8",
       "0xB6064eD41d4f67e353768aA239cA86f4F73665a1",
+      "0xB97Ad0E74fa7d920791E90258A6E2085088b4320",
+      "0xBF63F430A79D4036A5900C19818aFf1fa710f206",
     ],
   );
   return Iaddress;
@@ -222,32 +231,9 @@ before(async () => {
   venusHandler = await VenusHandler.deploy();
   await venusHandler.deployed();
 
-  const LiqeeHandler = await ethers.getContractFactory("LiqeeHandler");
-  liqeeHandler = await LiqeeHandler.deploy();
-  await liqeeHandler.deployed();
-
-  const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-  pancakeLpHandler = await PancakeLPHandler.connect(owner).deploy();
-  await pancakeLpHandler.deployed();
-  await pancakeLpHandler.addOrUpdateProtocolSlippage("700");
-
-  const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
-  biSwapLPHandler = await BiSwapLPHandler.deploy();
-  await biSwapLPHandler.deployed();
-  await biSwapLPHandler.addOrUpdateProtocolSlippage("700");
-
-  const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
-  apeSwapLPHandler = await ApeSwapLPHandler.deploy();
-  await apeSwapLPHandler.deployed();
-  await apeSwapLPHandler.addOrUpdateProtocolSlippage("700");
-
   const AlpacaHandler = await ethers.getContractFactory("AlpacaHandler");
   alpacaHandler = await AlpacaHandler.deploy();
   await alpacaHandler.deployed();
-
-  const BeefyLPHandlerdefault = await ethers.getContractFactory("BeefyLPHandler");
-  beefyLPHandler = await BeefyLPHandlerdefault.deploy(pancakeLpHandler.address);
-  await beefyLPHandler.deployed();
 
   const BeefyHandler = await ethers.getContractFactory("BeefyHandler");
   beefyHandler = await BeefyHandler.deploy();
@@ -256,11 +242,15 @@ before(async () => {
   const WombatHandler = await ethers.getContractFactory("WombatHandler");
   wombatHandler = await WombatHandler.deploy();
   await wombatHandler.deployed();
-  await wombatHandler.addOrUpdateProtocolSlippage("700");
+  await wombatHandler.addOrUpdateProtocolSlippage("2500");
 
   const ApeSwapLendingHandler = await ethers.getContractFactory("ApeSwapLendingHandler");
   apeSwapLendingHandler = await ApeSwapLendingHandler.deploy();
   await apeSwapLendingHandler.deployed();
+
+  const PriceOracle = await ethers.getContractFactory("PriceOracle");
+  priceOracle = await PriceOracle.deploy();
+  await priceOracle.deployed();
 });
 
 export async function RebalancingDeploy(
@@ -273,7 +263,6 @@ export async function RebalancingDeploy(
   priceOracle: PriceOracle,
   assetManagerConfig: AssetManagerConfig,
   feeModule: FeeModule,
-  indexOperationAddress: string,
 ): Promise<Rebalancing> {
   let rebalancing: Rebalancing;
 
@@ -285,10 +274,6 @@ export async function RebalancingDeploy(
   await accessController
     .connect(owner)
     .grantRole("0x1916b456004f332cd8a19679364ef4be668619658be72c17b7e86697c4ae0f16", indexSwapAddress);
-
-  await accessController
-    .connect(owner)
-    .grantRole("0x1916b456004f332cd8a19679364ef4be668619658be72c17b7e86697c4ae0f16", indexOperationAddress);
 
   const RebalanceLibrary = await ethers.getContractFactory("RebalanceLibrary", {
     libraries: {
@@ -353,7 +338,6 @@ export {
   baseHandler,
   pancakeLpHandler,
   venusHandler,
-  liqeeHandler,
   biSwapLPHandler,
   apeSwapLPHandler,
   apeSwapLendingHandler,

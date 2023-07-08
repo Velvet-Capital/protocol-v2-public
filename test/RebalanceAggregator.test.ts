@@ -2,7 +2,7 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import "@nomicfoundation/hardhat-chai-matchers";
 import hre from "hardhat";
-import { ethers, upgrades, waffle } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { BigNumber, Contract } from "ethers";
 
 import {
@@ -10,10 +10,6 @@ import {
   IAddresses,
   indexSwapLibrary,
   venusHandler,
-  pancakeLpHandler,
-  biSwapLPHandler,
-  liqeeHandler,
-  apeSwapLPHandler,
   apeSwapLendingHandler,
   alpacaHandler,
   wombatHandler,
@@ -35,11 +31,9 @@ import {
   VelvetSafeModule,
   ZeroExHandler,
   OneInchHandler,
-  OpenOceanHandler,
   ParaswapHandler,
   OffChainRebalance__factory,
   RebalanceAggregator__factory,
-  Vault,
   PriceOracle,
   AssetManagerConfig,
   TokenRegistry,
@@ -77,13 +71,14 @@ describe.only("Tests for MetaAggregator", () => {
   let indexSwap3: any;
   let indexSwap4: any;
   let indexSwap5: any;
+  let indexSwap6: any;
+  let indexSwap7: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
   let swapHandler1: PancakeSwapHandler;
   let velvetSafeModule: VelvetSafeModule;
   //let lendingHandler: LendingHandler;
   let oneInchHandler: OneInchHandler;
-  let openOceanHandler: OpenOceanHandler;
   let paraswapHandler: ParaswapHandler;
   let rebalancing: any;
   let rebalancing1: any;
@@ -91,6 +86,8 @@ describe.only("Tests for MetaAggregator", () => {
   let rebalancing3: any;
   let rebalancing4: any;
   let rebalancing5: any;
+  let rebalancing6: any;
+  let rebalancing7: any;
   let offChainRebalance: any;
   let offChainRebalance1: any;
   let offChainRebalance2: any;
@@ -103,6 +100,8 @@ describe.only("Tests for MetaAggregator", () => {
   let metaAggregator3: any;
   let metaAggregator4: any;
   let metaAggregator5: any;
+  let metaAggregator6: any;
+  let metaAggregator7: any;
   let tokenRegistry: TokenRegistry;
   let offChainIndexSwap: OffChainIndexSwap;
   let accessController1: AccessController;
@@ -123,6 +122,9 @@ describe.only("Tests for MetaAggregator", () => {
   let whitelistManager: SignerWithAddress;
   let assetManagerTreasury: SignerWithAddress;
   let zeroExHandler: ZeroExHandler;
+  let pancakeLpHandler: any;
+  let apeSwapLPHandler: any;
+  let biSwapLPHandler: any;
   //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
@@ -139,6 +141,21 @@ describe.only("Tests for MetaAggregator", () => {
       priceOracle = await PriceOracle.deploy();
       await priceOracle.deployed();
 
+      const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
+      pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
+      await pancakeLpHandler.deployed();
+      await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
+
+      const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
+      biSwapLPHandler = await BiSwapLPHandler.deploy(priceOracle.address);
+      await biSwapLPHandler.deployed();
+      await biSwapLPHandler.addOrUpdateProtocolSlippage("2500");
+
+      const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
+      apeSwapLPHandler = await ApeSwapLPHandler.deploy(priceOracle.address);
+      await apeSwapLPHandler.deployed();
+      await apeSwapLPHandler.addOrUpdateProtocolSlippage("2500");
+
       const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
       tokenRegistry = await TokenRegistry.deploy();
       await tokenRegistry.deployed();
@@ -152,25 +169,21 @@ describe.only("Tests for MetaAggregator", () => {
       zeroExHandler = await ZeroExHandler.deploy();
       await zeroExHandler.deployed();
 
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
+      zeroExHandler.init("0xdef1c0ded9bec7f1a1670819833240f027b25eff", priceOracle.address);
+      await zeroExHandler.addOrUpdateProtocolSlippage("100");
 
-      const IndexOperations = await ethers.getContractFactory("IndexOperations", {
-        libraries: {
-          IndexSwapLibrary: indexSwapLibrary.address,
-        },
-      });
-      const indexOperations = await IndexOperations.deploy();
-      await indexOperations.deployed();
-
+      const latestBlock = await hre.ethers.provider.getBlock("latest");
       await tokenRegistry.initialize(
-        "100",
-        "1000",
-        "1000",
+        "2500", // protocol fee
+        "30", // protocolFeeBottomConstraint
+        "1000", // max asset manager fee
+        "3000", // max performance fee
+        "500",
+        "500",
         "10000000000000000",
         "500000000000000000000",
         treasury.address,
         addresses.WETH_Address,
-        indexOperations.address,
         "1",
       );
 
@@ -228,8 +241,10 @@ describe.only("Tests for MetaAggregator", () => {
       const assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
       await assetManagerConfig.init({
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _minInvestmentAmount: "10000000000000000",
         _maxInvestmentAmount: "500000000000000000000",
         _tokenRegistry: tokenRegistry.address,
@@ -264,29 +279,24 @@ describe.only("Tests for MetaAggregator", () => {
 
       swapHandler1.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
 
-      zeroExHandler.init(iaddress.wbnbAddress, "0xdef1c0ded9bec7f1a1670819833240f027b25eff");
-
       const OneInchSwapHandler = await ethers.getContractFactory("OneInchHandler");
       oneInchHandler = await OneInchSwapHandler.deploy();
       await oneInchHandler.deployed();
 
-      oneInchHandler.init(iaddress.wbnbAddress, "0x1111111254EEB25477B68fb85Ed929f73A960582");
-
-      const OpenOceanHandler = await ethers.getContractFactory("OpenOceanHandler");
-      openOceanHandler = await OpenOceanHandler.deploy();
-      await openOceanHandler.deployed();
-
-      openOceanHandler.init(iaddress.wbnbAddress, "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64");
+      oneInchHandler.init("0x1111111254EEB25477B68fb85Ed929f73A960582", priceOracle.address);
+      await oneInchHandler.addOrUpdateProtocolSlippage("100");
 
       const ParaswapHandler = await ethers.getContractFactory("ParaswapHandler");
       paraswapHandler = await ParaswapHandler.deploy();
       await paraswapHandler.deployed();
 
       paraswapHandler.init(
-        iaddress.wbnbAddress,
         "0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57",
         "0x216B4B4Ba9F3e719726886d34a177484278Bfcae",
+        priceOracle.address,
       );
+
+      await paraswapHandler.addOrUpdateProtocolSlippage("100");
 
       await tokenRegistry.addRewardToken(addresses.venus_RewardToken);
       let registry = await tokenRegistry.enableToken(
@@ -305,6 +315,8 @@ describe.only("Tests for MetaAggregator", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
+
+          priceOracle.address,
           priceOracle.address,
           priceOracle.address,
         ],
@@ -318,13 +330,12 @@ describe.only("Tests for MetaAggregator", () => {
           addresses.vBNB_Address,
           addresses.WBNB_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
-          addresses.qBNB,
-          addresses.qETH,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
           addresses.ibBUSD_Address,
           addresses.MAIN_LP_BUSD,
           addresses.oBNB,
+          addresses.vETH_Address,
         ],
         [
           baseHandler.address,
@@ -336,13 +347,12 @@ describe.only("Tests for MetaAggregator", () => {
           venusHandler.address,
           pancakeLpHandler.address,
           pancakeLpHandler.address,
-          liqeeHandler.address,
-          liqeeHandler.address,
           biSwapLPHandler.address,
           apeSwapLPHandler.address,
           alpacaHandler.address,
           wombatHandler.address,
           apeSwapLendingHandler.address,
+          venusHandler.address,
         ],
         [
           [addresses.base_RewardToken],
@@ -354,21 +364,37 @@ describe.only("Tests for MetaAggregator", () => {
           [addresses.venus_RewardToken],
           [addresses.cake_RewardToken],
           [addresses.cake_RewardToken],
-          [addresses.liqee_RewardToken],
-          [addresses.liqee_RewardToken],
           [addresses.biswap_RewardToken],
           [addresses.apeSwap_RewardToken],
           [addresses.base_RewardToken],
           [addresses.wombat_RewardToken],
           [addresses.apeSwap_RewardToken],
+          [addresses.venus_RewardToken],
         ],
-        [true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false],
+        [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+        ],
       );
       registry.wait();
 
       tokenRegistry.enableExternalSwapHandler(zeroExHandler.address);
       tokenRegistry.enableExternalSwapHandler(oneInchHandler.address);
-      tokenRegistry.enableExternalSwapHandler(openOceanHandler.address);
       tokenRegistry.enableExternalSwapHandler(paraswapHandler.address);
       tokenRegistry.enableSwapHandlers([swapHandler.address]);
 
@@ -381,16 +407,13 @@ describe.only("Tests for MetaAggregator", () => {
         iaddress.ethAddress,
         iaddress.btcAddress,
         iaddress.dogeAddress,
+        iaddress.usdtAddress,
         addresses.vETH_Address,
         addresses.vBTC_Address,
         addresses.vBNB_Address,
         addresses.vDAI_Address,
         addresses.vDOGE_Address,
         addresses.vLINK_Address,
-        addresses.qBNB,
-        addresses.qETH,
-        addresses.qUSX,
-        addresses.qFIL,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
         addresses.WBNB_BUSDLP_Address,
@@ -465,8 +488,10 @@ describe.only("Tests for MetaAggregator", () => {
           symbol: "IDX",
           maxIndexInvestmentAmount: "500000000000000000000",
           minIndexInvestmentAmount: "10000000000000000",
-          _managementFee: "100",
-          _performanceFee: "10",
+          _managementFee: "200",
+          _performanceFee: "2500",
+          _entryFee: "0",
+          _exitFee: "0",
           _assetManagerTreasury: assetManagerTreasury.address,
           _whitelistedTokens: whitelistedTokens,
           _public: true,
@@ -483,22 +508,26 @@ describe.only("Tests for MetaAggregator", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
-        _whitelistedTokens: whitelistedTokens,
+        _whitelistedTokens: [],
         _public: true,
         _transferable: false,
         _transferableToPublic: false,
-        _whitelistTokens: true,
+        _whitelistTokens: false,
       });
       const indexFactoryCreate3 = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -511,8 +540,10 @@ describe.only("Tests for MetaAggregator", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -526,8 +557,10 @@ describe.only("Tests for MetaAggregator", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -541,8 +574,44 @@ describe.only("Tests for MetaAggregator", () => {
         symbol: "IDX",
         maxIndexInvestmentAmount: "500000000000000000000",
         minIndexInvestmentAmount: "10000000000000000",
-        _managementFee: "100",
-        _performanceFee: "10",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
+        _assetManagerTreasury: assetManagerTreasury.address,
+        _whitelistedTokens: whitelistedTokens,
+        _public: true,
+        _transferable: false,
+        _transferableToPublic: false,
+        _whitelistTokens: true,
+      });
+
+      const indexFactoryCreate7 = await indexFactory.createIndexNonCustodial({
+        name: "INDEXLY",
+        symbol: "IDX",
+        maxIndexInvestmentAmount: "500000000000000000000",
+        minIndexInvestmentAmount: "10000000000000000",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
+        _assetManagerTreasury: assetManagerTreasury.address,
+        _whitelistedTokens: whitelistedTokens,
+        _public: true,
+        _transferable: false,
+        _transferableToPublic: false,
+        _whitelistTokens: true,
+      });
+
+      const indexFactoryCreate8 = await indexFactory.createIndexNonCustodial({
+        name: "INDEXLY",
+        symbol: "IDX",
+        maxIndexInvestmentAmount: "500000000000000000000",
+        minIndexInvestmentAmount: "10000000000000000",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
         _assetManagerTreasury: assetManagerTreasury.address,
         _whitelistedTokens: whitelistedTokens,
         _public: true,
@@ -569,6 +638,12 @@ describe.only("Tests for MetaAggregator", () => {
       const indexAddress5 = await indexFactory.getIndexList(5);
       const indexInfo5 = await indexFactory.IndexSwapInfolList(5);
 
+      const indexAddress6 = await indexFactory.getIndexList(6);
+      const indexInfo6 = await indexFactory.IndexSwapInfolList(6);
+
+      const indexAddress7 = await indexFactory.getIndexList(7);
+      const indexInfo7 = await indexFactory.IndexSwapInfolList(7);
+
       indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
 
       indexSwap1 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress1);
@@ -580,6 +655,8 @@ describe.only("Tests for MetaAggregator", () => {
       indexSwap4 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress4);
 
       indexSwap5 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress5);
+      indexSwap6 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress6);
+      indexSwap7 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress7);
 
       console.log("indexSwapAddress1:", indexAddress1);
 
@@ -594,6 +671,10 @@ describe.only("Tests for MetaAggregator", () => {
       rebalancing4 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo4.rebalancing);
 
       rebalancing5 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo5.rebalancing);
+
+      rebalancing6 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo6.rebalancing);
+
+      rebalancing7 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo7.rebalancing);
 
       offChainRebalance = await ethers.getContractAt(OffChainRebalance__factory.abi, indexInfo.offChainRebalancing);
 
@@ -613,6 +694,8 @@ describe.only("Tests for MetaAggregator", () => {
       metaAggregator3 = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo3.metaAggregator);
       metaAggregator4 = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo4.metaAggregator);
       metaAggregator5 = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo5.metaAggregator);
+      metaAggregator6 = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo6.metaAggregator);
+      metaAggregator7 = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo7.metaAggregator);
 
       console.log("indexSwap deployed to:", indexSwap.address);
     });
@@ -622,19 +705,19 @@ describe.only("Tests for MetaAggregator", () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
         // index.initToken([dogeInstance.address, iaddress.ethAddress],[5000, 5000])
-        await index.initToken([iaddress.wbnbAddress, addresses.vBNB_Address], [5000, 5000]);
+        await index.initToken([addresses.vBNB_Address, addresses.vETH_Address], [5000, 5000]);
       });
 
       it("Initialize 2nd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(1);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([addresses.vBNB_Address, iaddress.btcAddress], [5000, 5000]);
+        await index.initToken([iaddress.ethAddress, iaddress.btcAddress], [5000, 5000]);
       });
 
       it("Initialize 3rd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(2);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([iaddress.ethAddress, addresses.ibBUSD_Address], [5000, 5000]);
+        await index.initToken([iaddress.btcAddress, addresses.ibBUSD_Address], [5000, 5000]);
       });
 
       it("Initialize 4th IndexFund Tokens", async () => {
@@ -651,6 +734,18 @@ describe.only("Tests for MetaAggregator", () => {
 
       it("Initialize 6th IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(5);
+        const index = indexSwap.attach(indexAddress);
+        await index.initToken([iaddress.busdAddress, iaddress.btcAddress], [5000, 5000]);
+      });
+
+      it("Initialize 7th IndexFund Tokens", async () => {
+        const indexAddress = await indexFactory.getIndexList(6);
+        const index = indexSwap.attach(indexAddress);
+        await index.initToken([iaddress.wbnbAddress, iaddress.btcAddress], [5000, 5000]);
+      });
+
+      it("Initialize 8th IndexFund Tokens", async () => {
+        const indexAddress = await indexFactory.getIndexList(7);
         const index = indexSwap.attach(indexAddress);
         await index.initToken([iaddress.wbnbAddress, iaddress.btcAddress], [5000, 5000]);
       });
@@ -700,14 +795,14 @@ describe.only("Tests for MetaAggregator", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("Invest 0.1BNB into 6th fund", async () => {
+      it("Invest 1BNB into 6th fund", async () => {
         const indexSupplyBefore = await indexSwap5.totalSupply();
         await indexSwap5.investInFund(
           {
             _slippage: ["200", "200"],
             _lpSlippage: ["200", "200"],
             _to: owner.address,
-            _tokenAmount: "100000000000000000",
+            _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           },
@@ -840,61 +935,330 @@ describe.only("Tests for MetaAggregator", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("redeem should revert back if index not paused", async () => {
-        const tokens = await indexSwap.getTokens();
-        const sToken = tokens[1];
-        const sAmount = ethers.utils.parseEther("100");
-        await expect(metaAggregator.redeem(sAmount, "200", sToken)).to.be.reverted;
+      it("Invest 1BNB into 7th Index fund", async () => {
+        const indexSupplyBefore = await indexSwap6.totalSupply();
+        await indexSwap6.investInFund(
+          {
+            _slippage: ["200", "200"],
+            _lpSlippage: ["200", "200"],
+            _to: owner.address,
+            _tokenAmount: "1000000000000000000",
+            _swapHandler: swapHandler.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "1000000000000000000",
+          },
+        );
+        const indexSupplyAfter = await indexSwap6.totalSupply();
+
+        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("should pause", async () => {
-        await rebalancing.setPause(true);
-      });
+      it("Invest 1BNB into 8th index fund", async () => {
+        const VBep20Interface = await ethers.getContractAt(
+          "VBep20Interface",
+          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
+        );
 
-      it("redeem should revert back if token getting redeem is not valid", async () => {
-        const tokens = await indexSwap.getTokens();
-        const sToken = addresses.vBNB_Address;
-        const sAmount = ethers.utils.parseEther("100");
-        await expect(metaAggregator.redeem(sAmount, "200", sToken)).to.be.reverted;
-      });
+        const indexSupplyBefore = await indexSwap7.totalSupply();
+        await indexSwap7.investInFund(
+          {
+            _slippage: ["200", "200"],
+            _lpSlippage: ["200", "200"],
+            _to: owner.address,
+            _tokenAmount: "1000000000000000000",
+            _swapHandler: swapHandler.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "1000000000000000000",
+          },
+        );
+        const indexSupplyAfter = await indexSwap7.totalSupply();
 
-      it("should revert back if the buy token is not registered", async () => {
-        const tokens = await indexSwap.getTokens();
+        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      });
+      it("should revert back if swapHandler is not enabled", async () => {
+        const tokens = await indexSwap3.getTokens();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const sToken = tokens[1];
-        const bToken = addresses.vDAI_Address;
-        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap.vault());
-
+        const sToken = tokens[0];
+        const bToken = addresses.oBNB;
         const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
         const handlerAddress1 = tokenInfo1[2];
         const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+
+        const sAmount = await handler1.getTokenBalance(indexSwap3.vault(), sToken);
+
+        const tx = await metaAggregator3.redeem(sAmount, "200", sToken);
+
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
         const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
 
         var exchangeData = {};
-        const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator.address);
+        var _sellTokenAddress: any = [];
+        var _buyTokenAddress: any = [];
+        var _sellAmount: any = [];
+        var _protocolFee: any = [];
+        var _callData: any = [];
         exchangeData = {
-          sellTokenAddress: [getUnderlyingTokens1[0].toString()],
-          buyTokenAddress: [bToken],
-          swapHandler: zeroExHandler.address,
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
+          swapHandler: addresses.WBNB,
           portfolioToken: bToken,
-          sellAmount: [bal.toBigInt().toString()],
-          protocolFee: [0],
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
           _lpSlippage: "200",
-          callData: ["0x"],
+          callData: _callData,
         };
-        await expect(metaAggregator.metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
-          metaAggregator,
-          "BuyTokenAddressNotValid",
+
+        await expect(metaAggregator3.metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
+          metaAggregator3,
+          "SwapHandlerNotEnabled",
         );
       });
+      it("swaps using 1Inch Protocol", async () => {
+        const tokens = await indexSwap3.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.oBNB;
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
 
-      it("should revert back if not redeemed", async () => {
-        const tokens = await indexSwap.getTokens();
+        const sAmount = await handler1.getTokenBalance(indexSwap3.vault(), sToken);
+
+        // const tx = await metaAggregator3.redeem(sAmount, "200", sToken);
+
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var exchangeData = {};
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            const oneInchParams = {
+              fromTokenAddress: getUnderlyingTokens1[0].toString().toLowerCase(),
+              toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
+              amount: bal.toBigInt().toString(),
+              fromAddress: oneInchHandler.address.toString(),
+              slippage: 6,
+              disableEstimate: true,
+              compatibilityMode: true,
+            };
+
+            const oneInchResponse = await axios.get(
+              `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+            );
+
+            var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0]);
+            _buyTokenAddress.push(getUnderlyingTokens0[0]);
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(oneInchResponse.data.tx.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal.sub(bal1);
+          var balAmount = [bal1, bal2];
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const oneInchParams = {
+                fromTokenAddress: getUnderlyingTokens1[0].toString().toLowerCase(),
+                toTokenAddress: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: balAmount[i].toBigInt().toString(),
+                fromAddress: oneInchHandler.address.toString(),
+                slippage: 6,
+                disableEstimate: true,
+                compatibilityMode: true,
+              };
+
+              const oneInchResponse = await axios.get(
+                `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+              );
+
+              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+              // var fee = 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(oneInchResponse.data.tx.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator3.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const oneInchParams = {
+                fromTokenAddress: getUnderlyingTokens1[i].toString().toLowerCase(),
+                toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
+                amount: bal.toBigInt().toString(),
+                fromAddress: oneInchHandler.address.toString(),
+                slippage: 6,
+                disableEstimate: true,
+                compatibilityMode: true,
+                referrerAddress: addr1.address,
+                fee: 3,
+              };
+
+              const oneInchResponse = await axios.get(
+                `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+              );
+
+              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+              // var fee = 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(oneInchResponse.data.tx.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator3.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const oneInchParams = {
+                fromTokenAddress: getUnderlyingTokens1[i].toString().toLowerCase(),
+                toTokenAddress: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: bal.toBigInt().toString(),
+                fromAddress: oneInchHandler.address.toString(),
+                slippage: 6,
+                disableEstimate: true,
+                compatibilityMode: true,
+                referrerAddress: addr1.address,
+                fee: 3,
+              };
+
+              const oneInchResponse = await axios.get(
+                `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+              );
+
+              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+              // var fee = 0;
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(oneInchResponse.data.tx.data);
+            }
+          }
+        }
+        exchangeData = {
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
+          swapHandler: oneInchHandler.address,
+          portfolioToken: bToken,
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
+          _lpSlippage: "200",
+          callData: _callData,
+        };
+
+        const balBefore = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+
+        const tx2 = await metaAggregator3.metaAggregatorSwap(exchangeData);
+
+        const balAfter = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+
+        const newTokenList = await indexSwap3.getTokens();
+
+        expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
+        expect(newTokenList.includes(bToken)).to.equal(true);
+      });
+
+      it("revert redeem", async () => {
+        const tokens = await indexSwap3.getTokens();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
-        const sToken = tokens[1];
-        const bToken = addresses.vBNB_Address;
+        const sToken = tokens[0];
+        const bToken = addresses.Cake_WBNBLP_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const balBeforeSToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+        const balBeforeBToken = await ERC20.attach(bToken).balanceOf(await indexSwap3.vault());
+        const tx = await metaAggregator3.redeem(sAmount, "800", sToken);
+
+        await metaAggregator3.revertRedeem("800");
+
+        const balAfterSToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+        const balAfterBToken = await ERC20.attach(bToken).balanceOf(await indexSwap3.vault());
+        expect(Number(balBeforeSToken)).to.be.greaterThanOrEqual(Number(balAfterSToken));
+        expect(Number(balBeforeBToken)).to.be.equals(Number(balAfterBToken));
+      });
+
+      it("swaps using 0x Protocol", async () => {
+        const tokens = await indexSwap3.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const bToken = addresses.Cake_WBNBLP_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const tx = await metaAggregator3.redeem(sAmount, "800", sToken);
 
         const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
         const handlerAddress1 = tokenInfo1[2];
@@ -905,43 +1269,195 @@ describe.only("Tests for MetaAggregator", () => {
         const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
         const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
 
+        var zeroExparams = {};
+
         var exchangeData = {};
-        const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator1.address);
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            zeroExparams = {
+              sellToken: getUnderlyingTokens1[0].toString(),
+              buyToken: getUnderlyingTokens0[0].toString(),
+              sellAmount: bal.toString(),
+              slippagePercentage: 0.06,
+            };
+            const zeroExResponse = await axios.get(
+              `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+              { "0x-api-key": process.env.ZEROX_KEY },
+            );
+
+            var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(zeroExResponse.data.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal.sub(bal1);
+          var balAmount = [bal1, bal2];
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: getUnderlyingTokens1[0].toString(),
+                buyToken: getUnderlyingTokens0[i].toString(),
+                sellAmount: balAmount[i].toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator3.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: getUnderlyingTokens1[i].toString(),
+                buyToken: getUnderlyingTokens0[0].toString(),
+                sellAmount: bal.toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator3.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: newUnderlying1[i].toString(),
+                buyToken: newUnderlying0[i].toString(),
+                sellAmount: bal.toString(),
+                slippagePercentage: 0.06,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        }
         exchangeData = {
-          sellTokenAddress: [getUnderlyingTokens1[0].toString()],
-          buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
           swapHandler: zeroExHandler.address,
           portfolioToken: bToken,
-          sellAmount: [0],
-          protocolFee: [0],
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
           _lpSlippage: "200",
-          callData: ["0x"],
+          callData: _callData,
         };
-        await expect(metaAggregator1.metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
-          metaAggregator1,
-          "NotRedeemed",
-        );
+
+        const balBefore = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+
+        const tx2 = await metaAggregator3.metaAggregatorSwap(exchangeData);
+
+        const balAfter = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+        const oldTokenBal = await ERC20.attach(sToken.toString()).balanceOf(await indexSwap3.vault());
+
+        const buyTokenRecordAfter = await indexSwap3.getRecord(bToken);
+        const newTokenList = await indexSwap3.getTokens();
+
+        const balAfterSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
+        expect(Number(oldTokenBal)).to.equal(0);
+        expect(newTokenList.includes(sToken)).to.be.equal(false);
+        expect(newTokenList.includes(bToken)).to.be.equal(true);
+        expect(Number(balBeforeSellToken)).to.be.greaterThan(Number(balAfterSellToken));
       });
-
-      it("should revert back if redeem is called by non asset manager", async () => {
-        const tokens = await indexSwap.getTokens();
+      it("swaps using Paraswap Protocol", async () => {
+        const tokens = await indexSwap6.getTokens();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.MAIN_LP_BUSD;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap6.vault());
+        const tx = await metaAggregator6.redeem(sAmount, "200", sToken);
 
-        const sToken = tokens[1];
-        const sAmount = ethers.utils.parseEther("100");
-        await expect(metaAggregator1.connect(nonOwner).redeem(sAmount, "200", sToken)).to.be.revertedWithCustomError(
-          metaAggregator1,
-          "CallerNotAssetManager",
-        );
-      });
-
-      it("should revert back if metaAggregatorSwap is called by non asset manager", async () => {
-        const tokens = await indexSwap.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const sToken = tokens[1];
-        const bToken = addresses.vBNB_Address;
-
+        const latestBlock = await hre.ethers.provider.getBlock("latest");
         const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
         const handlerAddress1 = tokenInfo1[2];
         const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
@@ -952,21 +1468,1624 @@ describe.only("Tests for MetaAggregator", () => {
         const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
 
         var exchangeData = {};
-        const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator1.address);
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator6.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            const paraswapParams = {
+              srcToken: getUnderlyingTokens1[0].toString().toLowerCase(),
+              destToken: getUnderlyingTokens0[0].toString().toLowerCase(),
+              amount: bal.toString(),
+              slippage: 1000,
+              side: "SELL",
+              network: 56,
+            };
+
+            const paraswapPriceRouteResponse = await axios.get(
+              `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+            );
+
+            const paraswapQuery = {
+              ignoreChecks: true,
+            };
+
+            await delay(1000);
+
+            const paraswapBuildTxResponse = await axios.post(
+              `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+              {
+                srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                userAddress: paraswapHandler.address.toString().toLowerCase(),
+                priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                slippage: 1000,
+                deadline: latestBlock.timestamp + 900,
+              },
+            );
+
+            await delay(1000);
+            var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(paraswapBuildTxResponse.data.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator6.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal1;
+          var balAmount = [bal1, bal2];
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const paraswapParams = {
+                srcToken: getUnderlyingTokens1[0].toString().toLowerCase(),
+                destToken: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: balAmount[i].toString(),
+                slippage: 1000,
+                side: "SELL",
+                network: 56,
+              };
+
+              const paraswapPriceRouteResponse = await axios.get(
+                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+              );
+
+              const paraswapQuery = {
+                ignoreChecks: true,
+              };
+
+              await delay(1000);
+
+              const paraswapBuildTxResponse = await axios.post(
+                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+                {
+                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                  userAddress: paraswapHandler.address.toString().toLowerCase(),
+                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                  slippage: 1000,
+                  deadline: latestBlock.timestamp + 900,
+                },
+              );
+
+              await delay(1000);
+              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(paraswapBuildTxResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator6.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const paraswapParams = {
+                srcToken: getUnderlyingTokens1[i].toString().toLowerCase(),
+                destToken: getUnderlyingTokens0[0].toString().toLowerCase(),
+                amount: bal.toString(),
+                slippage: 1000,
+                side: "SELL",
+                network: 56,
+              };
+
+              const paraswapPriceRouteResponse = await axios.get(
+                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+              );
+
+              const paraswapQuery = {
+                ignoreChecks: true,
+              };
+
+              await delay(1000);
+
+              const paraswapBuildTxResponse = await axios.post(
+                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+                {
+                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                  userAddress: paraswapHandler.address.toString().toLowerCase(),
+                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                  slippage: 1000,
+                  deadline: latestBlock.timestamp + 900,
+                },
+              );
+
+              await delay(1000);
+              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(paraswapBuildTxResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator6.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const paraswapParams = {
+                srcToken: getUnderlyingTokens1[i].toString().toLowerCase(),
+                destToken: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: bal.toString(),
+                slippage: 1000,
+                side: "SELL",
+                network: 56,
+              };
+
+              const paraswapPriceRouteResponse = await axios.get(
+                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+              );
+
+              const paraswapQuery = {
+                ignoreChecks: true,
+              };
+
+              await delay(1000);
+
+              const paraswapBuildTxResponse = await axios.post(
+                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+                {
+                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                  userAddress: paraswapHandler.address.toString().toLowerCase(),
+                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                  slippage: 1000,
+                  deadline: latestBlock.timestamp + 900,
+                },
+              );
+
+              await delay(1000);
+              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(paraswapBuildTxResponse.data.data);
+            }
+          }
+        }
 
         exchangeData = {
-          sellTokenAddress: [getUnderlyingTokens1[0].toString()],
-          buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
+          swapHandler: paraswapHandler.address,
+          portfolioToken: bToken,
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
+          _lpSlippage: "200",
+          callData: _callData,
+        };
+
+        const balBeforeBuyToken = await handler0.getTokenBalance(indexSwap6.vault(), bToken);
+
+        const tx2 = await metaAggregator6.metaAggregatorSwap(exchangeData);
+
+        const oldTokenBal = await ERC20.attach(sToken.toString()).balanceOf(await indexSwap6.vault());
+
+        const balAfterBuyToken = await handler0.getTokenBalance(indexSwap6.vault(), bToken);
+
+        expect(Number(balAfterBuyToken)).to.be.greaterThan(Number(balBeforeBuyToken));
+        expect(Number(oldTokenBal)).to.equal(0);
+      });
+
+      it("should revert back if the calldata includes fee and the overall slippage is more than 1% 0xHandler", async () => {
+        const tokens = await indexSwap3.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const bToken = addresses.vETH_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const tx = await metaAggregator3.redeem(sAmount, "800", sToken);
+
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var zeroExparams = {};
+
+        var exchangeData = {};
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            zeroExparams = {
+              sellToken: getUnderlyingTokens1[0].toString(),
+              buyToken: getUnderlyingTokens0[0].toString(),
+              sellAmount: bal.toString(),
+              slippagePercentage: 0.06,
+              feeRecipient: addr1.address,
+              buyTokenPercentageFee: 0.5,
+            };
+            const zeroExResponse = await axios.get(
+              `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+              { "0x-api-key": process.env.ZEROX_KEY },
+            );
+
+            var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(zeroExResponse.data.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal.sub(bal1);
+          var balAmount = [bal1, bal2];
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: getUnderlyingTokens1[0].toString(),
+                buyToken: getUnderlyingTokens0[i].toString(),
+                sellAmount: balAmount[i].toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0.5,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator3.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: getUnderlyingTokens1[i].toString(),
+                buyToken: getUnderlyingTokens0[0].toString(),
+                sellAmount: bal.toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0.5,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator3.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: newUnderlying1[i].toString(),
+                buyToken: newUnderlying0[i].toString(),
+                sellAmount: bal.toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0.5,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        }
+        exchangeData = {
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
           swapHandler: zeroExHandler.address,
           portfolioToken: bToken,
-          sellAmount: [0],
-          protocolFee: [0],
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
           _lpSlippage: "200",
-          callData: ["0x"],
+          callData: _callData,
         };
-        await expect(metaAggregator1.connect(nonOwner).metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
+
+        const balBefore = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+
+        await expect(metaAggregator3.metaAggregatorSwap(exchangeData)).to.be.reverted;
+      });
+      it("should revert back if the calldata includes fee and the overall slippage is more than 1% ParaswapHandler", async () => {
+        const tokens = await indexSwap2.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.vETH_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap2.vault());
+        const tx = await metaAggregator2.redeem(sAmount, "200", sToken);
+
+        const latestBlock = await hre.ethers.provider.getBlock("latest");
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var exchangeData = {};
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator2.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            const paraswapParams = {
+              srcToken: getUnderlyingTokens1[0].toString().toLowerCase(),
+              destToken: getUnderlyingTokens0[0].toString().toLowerCase(),
+              amount: bal.toString(),
+              slippage: 1000,
+              side: "SELL",
+              network: 56,
+              partnerAddress: addr1.address,
+              partnerFeeBps: 1000,
+            };
+
+            const paraswapPriceRouteResponse = await axios.get(
+              `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+            );
+
+            const paraswapQuery = {
+              ignoreChecks: true,
+            };
+
+            await delay(1000);
+
+            const paraswapBuildTxResponse = await axios.post(
+              `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+              {
+                srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                userAddress: paraswapHandler.address.toString().toLowerCase(),
+                priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                slippage: 1000,
+                deadline: latestBlock.timestamp + 500,
+                partnerAddress: addr1.address,
+                partnerFeeBps: 1000,
+              },
+            );
+
+            await delay(1000);
+            var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(paraswapBuildTxResponse.data.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator2.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal1;
+          var balAmount = [bal1, bal2];
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const paraswapParams = {
+                srcToken: getUnderlyingTokens1[0].toString().toLowerCase(),
+                destToken: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: balAmount[i].toString(),
+                slippage: 1000,
+                side: "SELL",
+                network: 56,
+                partnerAddress: addr1.address,
+                partnerFeeBps: 1000,
+              };
+
+              const paraswapPriceRouteResponse = await axios.get(
+                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+              );
+
+              const paraswapQuery = {
+                ignoreChecks: true,
+              };
+
+              await delay(1000);
+
+              const paraswapBuildTxResponse = await axios.post(
+                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+                {
+                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                  userAddress: paraswapHandler.address.toString().toLowerCase(),
+                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                  slippage: 1000,
+                  deadline: latestBlock.timestamp + 500,
+                  partnerAddress: addr1.address,
+                  partnerFeeBps: 1000,
+                },
+              );
+
+              await delay(1000);
+              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(paraswapBuildTxResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator2.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const paraswapParams = {
+                srcToken: getUnderlyingTokens1[i].toString().toLowerCase(),
+                destToken: getUnderlyingTokens0[0].toString().toLowerCase(),
+                amount: bal.toString(),
+                slippage: 1000,
+                side: "SELL",
+                network: 56,
+                partnerAddress: addr1.address,
+                partnerFeeBps: 1000,
+              };
+
+              const paraswapPriceRouteResponse = await axios.get(
+                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+              );
+
+              const paraswapQuery = {
+                ignoreChecks: true,
+              };
+
+              await delay(1000);
+
+              const paraswapBuildTxResponse = await axios.post(
+                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+                {
+                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                  userAddress: paraswapHandler.address.toString().toLowerCase(),
+                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                  slippage: 1000,
+                  deadline: latestBlock.timestamp + 500,
+                  partnerAddress: addr1.address,
+                  partnerFeeBps: 1000,
+                },
+              );
+
+              await delay(1000);
+              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(paraswapBuildTxResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator2.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const paraswapParams = {
+                srcToken: getUnderlyingTokens1[i].toString().toLowerCase(),
+                destToken: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: bal.toString(),
+                slippage: 1000,
+                side: "SELL",
+                network: 56,
+                partnerAddress: addr1.address,
+                partnerFeeBps: 1000,
+              };
+
+              const paraswapPriceRouteResponse = await axios.get(
+                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
+              );
+
+              const paraswapQuery = {
+                ignoreChecks: true,
+              };
+
+              await delay(1000);
+
+              const paraswapBuildTxResponse = await axios.post(
+                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
+                {
+                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
+                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
+                  userAddress: paraswapHandler.address.toString().toLowerCase(),
+                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
+                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
+                  slippage: 1000,
+                  deadline: latestBlock.timestamp + 500,
+                  partnerAddress: addr1.address,
+                  partnerFeeBps: 1000,
+                },
+              );
+
+              await delay(1000);
+              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
+
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(paraswapBuildTxResponse.data.data);
+            }
+          }
+        }
+
+        exchangeData = {
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
+          swapHandler: paraswapHandler.address,
+          portfolioToken: bToken,
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
+          _lpSlippage: "200",
+          callData: _callData,
+        };
+
+        await expect(metaAggregator2.metaAggregatorSwap(exchangeData)).to.be.reverted;
+      });
+      it("should revert back if the calldata includes fee and the overall slippage is more than 1% 1InchHandler", async () => {
+        const tokens = await indexSwap2.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.vBNB_Address;
+        // const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap6.vault());
+        // // const tx = await metaAggregator6.redeem(sAmount, "200", sToken);
+
+        // const latestBlock = await hre.ethers.provider.getBlock("latest");
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var exchangeData = {};
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+        var exchangeData = {};
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator2.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            const oneInchParams = {
+              fromTokenAddress: getUnderlyingTokens1[0].toString().toLowerCase(),
+              toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
+              amount: bal.toBigInt().toString(),
+              fromAddress: oneInchHandler.address.toString(),
+              slippage: 6,
+              disableEstimate: true,
+              compatibilityMode: true,
+              referrerAddress: addr1.address,
+              fee: 3,
+            };
+
+            const oneInchResponse = await axios.get(
+              `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+            );
+
+            var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0]);
+            _buyTokenAddress.push(getUnderlyingTokens0[0]);
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(oneInchResponse.data.tx.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator2.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal.sub(bal1);
+          var balAmount = [bal1, bal2];
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const oneInchParams = {
+                fromTokenAddress: getUnderlyingTokens1[0].toString().toLowerCase(),
+                toTokenAddress: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: balAmount[i].toBigInt().toString(),
+                fromAddress: oneInchHandler.address.toString(),
+                slippage: 6,
+                disableEstimate: true,
+                compatibilityMode: true,
+                referrerAddress: addr1.address,
+                fee: 3,
+              };
+
+              const oneInchResponse = await axios.get(
+                `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+              );
+
+              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+              // var fee = 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(oneInchResponse.data.tx.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator2.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const oneInchParams = {
+                fromTokenAddress: getUnderlyingTokens1[i].toString().toLowerCase(),
+                toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
+                amount: bal.toBigInt().toString(),
+                fromAddress: oneInchHandler.address.toString(),
+                slippage: 6,
+                disableEstimate: true,
+                compatibilityMode: true,
+                referrerAddress: addr1.address,
+                fee: 3,
+              };
+
+              const oneInchResponse = await axios.get(
+                `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+              );
+
+              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+              // var fee = 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(oneInchResponse.data.tx.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator2.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              const oneInchParams = {
+                fromTokenAddress: getUnderlyingTokens1[i].toString().toLowerCase(),
+                toTokenAddress: getUnderlyingTokens0[i].toString().toLowerCase(),
+                amount: bal.toBigInt().toString(),
+                fromAddress: oneInchHandler.address.toString(),
+                slippage: 6,
+                disableEstimate: true,
+                compatibilityMode: true,
+                referrerAddress: addr1.address,
+                fee: 3,
+              };
+
+              const oneInchResponse = await axios.get(
+                `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+              );
+
+              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+              // var fee = 0;
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(oneInchResponse.data.tx.data);
+            }
+          }
+        }
+        exchangeData = {
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
+          swapHandler: oneInchHandler.address,
+          portfolioToken: bToken,
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
+          _lpSlippage: "200",
+          callData: _callData,
+        };
+
+        await expect(metaAggregator2.metaAggregatorSwap(exchangeData)).to.be.reverted;
+      });
+      it("update external handler slippage should fail if value is greater than MAX_SLIPPAGE", async () => {
+        await expect(zeroExHandler.addOrUpdateProtocolSlippage("2000")).to.be.revertedWith("incorrect slippage range");
+      });
+      it("should update external handler slippage ", async () => {
+        await zeroExHandler.addOrUpdateProtocolSlippage("200");
+      });
+      it("should set max slippage as 0 and disabling slippage checks", async () => {
+        await zeroExHandler.addOrUpdateProtocolSlippage("0");
+
+        const tokens = await indexSwap3.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const bToken = addresses.vETH_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var zeroExparams = {};
+
+        var exchangeData = {};
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push("0");
+            _callData.push("0x");
+          } else {
+            zeroExparams = {
+              sellToken: getUnderlyingTokens1[0].toString(),
+              buyToken: getUnderlyingTokens0[0].toString(),
+              sellAmount: bal.toString(),
+              slippagePercentage: 0.06,
+              feeRecipient: addr1.address,
+              buyTokenPercentageFee: 0.5,
+            };
+            const zeroExResponse = await axios.get(
+              `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+              { "0x-api-key": process.env.ZEROX_KEY },
+            );
+
+            var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+
+            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+            _sellAmount.push(bal.toString());
+            _protocolFee.push(fee.toString());
+            _callData.push(zeroExResponse.data.data);
+          }
+        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
+          var bal1 = bal.div(2);
+          var bal2 = bal.sub(bal1);
+          var balAmount = [bal1, bal2];
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: getUnderlyingTokens1[0].toString(),
+                buyToken: getUnderlyingTokens0[i].toString(),
+                sellAmount: balAmount[i].toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0.5,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[0]);
+              _buyTokenAddress.push(getUnderlyingTokens0[i]);
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator3.address);
+            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: getUnderlyingTokens1[i].toString(),
+                buyToken: getUnderlyingTokens0[0].toString(),
+                sellAmount: bal.toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0.5,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[i]);
+              _buyTokenAddress.push(getUnderlyingTokens0[0]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+          var common = [];
+          var tempUnder0 = [];
+          var tempUnder1 = [];
+          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+              common.push(getUnderlyingTokens1[i]);
+            } else {
+              tempUnder1.push(getUnderlyingTokens1[i]);
+            }
+          }
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (!common.includes(getUnderlyingTokens0[i])) {
+              tempUnder0.push(getUnderlyingTokens0[i]);
+            }
+          }
+
+          var newUnderlying0 = tempUnder0.concat(common);
+          var newUnderlying1 = tempUnder1.concat(common);
+
+          for (let i = 0; i < newUnderlying1.length; i++) {
+            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator3.address);
+            if (newUnderlying1[i] == newUnderlying0[i]) {
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: newUnderlying1[i].toString(),
+                buyToken: newUnderlying0[i].toString(),
+                sellAmount: bal.toString(),
+                slippagePercentage: 0.06,
+                feeRecipient: addr1.address,
+                buyTokenPercentageFee: 0.5,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                { "0x-api-key": process.env.ZEROX_KEY },
+              );
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(newUnderlying1[i]);
+              _buyTokenAddress.push(newUnderlying0[i]);
+              _sellAmount.push(bal.toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+        }
+        exchangeData = {
+          sellTokenAddress: _sellTokenAddress,
+          buyTokenAddress: _buyTokenAddress,
+          swapHandler: zeroExHandler.address,
+          portfolioToken: bToken,
+          sellAmount: _sellAmount,
+          protocolFee: _protocolFee,
+          _lpSlippage: "200",
+          callData: _callData,
+        };
+
+        const balBefore = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+
+        const tx2 = await metaAggregator3.metaAggregatorSwap(exchangeData);
+
+        const balAfter = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
+        const oldTokenBal = await ERC20.attach(sToken.toString()).balanceOf(await indexSwap3.vault());
+
+        const buyTokenRecordAfter = await indexSwap3.getRecord(bToken);
+        const newTokenList = await indexSwap3.getTokens();
+
+        const balAfterSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap3.vault());
+
+        expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
+        expect(Number(oldTokenBal)).to.equal(0);
+        expect(newTokenList.includes(sToken)).to.be.equal(false);
+        expect(newTokenList.includes(bToken)).to.be.equal(true);
+      });
+      it("Swaps directly to protocol token WBNB and ETH", async () => {
+        const tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = [tokens[0], tokens[1]];
+        const bToken = [iaddress.wbnbAddress, iaddress.ethAddress];
+        const sAmount1 = await ERC20.attach(sToken[0]).balanceOf(await indexSwap.vault());
+        const sAmount2 = await ERC20.attach(sToken[1]).balanceOf(await indexSwap.vault());
+        const oldToken = tokens.map((el: any) => {
+          return el.toLowerCase();
+        });
+
+        const balBeforeSellToken = await ERC20.attach(sToken[0]).balanceOf(indexSwap.vault());
+        const balBeforeBuyToken1 = await ERC20.attach(bToken[0]).balanceOf(indexSwap.vault());
+        const balBeforeBuyToken2 = await ERC20.attach(bToken[1]).balanceOf(indexSwap.vault());
+
+        const tx = await metaAggregator.directSwap(sToken, bToken, [sAmount1, sAmount2], ["200", "200"]);
+
+        const balAfterSellToken1 = await ERC20.attach(sToken[0]).balanceOf(indexSwap.vault());
+        const balAfterBuyToken1 = await ERC20.attach(bToken[0]).balanceOf(indexSwap.vault());
+        const balAfterSellToken2 = await ERC20.attach(sToken[0]).balanceOf(indexSwap.vault());
+        const balAfterBuyToken2 = await ERC20.attach(bToken[0]).balanceOf(indexSwap.vault());
+
+        const newTokens = await indexSwap.getTokens();
+        const newToken = newTokens.map((el: any) => {
+          return el.toLowerCase();
+        });
+        expect(Number(balAfterSellToken1)).to.be.equal(0);
+        expect(Number(balAfterBuyToken1)).to.be.greaterThan(Number(balBeforeBuyToken1));
+        expect(Number(balAfterSellToken2)).to.be.equal(0);
+        expect(Number(balAfterBuyToken2)).to.be.greaterThan(Number(balBeforeBuyToken2));
+        expect(newToken.includes(bToken[0].toLowerCase())).to.be.equal(true);
+        expect(newToken.includes(sToken[0].toLowerCase())).to.be.equal(false);
+        expect(newToken.includes(bToken[1].toLowerCase())).to.be.equal(true);
+        expect(newToken.includes(sToken[1].toLowerCase())).to.be.equal(false);
+      });
+      it("Swaps directly to protocol token ERC20", async () => {
+        const tokens = await indexSwap1.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.vETH_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
+
+        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(indexSwap1.vault());
+        const balBeforeBuyToken = await ERC20.attach(bToken).balanceOf(indexSwap1.vault());
+
+        const tx = await metaAggregator1.directSwap([sToken], [bToken], [sAmount.toString()], ["200"]);
+
+        const balAfterSellToken = await ERC20.attach(sToken).balanceOf(indexSwap1.vault());
+        const balAfterBuyToken = await ERC20.attach(bToken).balanceOf(indexSwap1.vault());
+        const newTokens = await indexSwap1.getTokens();
+        const newToken = newTokens.map((el: any) => {
+          return el.toLowerCase();
+        });
+        expect(Number(balAfterSellToken)).to.be.equal(0);
+        expect(Number(balAfterBuyToken)).to.be.greaterThan(Number(balBeforeBuyToken));
+        expect(newToken.includes(bToken.toLowerCase())).to.be.equal(true);
+        expect(newToken.includes(sToken.toLowerCase())).to.be.equal(false);
+      });
+
+      it("Swaps WBNB directly to protocol token ERC20", async () => {
+        const tokens = await indexSwap7.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.vBNB_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap7.vault());
+
+        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(indexSwap7.vault());
+        const balBeforeBuyToken = await ERC20.attach(bToken).balanceOf(indexSwap7.vault());
+
+        const tx = await metaAggregator7.directSwap([sToken], [bToken], [sAmount.toString()], ["200"]);
+
+        const balAfterSellToken = await ERC20.attach(sToken).balanceOf(indexSwap7.vault());
+        const balAfterBuyToken = await ERC20.attach(bToken).balanceOf(indexSwap7.vault());
+        const newTokens = await indexSwap7.getTokens();
+        const newToken = newTokens.map((el: any) => {
+          return el.toLowerCase();
+        });
+        expect(Number(balAfterSellToken)).to.be.equal(0);
+        expect(Number(balAfterBuyToken)).to.be.greaterThan(Number(balBeforeBuyToken));
+        expect(newToken.includes(bToken.toLowerCase())).to.be.equal(true);
+        expect(newToken.includes(sToken.toLowerCase())).to.be.equal(false);
+      });
+
+      it("Swaps WBNB directly to derivative protocol token ERC20", async () => {
+        const tokens = await indexSwap4.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[1];
+        const bToken = addresses.MAIN_LP_BUSD;
+
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap4.vault());
+
+        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(indexSwap4.vault());
+        const balBeforeBuyToken = await handler0.getTokenBalance(await indexSwap4.vault(), bToken);
+
+        const tx = await metaAggregator4.directSwap([sToken], [bToken], [sAmount.toString()], ["200"]);
+
+        const balAfterSellToken = await ERC20.attach(sToken).balanceOf(indexSwap4.vault());
+        const balAfterBuyToken = await handler0.getTokenBalance(await indexSwap4.vault(), bToken);
+        const newTokens = await indexSwap4.getTokens();
+        const newToken = newTokens.map((el: any) => {
+          return el.toLowerCase();
+        });
+        expect(Number(balAfterSellToken)).to.be.equal(0);
+        expect(Number(balAfterBuyToken)).to.be.greaterThan(Number(balBeforeBuyToken));
+        expect(newToken.includes(bToken.toLowerCase())).to.be.equal(true);
+        expect(newToken.includes(sToken.toLowerCase())).to.be.equal(false);
+      });
+
+      it("Invest 0.1BNB into Top10 fund", async () => {
+        const VBep20Interface = await ethers.getContractAt(
+          "VBep20Interface",
+          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
+        );
+
+        const indexSupplyBefore = await indexSwap.totalSupply();
+        await indexSwap.investInFund(
+          {
+            _slippage: ["200", "200"],
+            _lpSlippage: ["200", "200"],
+            _to: owner.address,
+            _tokenAmount: "100000000000000000",
+            _swapHandler: swapHandler.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "100000000000000000",
+          },
+        );
+        const indexSupplyAfter = await indexSwap.totalSupply();
+
+        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      });
+
+      it("swaps into primary using ZeroEx Protocol from primary", async () => {
+        var tokens = await indexSwap5.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        var sToken = tokens[1];
+        var bToken = iaddress.ethAddress;
+        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
+        var zeroExparams = {};
+        var MetaSwapData = {};
+
+        var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+        if (sToken == getUnderlyingTokens0[0]) {
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: zeroExHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken,
+            _lpSlippage: "200",
+            protocolFee: ["0"],
+            callData: ["0x"],
+          };
+        } else {
+          zeroExparams = {
+            sellToken: sToken.toString(),
+            buyToken: getUnderlyingTokens0[0].toString(),
+            sellAmount: sAmount.toString(),
+            slippagePercentage: 0.06,
+          };
+          const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
+            "0x-api-key": process.env.ZEROX_KEY,
+          });
+          var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: zeroExHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken,
+            _lpSlippage: "200",
+            protocolFee: [fee.toString()],
+            callData: [zeroExResponse.data.data],
+          };
+        }
+        await metaAggregator5.swapPrimaryToken(MetaSwapData);
+        var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
+        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
+        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+        expect(Number(amountAfterSwap)).to.be.equal(0);
+      });
+
+      it("swaps into derivative token using oneInch Protocol from primary", async () => {
+        var tokens = await indexSwap4.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        var sToken = tokens[0];
+        var bToken = addresses.MAIN_LP_BUSD;
+        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap4.vault());
+        var zeroExparams = {};
+        var MetaSwapData = {};
+
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+        var tokenBalanceBefore = await handler0.getTokenBalance(await indexSwap4.vault(), bToken);
+
+        if (sToken == getUnderlyingTokens0[0]) {
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: zeroExHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken,
+            _lpSlippage: "200",
+            protocolFee: ["0"],
+            callData: ["0x"],
+          };
+        } else {
+          zeroExparams = {
+            sellToken: sToken.toString(),
+            buyToken: getUnderlyingTokens0[0].toString(),
+            sellAmount: sAmount.toString(),
+            slippagePercentage: 0.06,
+          };
+          const oneInchParams = {
+            fromTokenAddress: sToken.toString(),
+            toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
+            amount: sAmount.toString(),
+            fromAddress: oneInchHandler.address.toString(),
+            slippage: 6,
+            disableEstimate: true,
+            compatibilityMode: true,
+          };
+
+          const oneInchResponse = await axios.get(
+            `https://api-velvet.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
+          );
+
+          var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
+
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: oneInchHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken,
+            _lpSlippage: "200",
+            protocolFee: [fee.toString()],
+            callData: [oneInchResponse.data.tx.data],
+          };
+        }
+        await metaAggregator4.swapPrimaryToken(MetaSwapData);
+        var tokenBalanceAfter = await handler0.getTokenBalance(await indexSwap4.vault(), bToken);
+        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap4.vault());
+        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+        expect(Number(amountAfterSwap)).to.be.equal(0);
+      });
+
+      it("swaps into derivative using ZeroEx Protocol from primary", async () => {
+        var tokens = await indexSwap5.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        var sToken = tokens[1];
+        var bToken = addresses.vBNB_Address;
+        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
+        var zeroExparams = {};
+        var MetaSwapData = {};
+
+        var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+        if (sToken == getUnderlyingTokens0[0]) {
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: zeroExHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken,
+            _lpSlippage: "200",
+            protocolFee: ["0"],
+            callData: ["0x"],
+          };
+        } else {
+          zeroExparams = {
+            sellToken: sToken.toString(),
+            buyToken: getUnderlyingTokens0[0].toString(),
+            sellAmount: sAmount.toString(),
+            slippagePercentage: 0.06,
+          };
+          const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
+            "0x-api-key": process.env.ZEROX_KEY,
+          });
+          var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: zeroExHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken,
+            _lpSlippage: "200",
+            protocolFee: [fee.toString()],
+            callData: [zeroExResponse.data.data],
+          };
+        }
+        await metaAggregator5.swapPrimaryToken(MetaSwapData);
+        var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
+        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
+        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+        expect(Number(amountAfterSwap)).to.be.equal(0);
+      });
+
+      it("swaps into lp token using ZeroEx Protocol from primary", async () => {
+        var tokens = await indexSwap5.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        var sToken = tokens[0];
+        var bToken = addresses.Cake_WBNBLP_Address;
+        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
+        var zeroExparams = {};
+        var MetaSwapData = {};
+
+        var _sellTokenAddress = [];
+        var _buyTokenAddress = [];
+        var _sellAmount = [];
+        var _protocolFee = [];
+        var _callData = [];
+
+        var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
+
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        if (getUnderlyingTokens0.length == 1) {
+          zeroExparams = {
+            sellToken: sToken.toString(),
+            buyToken: getUnderlyingTokens0[0].toString(),
+            sellAmount: sAmount.toString(),
+            slippagePercentage: 0.06,
+          };
+          const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
+            "0x-api-key": process.env.ZEROX_KEY,
+          });
+          var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+
+          MetaSwapData = {
+            sellTokenAddress: [sToken.toString()],
+            buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+            swapHandler: zeroExHandler.address,
+            sellAmount: [sAmount.toString()],
+            portfolioToken: bToken.toString(),
+            _lpSlippage: "200",
+            protocolFee: [fee.toString()],
+            callData: [zeroExResponse.data.data],
+          };
+        }
+        if (getUnderlyingTokens0.length == 2) {
+          var amount1 = sAmount.div(2);
+          var amount2 = sAmount.sub(amount1);
+          var balAmount = [amount1, amount2];
+
+          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+              _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+              _buyTokenAddress.push(getUnderlyingTokens0[i].toString());
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push("0");
+              _callData.push("0x");
+            } else {
+              zeroExparams = {
+                sellToken: sToken.toString(),
+                buyToken: getUnderlyingTokens0[i].toString(),
+                sellAmount: balAmount[i].toString(),
+                slippagePercentage: 0.06,
+              };
+              const zeroExResponse = await axios.get(
+                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
+                {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              );
+              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
+              _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+              _buyTokenAddress.push(getUnderlyingTokens0[i].toString());
+              _sellAmount.push(balAmount[i].toString());
+              _protocolFee.push(fee.toString());
+              _callData.push(zeroExResponse.data.data);
+            }
+          }
+          MetaSwapData = {
+            sellTokenAddress: _sellTokenAddress,
+            buyTokenAddress: _buyTokenAddress,
+            swapHandler: zeroExHandler.address,
+            sellAmount: _sellAmount,
+            portfolioToken: bToken.toString(),
+            _lpSlippage: "200",
+            protocolFee: _protocolFee,
+            callData: _callData,
+          };
+        }
+        await metaAggregator5.swapPrimaryToken(MetaSwapData);
+        var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
+        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
+        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+        expect(Number(amountAfterSwap)).to.be.equal(0);
+      });
+
+      it("Direct Swap reverts if passed underlying token length more than 1", async () => {
+        const tokens = await indexSwap1.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.BSwap_BTC_WBNBLP_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
+
+        await expect(
+          metaAggregator1.directSwap([sToken], [bToken], [sAmount.toString()], ["200"]),
+        ).to.be.revertedWithCustomError(metaAggregator1, "InvalidTokenLength");
+      });
+
+      it("Direct Swap reverts if underlying is not same", async () => {
+        const tokens = await indexSwap1.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.vBNB_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
+
+        await expect(
+          metaAggregator1.directSwap([sToken], [bToken], [sAmount.toString()], ["200"]),
+        ).to.be.revertedWithCustomError(metaAggregator1, "InvalidToken");
+      });
+
+      it("Direct Swap reverts if length of tokens are not same", async () => {
+        const tokens = await indexSwap1.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.BSwap_BTC_WBNBLP_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
+
+        await expect(
+          metaAggregator1.directSwap([sToken, tokens[1]], [bToken], [sAmount.toString()], ["200"]),
+        ).to.be.revertedWithCustomError(metaAggregator1, "InvalidTokenLength");
+      });
+
+      it("Direct Swap reverts if length of tokens and sellAmount are not same", async () => {
+        const tokens = await indexSwap1.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.BSwap_BTC_WBNBLP_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
+
+        await expect(metaAggregator1.directSwap([sToken], [bToken], [], ["200"])).to.be.revertedWithCustomError(
           metaAggregator1,
-          "CallerNotAssetManager",
+          "InvalidSellAmount",
         );
       });
 
@@ -1059,6 +3178,136 @@ describe.only("Tests for MetaAggregator", () => {
         expect(Number(balBeforeSellToken)).to.be.greaterThan(Number(balAfterSellToken));
       });
 
+      it("redeem should revert back if index not paused", async () => {
+        const tokens = await indexSwap.getTokens();
+        const sToken = tokens[0];
+        const sAmount = ethers.utils.parseEther("100");
+        await expect(metaAggregator.redeem(sAmount, "200", sToken)).to.be.reverted;
+      });
+
+      it("should pause", async () => {
+        await rebalancing.setPause(true);
+      });
+
+      it("redeem should revert back if token getting redeem is not valid", async () => {
+        const tokens = await indexSwap.getTokens();
+        const sToken = addresses.vBNB_Address;
+        const sAmount = ethers.utils.parseEther("100");
+        await expect(metaAggregator.redeem(sAmount, "200", sToken)).to.be.reverted;
+      });
+
+      it("should revert back if the buy token is not registered", async () => {
+        const tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const bToken = addresses.vDAI_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap.vault());
+
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+
+        var exchangeData = {};
+        const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator.address);
+        exchangeData = {
+          sellTokenAddress: [getUnderlyingTokens1[0].toString()],
+          buyTokenAddress: [bToken],
+          swapHandler: zeroExHandler.address,
+          portfolioToken: bToken,
+          sellAmount: [bal.toBigInt().toString()],
+          protocolFee: [0],
+          _lpSlippage: "200",
+          callData: ["0x"],
+        };
+        await expect(metaAggregator.metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
+          metaAggregator,
+          "BuyTokenAddressNotValid",
+        );
+      });
+
+      it("should revert back if not redeemed", async () => {
+        const tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const bToken = addresses.vBNB_Address;
+
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var exchangeData = {};
+        const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator1.address);
+        exchangeData = {
+          sellTokenAddress: [getUnderlyingTokens1[0].toString()],
+          buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+          swapHandler: zeroExHandler.address,
+          portfolioToken: bToken,
+          sellAmount: [0],
+          protocolFee: [0],
+          _lpSlippage: "200",
+          callData: ["0x"],
+        };
+        await expect(metaAggregator1.metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
+          metaAggregator1,
+          "NotRedeemed",
+        );
+      });
+
+      it("should revert back if redeem is called by non asset manager", async () => {
+        const tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const sAmount = ethers.utils.parseEther("100");
+        await expect(metaAggregator1.connect(nonOwner).redeem(sAmount, "200", sToken)).to.be.revertedWithCustomError(
+          metaAggregator1,
+          "CallerNotAssetManager",
+        );
+      });
+
+      it("should revert back if metaAggregatorSwap is called by non asset manager", async () => {
+        const tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const sToken = tokens[0];
+        const bToken = addresses.vBNB_Address;
+
+        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+        const handlerAddress1 = tokenInfo1[2];
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+        var exchangeData = {};
+        const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator1.address);
+
+        exchangeData = {
+          sellTokenAddress: [getUnderlyingTokens1[0].toString()],
+          buyTokenAddress: [getUnderlyingTokens0[0].toString()],
+          swapHandler: zeroExHandler.address,
+          portfolioToken: bToken,
+          sellAmount: [0],
+          protocolFee: [0],
+          _lpSlippage: "200",
+          callData: ["0x"],
+        };
+        await expect(metaAggregator1.connect(nonOwner).metaAggregatorSwap(exchangeData)).to.be.revertedWithCustomError(
+          metaAggregator1,
+          "CallerNotAssetManager",
+        );
+      });
+
       it("Invest 1BNB into Top10 fund", async () => {
         await rebalancing.setPause(false);
         const indexSupplyBefore = await indexSwap.totalSupply();
@@ -1078,813 +3327,6 @@ describe.only("Tests for MetaAggregator", () => {
         const indexSupplyAfter = await indexSwap.totalSupply();
 
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-      });
-
-      it("Invest 1BNB into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["200", "200"],
-            _lpSlippage: ["200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap.totalSupply();
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-      });
-
-      it("swaps using Paraswap Protocol", async () => {
-        const tokens = await indexSwap.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const sToken = tokens[0];
-        const bToken = iaddress.busdAddress;
-        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap.vault());
-        const tx = await metaAggregator.redeem(sAmount, "200", sToken);
-
-        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
-        const handlerAddress1 = tokenInfo1[2];
-        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-        const handlerAddress0 = tokenInfo0[2];
-        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
-        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
-        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
-
-        var exchangeData = {};
-        var _sellTokenAddress = [];
-        var _buyTokenAddress = [];
-        var _sellAmount = [];
-        var _protocolFee = [];
-        var _callData = [];
-
-        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
-          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator.address);
-          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
-            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
-            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
-            _sellAmount.push(bal.toString());
-            _protocolFee.push("0");
-            _callData.push("0x");
-          } else {
-            const paraswapParams = {
-              srcToken: getUnderlyingTokens1[0].toString().toLowerCase(),
-              destToken: getUnderlyingTokens0[0].toString().toLowerCase(),
-              amount: bal.toString(),
-              slippage: 600,
-              side: "SELL",
-              network: 56,
-            };
-
-            const paraswapPriceRouteResponse = await axios.get(
-              `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
-            );
-
-            const paraswapQuery = {
-              ignoreChecks: true,
-            };
-
-            await delay(1000);
-
-            const paraswapBuildTxResponse = await axios.post(
-              `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
-              {
-                srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
-                destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
-                userAddress: paraswapHandler.address.toString().toLowerCase(),
-                priceRoute: paraswapPriceRouteResponse.data.priceRoute,
-                srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
-                destAmount: paraswapPriceRouteResponse.data.priceRoute.destAmount,
-              },
-            );
-
-            await delay(1000);
-            var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
-
-            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
-            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
-            _sellAmount.push(bal.toString());
-            _protocolFee.push(fee.toString());
-            _callData.push(paraswapBuildTxResponse.data.data);
-          }
-        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
-          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator.address);
-          var bal1 = bal.div(2);
-          var bal2 = bal1;
-          var balAmount = [bal1, bal2];
-
-          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
-            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
-              _sellTokenAddress.push(getUnderlyingTokens1[0]);
-              _buyTokenAddress.push(getUnderlyingTokens0[i]);
-              _sellAmount.push(balAmount[i].toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              const paraswapParams = {
-                srcToken: getUnderlyingTokens1[0].toString().toLowerCase(),
-                destToken: getUnderlyingTokens0[i].toString().toLowerCase(),
-                amount: balAmount[i].toString(),
-                slippage: 600,
-                side: "SELL",
-                network: 56,
-              };
-
-              const paraswapPriceRouteResponse = await axios.get(
-                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
-              );
-
-              const paraswapQuery = {
-                ignoreChecks: true,
-              };
-
-              await delay(1000);
-
-              const paraswapBuildTxResponse = await axios.post(
-                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
-                {
-                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
-                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
-                  userAddress: paraswapHandler.address.toString().toLowerCase(),
-                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
-                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
-                  destAmount: paraswapPriceRouteResponse.data.priceRoute.destAmount,
-                },
-              );
-
-              await delay(1000);
-              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
-
-              _sellTokenAddress.push(getUnderlyingTokens1[0]);
-              _buyTokenAddress.push(getUnderlyingTokens0[i]);
-              _sellAmount.push(balAmount[i].toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(paraswapBuildTxResponse.data.data);
-            }
-          }
-        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
-          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
-            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator.address);
-            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
-              _sellTokenAddress.push(getUnderlyingTokens1[i]);
-              _buyTokenAddress.push(getUnderlyingTokens0[0]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              const paraswapParams = {
-                srcToken: getUnderlyingTokens1[i].toString().toLowerCase(),
-                destToken: getUnderlyingTokens0[0].toString().toLowerCase(),
-                amount: bal.toString(),
-                slippage: 600,
-                side: "SELL",
-                network: 56,
-              };
-
-              const paraswapPriceRouteResponse = await axios.get(
-                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
-              );
-
-              const paraswapQuery = {
-                ignoreChecks: true,
-              };
-
-              await delay(1000);
-
-              const paraswapBuildTxResponse = await axios.post(
-                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
-                {
-                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
-                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
-                  userAddress: paraswapHandler.address.toString().toLowerCase(),
-                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
-                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
-                  destAmount: paraswapPriceRouteResponse.data.priceRoute.destAmount,
-                },
-              );
-
-              await delay(1000);
-              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
-
-              _sellTokenAddress.push(getUnderlyingTokens1[i]);
-              _buyTokenAddress.push(getUnderlyingTokens0[0]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(paraswapBuildTxResponse.data.data);
-            }
-          }
-        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
-          var common = [];
-          var tempUnder0 = [];
-          var tempUnder1 = [];
-          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
-            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
-              common.push(getUnderlyingTokens1[i]);
-            } else {
-              tempUnder1.push(getUnderlyingTokens1[i]);
-            }
-          }
-
-          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
-            if (!common.includes(getUnderlyingTokens0[i])) {
-              tempUnder0.push(getUnderlyingTokens0[i]);
-            }
-          }
-
-          var newUnderlying0 = tempUnder0.concat(common);
-          var newUnderlying1 = tempUnder1.concat(common);
-
-          for (let i = 0; i < newUnderlying1.length; i++) {
-            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator1.address);
-            if (newUnderlying1[i] == newUnderlying0[i]) {
-              _sellTokenAddress.push(newUnderlying1[i]);
-              _buyTokenAddress.push(newUnderlying0[i]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              const paraswapParams = {
-                srcToken: getUnderlyingTokens1[i].toString().toLowerCase(),
-                destToken: getUnderlyingTokens0[i].toString().toLowerCase(),
-                amount: bal.toString(),
-                slippage: 600,
-                side: "SELL",
-                network: 56,
-              };
-
-              const paraswapPriceRouteResponse = await axios.get(
-                `https://apiv5.paraswap.io/prices?${qs.stringify(paraswapParams)}`,
-              );
-
-              const paraswapQuery = {
-                ignoreChecks: true,
-              };
-
-              await delay(1000);
-
-              const paraswapBuildTxResponse = await axios.post(
-                `https://apiv5.paraswap.io/transactions/56?${qs.stringify(paraswapQuery)}`,
-                {
-                  srcToken: paraswapPriceRouteResponse.data.priceRoute.srcToken,
-                  destToken: paraswapPriceRouteResponse.data.priceRoute.destToken,
-                  userAddress: paraswapHandler.address.toString().toLowerCase(),
-                  priceRoute: paraswapPriceRouteResponse.data.priceRoute,
-                  srcAmount: paraswapPriceRouteResponse.data.priceRoute.srcAmount,
-                  destAmount: paraswapPriceRouteResponse.data.priceRoute.destAmount,
-                },
-              );
-
-              await delay(1000);
-              var fee = paraswapBuildTxResponse.data.protocolFee ? paraswapBuildTxResponse.data.protocolFee : 0;
-
-              _sellTokenAddress.push(newUnderlying1[i]);
-              _buyTokenAddress.push(newUnderlying0[i]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(paraswapBuildTxResponse.data.data);
-            }
-          }
-        }
-
-        exchangeData = {
-          sellTokenAddress: _sellTokenAddress,
-          buyTokenAddress: _buyTokenAddress,
-          swapHandler: paraswapHandler.address,
-          portfolioToken: bToken,
-          sellAmount: _sellAmount,
-          protocolFee: _protocolFee,
-          _lpSlippage: "200",
-          callData: _callData,
-        };
-
-        const balBeforeBuyToken = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap.vault());
-
-        const tx2 = await metaAggregator.metaAggregatorSwap(exchangeData);
-
-        const oldTokenBal = await ERC20.attach(sToken.toString()).balanceOf(await indexSwap.vault());
-
-        const balAfterBuyToken = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap.vault());
-
-        expect(Number(balAfterBuyToken)).to.be.greaterThan(Number(balBeforeBuyToken));
-        expect(Number(oldTokenBal)).to.equal(0);
-      });
-
-      it("swaps using 0x Protocol", async () => {
-        const tokens = await indexSwap1.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        const sToken = tokens[1];
-        const bToken = addresses.BSwap_BTC_WBNBLP_Address;
-        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
-
-        const balBeforeSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
-
-        const tx = await metaAggregator1.redeem(sAmount, "200", sToken);
-
-        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
-        const handlerAddress1 = tokenInfo1[2];
-        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-        const handlerAddress0 = tokenInfo0[2];
-        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
-        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
-        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
-
-        var zeroExparams = {};
-
-        var exchangeData = {};
-        var _sellTokenAddress = [];
-        var _buyTokenAddress = [];
-        var _sellAmount = [];
-        var _protocolFee = [];
-        var _callData = [];
-
-        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
-          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator1.address);
-          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
-            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
-            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
-            _sellAmount.push(bal.toString());
-            _protocolFee.push("0");
-            _callData.push("0x");
-          } else {
-            zeroExparams = {
-              sellToken: getUnderlyingTokens1[0].toString(),
-              buyToken: getUnderlyingTokens0[0].toString(),
-              sellAmount: bal.toString(),
-              slippagePercentage: 0.06,
-            };
-            const zeroExResponse = await axios.get(
-              `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
-              { "0x-api-key": process.env.ZEROX_KEY },
-            );
-
-            var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-
-            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
-            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
-            _sellAmount.push(bal.toString());
-            _protocolFee.push(fee.toString());
-            _callData.push(zeroExResponse.data.data);
-          }
-        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
-          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator1.address);
-          var bal1 = bal.div(2);
-          var bal2 = bal.sub(bal1);
-          var balAmount = [bal1, bal2];
-
-          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
-            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
-              _sellTokenAddress.push(getUnderlyingTokens1[0]);
-              _buyTokenAddress.push(getUnderlyingTokens0[i]);
-              _sellAmount.push(balAmount[i].toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              zeroExparams = {
-                sellToken: getUnderlyingTokens1[0].toString(),
-                buyToken: getUnderlyingTokens0[i].toString(),
-                sellAmount: balAmount[i].toString(),
-                slippagePercentage: 0.06,
-              };
-              const zeroExResponse = await axios.get(
-                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
-                { "0x-api-key": process.env.ZEROX_KEY },
-              );
-
-              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-              _sellTokenAddress.push(getUnderlyingTokens1[0]);
-              _buyTokenAddress.push(getUnderlyingTokens0[i]);
-              _sellAmount.push(balAmount[i].toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(zeroExResponse.data.data);
-            }
-          }
-        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
-          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
-            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator1.address);
-            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
-              _sellTokenAddress.push(getUnderlyingTokens1[i]);
-              _buyTokenAddress.push(getUnderlyingTokens0[0]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              zeroExparams = {
-                sellToken: getUnderlyingTokens1[i].toString(),
-                buyToken: getUnderlyingTokens0[0].toString(),
-                sellAmount: bal.toString(),
-                slippagePercentage: 0.06,
-              };
-              const zeroExResponse = await axios.get(
-                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
-                { "0x-api-key": process.env.ZEROX_KEY },
-              );
-
-              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-              _sellTokenAddress.push(getUnderlyingTokens1[i]);
-              _buyTokenAddress.push(getUnderlyingTokens0[0]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(zeroExResponse.data.data);
-            }
-          }
-        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
-          var common = [];
-          var tempUnder0 = [];
-          var tempUnder1 = [];
-          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
-            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
-              common.push(getUnderlyingTokens1[i]);
-            } else {
-              tempUnder1.push(getUnderlyingTokens1[i]);
-            }
-          }
-
-          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
-            if (!common.includes(getUnderlyingTokens0[i])) {
-              tempUnder0.push(getUnderlyingTokens0[i]);
-            }
-          }
-
-          var newUnderlying0 = tempUnder0.concat(common);
-          var newUnderlying1 = tempUnder1.concat(common);
-
-          for (let i = 0; i < newUnderlying1.length; i++) {
-            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator1.address);
-            if (newUnderlying1[i] == newUnderlying0[i]) {
-              _sellTokenAddress.push(newUnderlying1[i]);
-              _buyTokenAddress.push(newUnderlying0[i]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              zeroExparams = {
-                sellToken: newUnderlying1[i].toString(),
-                buyToken: newUnderlying0[i].toString(),
-                sellAmount: bal.toString(),
-                slippagePercentage: 0.06,
-              };
-              const zeroExResponse = await axios.get(
-                `https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`,
-                { "0x-api-key": process.env.ZEROX_KEY },
-              );
-              var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-              _sellTokenAddress.push(newUnderlying1[i]);
-              _buyTokenAddress.push(newUnderlying0[i]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(zeroExResponse.data.data);
-            }
-          }
-        }
-        exchangeData = {
-          sellTokenAddress: _sellTokenAddress,
-          buyTokenAddress: _buyTokenAddress,
-          swapHandler: zeroExHandler.address,
-          portfolioToken: bToken,
-          sellAmount: _sellAmount,
-          protocolFee: _protocolFee,
-          _lpSlippage: "200",
-          callData: _callData,
-        };
-
-        const balBefore = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap1.vault());
-
-        const tx2 = await metaAggregator1.metaAggregatorSwap(exchangeData);
-
-        const balAfter = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap1.vault());
-        const oldTokenBal = await ERC20.attach(sToken.toString()).balanceOf(await indexSwap1.vault());
-
-        const buyTokenRecordAfter = await indexSwap1.getRecord(bToken);
-        const newTokenList = await indexSwap1.getTokens();
-
-        const balAfterSellToken = await ERC20.attach(sToken).balanceOf(await indexSwap1.vault());
-
-        expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
-        expect(Number(oldTokenBal)).to.equal(0);
-        expect(newTokenList.includes(sToken)).to.be.equal(false);
-        expect(newTokenList.includes(bToken)).to.be.equal(true);
-        expect(Number(balBeforeSellToken)).to.be.greaterThan(Number(balAfterSellToken));
-      });
-
-      it("swaps using 1Inch Protocol", async () => {
-        const tokens = await indexSwap3.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const sToken = tokens[1];
-        const bToken = tokens[0];
-        const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
-        const handlerAddress1 = tokenInfo1[2];
-        const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
-
-        const sAmount = await handler1.getTokenBalance(indexSwap3.vault(), sToken);
-
-        const tx = await metaAggregator3.redeem(sAmount, "200", sToken);
-
-        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-        const handlerAddress0 = tokenInfo0[2];
-        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-        const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
-        const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
-
-        var exchangeData = {};
-        var _sellTokenAddress = [];
-        var _buyTokenAddress = [];
-        var _sellAmount = [];
-        var _protocolFee = [];
-        var _callData = [];
-
-        if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
-          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
-          if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
-            _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
-            _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
-            _sellAmount.push(bal.toString());
-            _protocolFee.push("0");
-            _callData.push("0x");
-          } else {
-            const oneInchParams = {
-              fromTokenAddress: getUnderlyingTokens1[0].toString().toLowerCase(),
-              toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
-              amount: bal.toBigInt().toString(),
-              fromAddress: oneInchHandler.address.toString(),
-              slippage: 6,
-              disableEstimate: true,
-              compatibilityMode: true,
-            };
-
-            const oneInchResponse = await axios.get(`https://api.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`);
-
-            var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
-
-            _sellTokenAddress.push(getUnderlyingTokens1[0]);
-            _buyTokenAddress.push(getUnderlyingTokens0[0]);
-            _sellAmount.push(bal.toString());
-            _protocolFee.push(fee.toString());
-            _callData.push(oneInchResponse.data.tx.data);
-          }
-        } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
-          const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator3.address);
-          var bal1 = bal.div(2);
-          var bal2 = bal.sub(bal1);
-          var balAmount = [bal1, bal2];
-
-          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
-            if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
-              _sellTokenAddress.push(getUnderlyingTokens1[0]);
-              _buyTokenAddress.push(getUnderlyingTokens0[i]);
-              _sellAmount.push(balAmount[i].toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              const oneInchParams = {
-                fromTokenAddress: getUnderlyingTokens1[0].toString().toLowerCase(),
-                toTokenAddress: getUnderlyingTokens0[i].toString().toLowerCase(),
-                amount: balAmount[i].toBigInt().toString(),
-                fromAddress: oneInchHandler.address.toString(),
-                slippage: 6,
-                disableEstimate: true,
-                compatibilityMode: true,
-              };
-
-              const oneInchResponse = await axios.get(
-                `https://api.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
-              );
-
-              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
-              // var fee = 0;
-              _sellTokenAddress.push(getUnderlyingTokens1[0]);
-              _buyTokenAddress.push(getUnderlyingTokens0[i]);
-              _sellAmount.push(balAmount[i].toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(oneInchResponse.data.tx.data);
-            }
-          }
-        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
-          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
-            const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator3.address);
-            if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
-              _sellTokenAddress.push(getUnderlyingTokens1[i]);
-              _buyTokenAddress.push(getUnderlyingTokens0[0]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              const oneInchParams = {
-                fromTokenAddress: getUnderlyingTokens1[i].toString().toLowerCase(),
-                toTokenAddress: getUnderlyingTokens0[0].toString().toLowerCase(),
-                amount: bal.toBigInt().toString(),
-                fromAddress: oneInchHandler.address.toString(),
-                slippage: 6,
-                disableEstimate: true,
-                compatibilityMode: true,
-              };
-
-              const oneInchResponse = await axios.get(
-                `https://api.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
-              );
-
-              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
-              // var fee = 0;
-              _sellTokenAddress.push(getUnderlyingTokens1[i]);
-              _buyTokenAddress.push(getUnderlyingTokens0[0]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(oneInchResponse.data.tx.data);
-            }
-          }
-        } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
-          var common = [];
-          var tempUnder0 = [];
-          var tempUnder1 = [];
-          for (let i = 0; i < getUnderlyingTokens1.length; i++) {
-            if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
-              common.push(getUnderlyingTokens1[i]);
-            } else {
-              tempUnder1.push(getUnderlyingTokens1[i]);
-            }
-          }
-
-          for (let i = 0; i < getUnderlyingTokens0.length; i++) {
-            if (!common.includes(getUnderlyingTokens0[i])) {
-              tempUnder0.push(getUnderlyingTokens0[i]);
-            }
-          }
-
-          var newUnderlying0 = tempUnder0.concat(common);
-          var newUnderlying1 = tempUnder1.concat(common);
-
-          for (let i = 0; i < newUnderlying1.length; i++) {
-            const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator3.address);
-            if (newUnderlying1[i] == newUnderlying0[i]) {
-              _sellTokenAddress.push(newUnderlying1[i]);
-              _buyTokenAddress.push(newUnderlying0[i]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push("0");
-              _callData.push("0x");
-            } else {
-              const oneInchParams = {
-                fromTokenAddress: getUnderlyingTokens1[i].toString().toLowerCase(),
-                toTokenAddress: getUnderlyingTokens0[i].toString().toLowerCase(),
-                amount: bal.toBigInt().toString(),
-                fromAddress: oneInchHandler.address.toString(),
-                slippage: 6,
-                disableEstimate: true,
-                compatibilityMode: true,
-              };
-
-              const oneInchResponse = await axios.get(
-                `https://api.1inch.io/v5.0/56/swap?${qs.stringify(oneInchParams)}`,
-              );
-
-              var fee = oneInchResponse.data.protocolFee ? oneInchResponse.data.protocolFee : 0;
-              // var fee = 0;
-              _sellTokenAddress.push(newUnderlying1[i]);
-              _buyTokenAddress.push(newUnderlying0[i]);
-              _sellAmount.push(bal.toString());
-              _protocolFee.push(fee.toString());
-              _callData.push(oneInchResponse.data.tx.data);
-            }
-          }
-        }
-        exchangeData = {
-          sellTokenAddress: _sellTokenAddress,
-          buyTokenAddress: _buyTokenAddress,
-          swapHandler: oneInchHandler.address,
-          portfolioToken: bToken,
-          sellAmount: _sellAmount,
-          protocolFee: _protocolFee,
-          _lpSlippage: "200",
-          callData: _callData,
-        };
-        await delay(2000);
-
-        const balBefore = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
-
-        const tx2 = await metaAggregator3.metaAggregatorSwap(exchangeData);
-
-        const balAfter = await ERC20.attach(bToken.toString()).balanceOf(await indexSwap3.vault());
-
-        const newTokenList = await indexSwap3.getTokens();
-
-        expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
-        expect(newTokenList.includes(bToken)).to.equal(true);
-      });
-
-      it("swaps token using ZeroEx Protocol for base", async () => {
-        const tokens = await indexSwap4.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        var sToken = tokens[1];
-        var bToken = iaddress.wbnbAddress;
-        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap4.vault());
-        var zeroExparams = {};
-        var MetaSwapData = {};
-        var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap4.vault());
-        zeroExparams = {
-          sellToken: sToken.toString(),
-          buyToken: bToken.toString(),
-          sellAmount: BigNumber.from(sAmount).toString(),
-          slippagePercentage: 0.06,
-        };
-        const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
-          "0x-api-key": process.env.ZEROX_KEY,
-        });
-
-        var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-
-        MetaSwapData = {
-          sellTokenAddress: sToken.toString(),
-          buyTokenAddress: bToken.toString(),
-          swapHandler: zeroExHandler.address,
-          sellAmount: BigNumber.from(sAmount).toString(),
-          protocolFee: fee.toString(),
-          callData: zeroExResponse.data.data,
-        };
-        await metaAggregator4.swapPrimaryToken(MetaSwapData);
-        var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap4.vault());
-        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap4.vault());
-        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
-        expect(Number(amountAfterSwap)).to.be.equal(0);
-      });
-
-      it("swaps token1 to token0 using ZeroEx Protocol for base", async () => {
-        var tokens = await indexSwap5.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        var sToken = tokens[0];
-        var bToken = tokens[1];
-        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
-        var zeroExparams = {};
-        var MetaSwapData = {};
-
-        var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
-        zeroExparams = {
-          sellToken: sToken.toString(),
-          buyToken: bToken.toString(),
-          sellAmount: sAmount.toString(),
-          slippagePercentage: 0.06,
-        };
-        const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
-          "0x-api-key": process.env.ZEROX_KEY,
-        });
-        var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-
-        MetaSwapData = {
-          sellTokenAddress: sToken.toString(),
-          buyTokenAddress: bToken.toString(),
-          swapHandler: zeroExHandler.address,
-          sellAmount: sAmount.toString(),
-          protocolFee: fee.toString(),
-          callData: zeroExResponse.data.data,
-        };
-        await metaAggregator5.swapPrimaryToken(MetaSwapData);
-        var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
-        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
-        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
-        expect(Number(amountAfterSwap)).to.be.equal(0);
-      });
-
-      it("swaps token1 to token0 using ZeroEx Protocol for base", async () => {
-        var tokens = await indexSwap5.getTokens();
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        var sToken = tokens[0];
-        var bToken = iaddress.busdAddress;
-        var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
-        var zeroExparams = {};
-        var MetaSwapData = {};
-
-        var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
-        zeroExparams = {
-          sellToken: sToken.toString(),
-          buyToken: bToken.toString(),
-          sellAmount: sAmount.toString(),
-          slippagePercentage: 0.06,
-        };
-        const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
-          "0x-api-key": process.env.ZEROX_KEY,
-        });
-        var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-
-        MetaSwapData = {
-          sellTokenAddress: sToken.toString(),
-          buyTokenAddress: bToken.toString(),
-          swapHandler: zeroExHandler.address,
-          sellAmount: sAmount.toString(),
-          protocolFee: fee.toString(),
-          callData: zeroExResponse.data.data,
-        };
-        await metaAggregator5.swapPrimaryToken(MetaSwapData);
-        var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap5.vault());
-        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap5.vault());
-        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
-        expect(Number(amountAfterSwap)).to.be.equal(0);
       });
     });
   });

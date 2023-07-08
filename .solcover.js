@@ -1,4 +1,4 @@
 module.exports = {
-  // skipFiles: ['./handler/ExternalSwapHandler/OpenOceanHandler.sol']
+  skipFiles: ["handler/UniswapV2LPHandler.sol", "handler/AbstractLPHandler.sol", "handler/libraries/FullMath.sol"],
   configureYulOptimizer: true,
 };
