@@ -24,12 +24,12 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {ComptrollerInterface} from "./interfaces/ComptrollerInterface.sol";
 import {VBep20Storage} from "./interfaces/VBep20Storage.sol";
 import {VBep20Interface} from "./interfaces/VBep20Interface.sol";
-import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
+
 import {IHandler} from "../IHandler.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "contracts/FunctionParameters.sol";
 
-contract VenusHandler is IHandler, Ownable {
+contract VenusHandler is IHandler {
   address public constant COMPTROLLER = 0xfD36E2c2a6789Db23113685031d7F16329158384;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);

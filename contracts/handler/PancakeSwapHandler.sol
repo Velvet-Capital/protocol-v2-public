@@ -23,8 +23,8 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
-import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
-contract PancakeSwapHandler is Initializable, Ownable {
+
+contract PancakeSwapHandler is Initializable {
   IUniswapV2Router02 internal pancakeSwapRouter;
   IPriceOracle internal oracle;
 

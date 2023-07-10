@@ -26,8 +26,8 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {IVaultAlpaca} from "./interfaces/IVaultAlpaca.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
-import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
-contract AlpacaHandler is IHandler, Ownable {
+
+contract AlpacaHandler is IHandler {
   using SafeMathUpgradeable for uint256;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256 amount, address indexed to);
