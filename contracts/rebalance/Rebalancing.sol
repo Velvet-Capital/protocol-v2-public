@@ -193,7 +193,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
     (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(index), tokens);
 
-    uint256 contractBalanceInUSD = oracle.getUsdEthPrice(address(this).balance);
+    uint256 contractBalanceInUSD = oracle.getEthUsdPrice(address(this).balance);
     vaultBalance = vaultBalance.add(contractBalanceInUSD);
 
     for (uint256 i = 0; i < tokens.length; i++) {
