@@ -15,9 +15,9 @@ contract ParaswapHandler is Initializable, ApproveControl, ExternalSlippageContr
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
   using SafeMathUpgradeable for uint;
-  IPriceOracle public oracle;
-  address public swapTarget;
-  address public paraswapTransferHelper;
+  IPriceOracle internal oracle;
+  address internal swapTarget;
+  address internal paraswapTransferHelper;
 
   function init(address _swapTarget, address _transferHelper, address _oracle) external initializer {
     swapTarget = _swapTarget;

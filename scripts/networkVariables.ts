@@ -146,6 +146,12 @@ export const BSCMainNet: ChainAddresses = {
   gnosisMultisendLibrary: "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
   gnosisSafeProxyFactory: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2",
   moduleProxyFactory: "0x76E2cFc1F5Fa8F6a5b3fC4c8F4788F0116861F9B",
+
+  //External Swap URL
+  zeroExUrl: "https://bsc.api.0x.org/swap/v1/quote?",
+  oneInchUrl : "https://api-velvet.1inch.io/v5.0/56/swap?",
+  paraswapPricesUrl : "https://apiv5.paraswap.io/prices?",
+  paraswapTransactionUrl : "https://apiv5.paraswap.io/transactions/56?",
 };
 
 export const MaticMainNet: ChainAddresses = {

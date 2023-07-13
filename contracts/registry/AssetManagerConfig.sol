@@ -12,8 +12,8 @@ import {FunctionParameters} from "../FunctionParameters.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-  IAccessController public accessController;
-  ITokenRegistry public tokenRegistry;
+  IAccessController internal accessController;
+  ITokenRegistry internal tokenRegistry;
 
   uint256 public MAX_INVESTMENTAMOUNT;
   uint256 public MIN_INVESTMENTAMOUNT;

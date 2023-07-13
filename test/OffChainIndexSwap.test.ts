@@ -603,8 +603,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -683,8 +685,10 @@ describe.only("Tests for OffChainIndex", () => {
                 slippagePercentage: 1,
                 gasPrice: "4000457106",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -764,8 +768,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "3500457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -863,8 +869,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -941,8 +949,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1032,8 +1042,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1107,8 +1119,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1263,8 +1277,10 @@ describe.only("Tests for OffChainIndex", () => {
               gasPrice: "4000457106",
               gas: "350000",
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-              "0x-api-key": process.env.ZEROX_KEY,
+            const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
             });
             sellTokensContract.push(key);
             sellTokenSwapData.push(response.data.data.toString());
@@ -1387,8 +1403,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1468,8 +1486,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1584,8 +1604,10 @@ describe.only("Tests for OffChainIndex", () => {
               gasPrice: "4000457106",
               gas: "350000",
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-              "0x-api-key": process.env.ZEROX_KEY,
+            const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
             });
             sellTokensContract.push(key);
             sellTokenSwapData.push(response.data.data.toString());
@@ -1649,8 +1671,10 @@ describe.only("Tests for OffChainIndex", () => {
               gasPrice: "4000457106",
               gas: "350000",
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-              "0x-api-key": process.env.ZEROX_KEY,
+            const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
             });
             sellTokensContract2.push(key);
             sellTokenSwapData2.push(response.data.data.toString());
@@ -1719,8 +1743,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1828,8 +1854,10 @@ describe.only("Tests for OffChainIndex", () => {
                 gasPrice: "4000457106",
                 gas: "350000",
               };
-              const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-                "0x-api-key": process.env.ZEROX_KEY,
+              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
               });
               await delay(2000);
               buyUnderlyingTokensContract.push(getUnderlyingTokens[j]);
@@ -1993,8 +2021,10 @@ describe.only("Tests for OffChainIndex", () => {
               gasPrice: "2000457106",
               gas: "200000",
             };
-            const response = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(params)}`, {
-              "0x-api-key": process.env.ZEROX_KEY,
+            const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              headers: {
+                    "0x-api-key": process.env.ZEROX_KEY
+                },
             });
             sellTokensContract.push(key);
             sellTokenSwapData.push(response.data.data.toString());

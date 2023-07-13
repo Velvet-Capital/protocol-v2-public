@@ -19,7 +19,7 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IIndexSwap} from "./IIndexSwap.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
@@ -40,12 +40,11 @@ import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.s
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 
-contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable, OwnableUpgradeable {
   IAccessController internal accessController;
   IVelvetSafeModule internal safe;
   IPriceOracle internal oracle;
   ITokenRegistry internal tokenRegistry;
-  address public owner;
   address internal WETH;
   address internal zeroAddress;
 
@@ -73,7 +72,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     address _tokenRegistry
   ) external initializer {
     __UUPSUpgradeable_init();
-    owner = msg.sender;
+    __Ownable_init();
     zeroAddress = address(0);
     if (
       _accessController == zeroAddress ||
@@ -112,20 +111,13 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     _;
   }
 
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
-    }
-    _;
-  }
-
   /**
    * @notice The function claims additional reward tokens
    * @dev Requires the tokens to be send to this contract address before swapping
    * @param _index The index to claim for
    * @param _tokens The derivative tokens to claim for
    */
-  function claimTokens(IIndexSwap _index, address[] calldata _tokens) external nonReentrant onlyIndexManager {
+  function claimTokens(IIndexSwap _index, address[] calldata _tokens) external onlyIndexManager {
     for (uint256 i = 0; i < _tokens.length; i++) {
       address _token = _tokens[i];
       IHandler handler = IHandler(getTokenInfo(_token).handler);
@@ -172,7 +164,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
   /**
    * @notice Transfer tokens from vault to a specific address
    */
-  function _pullFromVaultRewards(address token, uint256 amount, address to) external nonReentrant onlyIndexManager {
+  function _pullFromVaultRewards(address token, uint256 amount, address to) external onlyIndexManager {
     _safeTokenTransfer(token, amount, to);
   }
 
@@ -236,7 +228,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    */
   function swapETHToToken(
     FunctionParameters.SwapETHToTokenPublicData memory inputData
-  ) public payable onlyIndexManager {
+  ) external payable onlyIndexManager {
     _swapETHToToken(
       FunctionParameters.SwapETHToTokenData(
         inputData._token,
@@ -532,7 +524,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    */
   function _swapTokenToTokens(
     FunctionParameters.SwapTokenToTokensData memory inputData
-  ) external payable virtual nonReentrant onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
+  ) external payable virtual onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
     IIndexSwap _index = IIndexSwap(inputData._index);
     address[] memory _tokens = _index.getTokens();
     for (uint256 i = 0; i < _tokens.length; i++) {
@@ -596,7 +588,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    */
   function swapOffChainTokens(
     ExchangeData.IndexOperationData memory inputdata
-  ) external virtual nonReentrant onlyIndexManager returns (uint256, uint256) {
+  ) external virtual onlyIndexManager returns (uint256, uint256) {
     IndexSwapLibrary._whitelistAndHandlerCheck(inputdata._token, inputdata.inputData._offChainHandler, inputdata.index);
     address vault = inputdata.index.vault();
     //Checks if token is non primary

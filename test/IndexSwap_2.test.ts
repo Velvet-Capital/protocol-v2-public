@@ -657,7 +657,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should get the swap address from the pancake swap handler", async () => {
-        await expect(swapHandler.getSwapAddress("10000000", addresses.vETH_Address));
+        await expect(swapHandler.getSwapAddress());
       });
 
       it("swap token to ETH should fail via the pancake swap handler should not work if passed slippage is less than divisor_int", async () => {
@@ -1366,7 +1366,7 @@ describe.only("Tests for MixedIndex", () => {
       it("should revert unpause", async () => {
         await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
           rebalancing,
-          "TenMinutesPassOrRebalancingHasToBeCalled",
+          "FifteenMinutesNotExcedeed",
         );
       });
 

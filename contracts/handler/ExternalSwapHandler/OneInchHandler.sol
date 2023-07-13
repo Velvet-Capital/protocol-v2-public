@@ -15,8 +15,8 @@ contract OneInchHandler is Initializable, ApproveControl, ExternalSlippageContro
   using SafeERC20Upgradeable for IERC20Upgradeable;
   using SafeMathUpgradeable for uint;
 
-  IPriceOracle public oracle;
-  address public swapTarget;
+  IPriceOracle internal oracle;
+  address internal swapTarget;
 
   function init(address _swapTarget, address _oracle) external initializer {
     swapTarget = _swapTarget;

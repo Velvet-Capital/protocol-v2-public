@@ -815,7 +815,7 @@ describe.only("Tests for MixedIndex", () => {
       it("should revert unpause", async () => {
         await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
           rebalancing,
-          "TenMinutesPassOrRebalancingHasToBeCalled",
+          "FifteenMinutesNotExcedeed",
         );
       });
 

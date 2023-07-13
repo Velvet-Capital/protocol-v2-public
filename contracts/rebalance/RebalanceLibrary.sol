@@ -333,33 +333,6 @@ library RebalanceLibrary {
     return (_amount[1], 0);
   }
 
-  function _swap(
-    address[] memory sellTokens,
-    address offChainHandler,
-    bytes[] calldata swapData,
-    uint256 _index,
-    address WETH,
-    address _contract
-  ) external returns (uint256) {
-    for (uint256 i = 0; i < sellTokens.length; i++) {
-      address _token = sellTokens[i];
-      if (_token != address(0) && _token != WETH) {
-        uint256 _balance = IERC20Upgradeable(_token).balanceOf(_contract);
-        IndexSwapLibrary._transferAndSwapUsingOffChainHandler(
-          _token,
-          WETH,
-          _balance,
-          _contract,
-          swapData[_index],
-          offChainHandler,
-          0
-        );
-        _index++;
-      }
-    }
-    return _index;
-  }
-
   /**
    * @notice This function transfers the tokens to the offChain handler and makes the external swap possible
    */

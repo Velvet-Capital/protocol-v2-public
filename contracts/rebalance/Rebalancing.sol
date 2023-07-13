@@ -38,15 +38,15 @@ import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 
 contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
-  IIndexSwap public index;
-  AccessController public accessController;
-  ITokenRegistry public tokenRegistry;
-  IAssetManagerConfig public assetManagerConfig;
-  IExchange public exchange;
+  IIndexSwap internal index;
+  AccessController internal accessController;
+  ITokenRegistry internal tokenRegistry;
+  IAssetManagerConfig internal assetManagerConfig;
+  IExchange internal exchange;
 
   using SafeMathUpgradeable for uint256;
 
-  IPriceOracle public oracle;
+  IPriceOracle internal oracle;
 
   event UpdatedWeights(uint256 time, uint96[] indexed newDenorms);
   event UpdatedTokens(uint256 time, address[] indexed newTokens, uint96[] indexed newDenorms);
@@ -97,7 +97,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
         _setPaused(_state);
       } else {
         if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
-          revert ErrorLibrary.TenMinutesPassOrRebalancingHasToBeCalled();
+          revert ErrorLibrary.FifteenMinutesNotExcedeed();
         }
         _setPaused(_state);
       }
@@ -193,7 +193,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
     (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(index), tokens);
 
-    uint256 contractBalanceInUSD = oracle.getUsdEthPrice(address(this).balance);
+    uint256 contractBalanceInUSD = oracle.getEthUsdPrice(address(this).balance);
     vaultBalance = vaultBalance.add(contractBalanceInUSD);
 
     for (uint256 i = 0; i < tokens.length; i++) {

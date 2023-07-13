@@ -39,6 +39,7 @@ import { copyFileSync, link } from "fs";
 import { MerkleTree } from "merkletreejs";
 import { equal } from "assert";
 import { TransformStreamDefaultController } from "stream/web";
+import exp from "constants";
 
 var chai = require("chai");
 //use default BigNumber
@@ -167,7 +168,7 @@ describe.only("Tests for IndexFactory", () => {
           IndexSwapLibrary: indexSwapLibrary.address,
         },
       });
-      const rebalanceLibrary = await RebalanceLibrary.deploy();
+      rebalanceLibrary = await RebalanceLibrary.deploy();
       await rebalanceLibrary.deployed();
 
       const OffChainRebalance = await ethers.getContractFactory("OffChainRebalance", {
@@ -826,6 +827,35 @@ describe.only("Tests for IndexFactory", () => {
         expect(Number(res._protocolFee)).to.be.equal(Number(0));
         expect(Number(res._managementFee)).to.be.equal(Number(0));
         expect(Number(res._performanceFee)).to.be.equal(Number(0));
+      });
+
+      it("expect owner to be IndexFactory", async () =>{
+        const OffChainIndex = await ethers.getContractFactory("OffChainIndexSwap", {
+          libraries: {
+            IndexSwapLibrary: indexSwapLibrary.address,
+          },
+        });
+        const OffChainRebalance = await ethers.getContractFactory("OffChainRebalance", {
+          libraries: {
+            RebalanceLibrary: rebalanceLibrary.address,
+            IndexSwapLibrary: indexSwapLibrary.address,
+          },
+        });
+        const RebalanceAggregator = await ethers.getContractFactory("RebalanceAggregator", {
+          libraries: {
+            RebalanceLibrary: rebalanceLibrary.address,
+          },
+        });
+        const offChainRebalance = await OffChainRebalance.attach(indexInfo.offChainRebalancing);
+        const rebalanceAggregator = await RebalanceAggregator.attach(indexInfo.metaAggregator);
+        const offChainIndex = await OffChainIndex.attach(indexInfo.offChainIndexSwap)
+
+        expect(await offChainIndex.owner()).to.be.equal(indexFactory.address);
+        expect(await indexSwap.owner()).to.be.equal(indexFactory.address);
+        expect(await rebalancing.owner()).to.be.equal(indexFactory.address);
+        expect(await feeModule0.owner()).to.be.equal(indexFactory.address);
+        expect(await offChainRebalance.owner()).to.be.equal(indexFactory.address);
+        expect(await rebalanceAggregator.owner()).to.be.equal(indexFactory.address);
       });
 
       it("Invest 0.1BNB into Top10 fund", async () => {
@@ -1656,6 +1686,23 @@ describe.only("Tests for IndexFactory", () => {
         });
       });
 
+      it("print values", async () => {
+        const vault = await indexSwap.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const bal1 = await ERC20.attach(iaddress.ethAddress).balanceOf(vault);
+        const bal2 = await ERC20.attach(iaddress.btcAddress).balanceOf(vault);
+        const bal3 = await ERC20.attach(iaddress.wbnbAddress).balanceOf(vault);
+
+        const bal1USD = await priceOracle.getPriceTokenUSD18Decimals(iaddress.ethAddress, bal1);
+        const bal2USD = await priceOracle.getPriceTokenUSD18Decimals(iaddress.btcAddress, bal2);
+        const bal3USD = await priceOracle.getPriceTokenUSD18Decimals(iaddress.wbnbAddress, bal3);
+
+        const total = Number(bal1USD) + Number(bal2USD) + Number(bal3USD);
+        console.log("percent 1", Number(bal1USD) / Number(total));
+        console.log("percent 2", Number(bal2USD) / Number(total));
+        console.log("percent 3", Number(bal3USD) / Number(total));
+      });
+
       it("should update tokens", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await rebalancing.updateTokens({
@@ -1697,7 +1744,7 @@ describe.only("Tests for IndexFactory", () => {
       it("should revert unpause", async () => {
         await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
           rebalancing,
-          "TenMinutesPassOrRebalancingHasToBeCalled",
+          "FifteenMinutesNotExcedeed",
         );
       });
 

@@ -32,14 +32,14 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
   address internal WETH;
 
   // Total denormalized weight of the pool.
-  uint256 public constant TOTAL_WEIGHT = 10_000;
+  uint256 internal constant TOTAL_WEIGHT = 10_000;
 
-  ITokenRegistry public tokenRegistry;
-  IExchange public exchange;
-  IFeeModule public feeModule;
-  IAssetManagerConfig public iAssetManagerConfig;
-  IPriceOracle public oracle;
-  IIndexSwap public index;
+  ITokenRegistry internal tokenRegistry;
+  IExchange internal exchange;
+  IFeeModule internal feeModule;
+  IAssetManagerConfig internal iAssetManagerConfig;
+  IPriceOracle internal oracle;
+  IIndexSwap internal index;
   struct UserData {
     bool userRedeemedStatus;
     address withdrawToken;
@@ -502,7 +502,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @dev Emits a MultipleTokenWithdrawalTriggered event upon successful withdrawal.
    * @dev Removes the user's redeemed status and withdrawal token from storage.
    */
-  function triggerMultipleTokenWithdrawal() external {
+  function triggerMultipleTokenWithdrawal() external nonReentrant{
     // Check if the user has redeemed their tokens
     if (userWithdrawData[msg.sender].userRedeemedStatus != true) {
       revert ErrorLibrary.TokensNotRedeemed();

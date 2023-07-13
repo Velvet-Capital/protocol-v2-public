@@ -41,12 +41,12 @@ import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   using SafeMathUpgradeable for uint256;
 
-  IPriceOracle public _oracle;
+  IPriceOracle internal _oracle;
 
-  address public constant routerAddress = 0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7;
-  RouterInterface public router = RouterInterface(routerAddress);
-  uint256 public constant DIVISOR_INT = 10_000;
-  address public constant MASTER_CHEF = 0x5c8D727b265DBAfaba67E050f2f739cAeEB4A6F9;
+  address internal constant routerAddress = 0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7;
+  RouterInterface internal router = RouterInterface(routerAddress);
+  uint256 internal constant DIVISOR_INT = 10_000;
+  address internal constant MASTER_CHEF = 0x5c8D727b265DBAfaba67E050f2f739cAeEB4A6F9;
 
   mapping(address => uint256) pid;
 

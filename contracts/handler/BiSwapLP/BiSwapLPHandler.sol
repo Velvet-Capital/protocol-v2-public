@@ -39,14 +39,14 @@ import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   using SafeMathUpgradeable for uint256;
 
-  IPriceOracle public _oracle;
+  IPriceOracle internal _oracle;
 
-  address public constant routerAddress = 0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8;
-  RouterInterface public router = RouterInterface(routerAddress);
-  uint256 public constant DIVISOR_INT = 10_000;
+  address internal constant routerAddress = 0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8;
+  RouterInterface internal router = RouterInterface(routerAddress);
+  uint256 internal constant DIVISOR_INT = 10_000;
 
-  address public constant SWAP_FEE_REWARD = 0x04eFD76283A70334C72BB4015e90D034B9F3d245;
-  address public constant MASTER_CHEF = 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739;
+  address internal constant SWAP_FEE_REWARD = 0x04eFD76283A70334C72BB4015e90D034B9F3d245;
+  address internal constant MASTER_CHEF = 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
