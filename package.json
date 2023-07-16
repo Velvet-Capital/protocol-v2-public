@@ -46,7 +46,7 @@
     "@types/node": "^17.0.10",
     "chai": "^4.3.4",
     "dotenv": "^10.0.0",
-    "ethereum-waffle": "^3.4.0",
+    "ethereum-waffle": "^4.0.10",
     "ethers": "^5.6.9",
     "hardhat": "^2.11",
     "hardhat-abi-exporter": "^2.2.1",
