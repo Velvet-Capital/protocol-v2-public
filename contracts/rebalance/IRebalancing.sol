@@ -47,6 +47,15 @@ interface IRebalancing {
     uint256[] calldata _slippageBuy
   ) external;
 
+  function swapRewardToken(
+    address rewardToken,
+    address swapHandler,
+    address buyToken,
+    uint256 amount,
+    uint256 slippage,
+    uint256 _lpSlippage
+  ) external;
+
   function updateTreasury(address _newAddress) external;
 
   function getCurrentWeights() external returns (uint256[] memory);

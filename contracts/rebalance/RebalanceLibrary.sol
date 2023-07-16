@@ -245,7 +245,7 @@ library RebalanceLibrary {
   /**
    * @notice This function gets the underlying balances of the input token
    */
-  function checkUnderlyingBalances(
+  function getUnderlyingBalances(
     address _token,
     IHandler _handler,
     address _contract
@@ -258,16 +258,9 @@ library RebalanceLibrary {
     return balances;
   }
 
-  /**
-   * @notice This function gets the underlying balance of a specific underyling token
-   */
-  function checkUnderlyingBalance(address _token, address _contract) external view returns (uint256) {
-    return IERC20Upgradeable(_token).balanceOf(_contract);
-  }
-
   function checkPrimary(IIndexSwap index, address[] calldata tokens) external view {
     for (uint i = 0; i < tokens.length; i++) {
-      if (ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary == false) {
+      if (!ITokenRegistry(index.tokenRegistry()).getTokenInformation(tokens[i]).primary) {
         revert ErrorLibrary.NotPrimaryToken();
       }
     }
@@ -277,10 +270,10 @@ library RebalanceLibrary {
     if (!(index.paused())) {
       revert ErrorLibrary.ContractNotPaused();
     }
-    if (index.getRedeemed() != true) {
+    if (!index.getRedeemed()) {
       revert ErrorLibrary.TokensStaked();
     }
-    if (tokenRegistry.getProtocolState() == true) {
+    if (tokenRegistry.getProtocolState()) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
   }
@@ -289,7 +282,7 @@ library RebalanceLibrary {
     if (!(tokenRegistry.isExternalSwapHandler(handler))) {
       revert ErrorLibrary.OffHandlerNotValid();
     }
-    if (index.getRedeemed() != true) {
+    if (!index.getRedeemed()) {
       revert ErrorLibrary.TokensStaked();
     }
   }
@@ -315,7 +308,7 @@ library RebalanceLibrary {
     if (!(index.paused())) {
       revert ErrorLibrary.ContractNotPaused();
     }
-    if (index.getRedeemed() != true) {
+    if (!index.getRedeemed()) {
       revert ErrorLibrary.TokensStaked();
     }
   }
@@ -331,33 +324,6 @@ library RebalanceLibrary {
     }
     IWETH(_eth).withdraw(_amount[1]);
     return (_amount[1], 0);
-  }
-
-  function _swap(
-    address[] memory sellTokens,
-    address offChainHandler,
-    bytes[] calldata swapData,
-    uint256 _index,
-    address WETH,
-    address _contract
-  ) external returns (uint256) {
-    for (uint256 i = 0; i < sellTokens.length; i++) {
-      address _token = sellTokens[i];
-      if (_token != address(0) && _token != WETH) {
-        uint256 _balance = IERC20Upgradeable(_token).balanceOf(_contract);
-        IndexSwapLibrary._transferAndSwapUsingOffChainHandler(
-          _token,
-          WETH,
-          _balance,
-          _contract,
-          swapData[_index],
-          offChainHandler,
-          0
-        );
-        _index++;
-      }
-    }
-    return _index;
   }
 
   /**
@@ -377,7 +343,7 @@ library RebalanceLibrary {
   }
 
   function validateEnableRebalance(IIndexSwap _index, ITokenRegistry _registry) external {
-    if (_registry.getProtocolState() == true) {
+    if (_registry.getProtocolState()) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
     if (_index.paused()) {

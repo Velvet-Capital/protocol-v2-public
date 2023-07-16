@@ -51,12 +51,14 @@ contract PancakeSwapHandler is Initializable {
     uint256 _swapAmount,
     uint256 _slippage,
     address _t,
-    address _to
+    address _to,
+    bool isEnabled
   ) public returns (uint256 swapResult) {
     TransferHelper.safeApprove(_t, address(pancakeSwapRouter), _swapAmount);
+    uint256 internalSlippage = isEnabled ? getSlippage(_swapAmount, _slippage, getPathForToken(_t)) : 1;
     swapResult = pancakeSwapRouter.swapExactTokensForETH(
       _swapAmount,
-      getSlippage(_swapAmount, _slippage, getPathForToken(_t)),
+      internalSlippage,
       getPathForToken(_t),
       _to,
       block.timestamp
@@ -68,16 +70,27 @@ contract PancakeSwapHandler is Initializable {
     uint256 _slippage,
     address _tokenIn,
     address _tokenOut,
-    address _to
+    address _to,
+    bool isEnabled
   ) public returns (uint256 swapResult) {
     TransferHelper.safeApprove(_tokenIn, address(pancakeSwapRouter), _swapAmount);
-    swapResult = pancakeSwapRouter.swapExactTokensForTokens(
-      _swapAmount,
-      getSlippage(_swapAmount, _slippage, getPathForMultiToken(_tokenIn, _tokenOut)),
-      getPathForMultiToken(_tokenIn, _tokenOut),
-      _to,
-      block.timestamp
-    )[1];
+    if (isEnabled) {
+      swapResult = pancakeSwapRouter.swapExactTokensForTokens(
+        _swapAmount,
+        getSlippage(_swapAmount, _slippage, getPathForMultiToken(_tokenIn, _tokenOut)),
+        getPathForMultiToken(_tokenIn, _tokenOut),
+        _to,
+        block.timestamp
+      )[1];
+    } else {
+      swapResult = pancakeSwapRouter.swapExactTokensForTokens(
+        _swapAmount,
+        1,
+        getPathForRewardToken(_tokenIn, _tokenOut),
+        _to,
+        block.timestamp
+      )[2];
+    }
   }
 
   function swapETHToTokens(uint256 _slippage, address _t, address _to) public payable returns (uint256 swapResult) {
@@ -121,6 +134,19 @@ contract PancakeSwapHandler is Initializable {
     address[] memory path = new address[](2);
     path[0] = _tokenIn;
     path[1] = _tokenOut;
+
+    return path;
+  }
+
+  /**
+   * @notice The function sets the path (token, token) for a token
+   * @return Path for (token, token)
+   */
+  function getPathForRewardToken(address _tokenIn, address _tokenOut) public view returns (address[] memory) {
+    address[] memory path = new address[](3);
+    path[0] = _tokenIn;
+    path[1] = getETH();
+    path[2] = _tokenOut;
 
     return path;
   }

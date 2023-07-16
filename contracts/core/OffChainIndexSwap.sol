@@ -32,19 +32,20 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
   address internal WETH;
 
   // Total denormalized weight of the pool.
-  uint256 public constant TOTAL_WEIGHT = 10_000;
+  uint256 internal constant TOTAL_WEIGHT = 10_000;
 
-  ITokenRegistry public tokenRegistry;
-  IExchange public exchange;
-  IFeeModule public feeModule;
-  IAssetManagerConfig public iAssetManagerConfig;
-  IPriceOracle public oracle;
-  IIndexSwap public index;
+  ITokenRegistry internal tokenRegistry;
+  IExchange internal exchange;
+  IFeeModule internal feeModule;
+  IAssetManagerConfig internal iAssetManagerConfig;
+  IPriceOracle internal oracle;
+  IIndexSwap internal index;
   struct UserData {
     bool userRedeemedStatus;
     address withdrawToken;
     uint256 tokenAmount;
     bytes userRedeemedTokens;
+    uint256 sellTokenLength;
   }
   mapping(address => UserData) public userWithdrawData;
   //using this mapping to user, users swapData in byte format
@@ -137,7 +138,10 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     // Get the index operations contract
 
     // Check if the investment is made with ETH
-    if (msg.value > 0 && WETH == _initData.sellTokenAddress) {
+    if (msg.value > 0) {
+      if (!(WETH == _initData.sellTokenAddress)) {
+        revert ErrorLibrary.InvalidToken();
+      }
       _tokenAmount = msg.value;
       IndexSwapLibrary._checkInvestmentValue(_tokenAmount, iAssetManagerConfig);
 
@@ -265,27 +269,27 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @notice The function is used withdrawaing - pulling from vault and redeeming the tokens of user for withdrawal
    */
   function redeemTokens(ExchangeData.RedeemData memory inputdata) external virtual nonReentrant notPaused {
-    address user = msg.sender;
-
+    // address user = msg.sender;
     (uint256 totalSupplyIndex, uint256 _fee) = _beforeCheckAndChargeFees(
       inputdata.tokenAmount,
       inputdata.token,
-      user,
-      userWithdrawData[user].userRedeemedStatus
+      msg.sender,
+      userWithdrawData[msg.sender].userRedeemedStatus
     );
     address[] memory _tokens = index.getTokens();
     uint256 _tokenAmount = inputdata.tokenAmount.sub(_fee);
+    uint256 sellTokenLength;
     for (uint256 i = 0; i < _tokens.length; i++) {
-      delete tokenAmounts[user][_tokens[i]];
+      delete tokenAmounts[msg.sender][_tokens[i]];
       uint256 amount = _getTokenAmount(_tokenAmount, totalSupplyIndex, _tokens[i]);
       if (_tokens[i] == inputdata.token && inputdata.token == WETH) {
         _pullAndWithdraw(inputdata.token, amount);
       } else if (_tokens[i] == inputdata.token) {
-        IndexSwapLibrary.pullFromVault(exchange, inputdata.token, amount, user);
+        IndexSwapLibrary.pullFromVault(exchange, inputdata.token, amount, msg.sender);
       } else {
         IHandler handler = IHandler(tokenRegistry.getTokenInformation(_tokens[i]).handler);
         address[] memory underlying = handler.getUnderlying(_tokens[i]);
-        uint256[] memory balanceBefore = IndexSwapLibrary.checkUnderlyingBalances(_tokens[i], handler, address(this));
+        uint256[] memory balanceBefore = IndexSwapLibrary.getUnderlyingBalances(_tokens[i], handler, address(this));
         IndexSwapLibrary._pullAndRedeem(
           exchange,
           _tokens[i],
@@ -295,28 +299,31 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
           tokenRegistry.getTokenInformation(_tokens[i]).primary,
           handler
         );
-        user = msg.sender;
         for (uint256 j = 0; j < underlying.length; j++) {
           address _underlying = underlying[j];
           if (_underlying == WETH) {
             IWETH(_underlying).deposit{value: address(this).balance}();
           }
-          uint256 _balanceBefore = balanceBefore[j];
           uint256 _balanceAfter = IERC20Upgradeable(_underlying).balanceOf(address(this));
-          tokenAmounts[user][_tokens[i]].push(_balanceAfter.sub(_balanceBefore));
-          userUnderlyingAmounts[msg.sender][_underlying] = userUnderlyingAmounts[msg.sender][_underlying]
-            .add(_balanceAfter)
-            .sub(_balanceBefore);
+          uint256 _underlyingDifference = _balanceAfter.sub(balanceBefore[j]);
+          if(_underlyingDifference <= 0){
+            revert ErrorLibrary.ZeroTokenAmount();
+          }
+          tokenAmounts[msg.sender][_tokens[i]].push(_underlyingDifference);
+          uint256 userAmount = userUnderlyingAmounts[msg.sender][_underlying];
+          sellTokenLength = userAmount > 0 ? sellTokenLength : sellTokenLength.add(1);
+          userUnderlyingAmounts[msg.sender][_underlying] = userAmount.add(_underlyingDifference);
         }
       }
     }
-    userWithdrawData[user].withdrawToken = inputdata.token;
-    userWithdrawData[user].userRedeemedStatus = true;
-    userWithdrawData[user].tokenAmount = _tokenAmount;
-    userWithdrawData[user].userRedeemedTokens = abi.encode(_tokens);
+    userWithdrawData[msg.sender].withdrawToken = inputdata.token;
+    userWithdrawData[msg.sender].userRedeemedStatus = true;
+    userWithdrawData[msg.sender].tokenAmount = _tokenAmount;
+    userWithdrawData[msg.sender].userRedeemedTokens = abi.encode(_tokens);
+    userWithdrawData[msg.sender].sellTokenLength = sellTokenLength;
 
     emit UserTokenRedeemed(
-      user,
+      msg.sender,
       inputdata.tokenAmount,
       IndexSwapLibrary.getIndexTokenRate(index),
       address(index),
@@ -354,9 +361,18 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     uint256 balanceBefore = IERC20Upgradeable(withdrawToken).balanceOf(address(this));
     uint256 balanceAfter = 0;
+    uint256 tokenLength = inputData.sellTokenAddress.length;
+    if (
+      userWithdrawData[user].sellTokenLength != tokenLength ||
+      tokenLength != inputData.sellAmount.length ||
+      tokenLength != inputData.buySwapData.length ||
+      tokenLength != inputData.protocolFee.length
+    ) {
+      revert ErrorLibrary.InvalidLength();
+    }
 
     // Iterate through the sell tokens and perform the withdrawal
-    for (uint256 i = 0; i < inputData.sellTokenAddress.length; i++) {
+    for (uint256 i = 0; i < tokenLength; i++) {
       if (inputData.sellTokenAddress[i] != withdrawToken) {
         // Perform the withdrawal for non-withdrawal tokens
         _withdraw(
@@ -502,9 +518,9 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @dev Emits a MultipleTokenWithdrawalTriggered event upon successful withdrawal.
    * @dev Removes the user's redeemed status and withdrawal token from storage.
    */
-  function triggerMultipleTokenWithdrawal() external {
+  function triggerMultipleTokenWithdrawal() external nonReentrant {
     // Check if the user has redeemed their tokens
-    if (userWithdrawData[msg.sender].userRedeemedStatus != true) {
+    if (!userWithdrawData[msg.sender].userRedeemedStatus) {
       revert ErrorLibrary.TokensNotRedeemed();
     }
 

@@ -39,6 +39,7 @@ import { copyFileSync, link } from "fs";
 import { MerkleTree } from "merkletreejs";
 import { equal } from "assert";
 import { TransformStreamDefaultController } from "stream/web";
+import exp from "constants";
 
 var chai = require("chai");
 //use default BigNumber
@@ -167,7 +168,7 @@ describe.only("Tests for IndexFactory", () => {
           IndexSwapLibrary: indexSwapLibrary.address,
         },
       });
-      const rebalanceLibrary = await RebalanceLibrary.deploy();
+      rebalanceLibrary = await RebalanceLibrary.deploy();
       await rebalanceLibrary.deployed();
 
       const OffChainRebalance = await ethers.getContractFactory("OffChainRebalance", {
@@ -828,6 +829,35 @@ describe.only("Tests for IndexFactory", () => {
         expect(Number(res._performanceFee)).to.be.equal(Number(0));
       });
 
+      it("expect owner to be IndexFactory", async () => {
+        const OffChainIndex = await ethers.getContractFactory("OffChainIndexSwap", {
+          libraries: {
+            IndexSwapLibrary: indexSwapLibrary.address,
+          },
+        });
+        const OffChainRebalance = await ethers.getContractFactory("OffChainRebalance", {
+          libraries: {
+            RebalanceLibrary: rebalanceLibrary.address,
+            IndexSwapLibrary: indexSwapLibrary.address,
+          },
+        });
+        const RebalanceAggregator = await ethers.getContractFactory("RebalanceAggregator", {
+          libraries: {
+            RebalanceLibrary: rebalanceLibrary.address,
+          },
+        });
+        const offChainRebalance = await OffChainRebalance.attach(indexInfo.offChainRebalancing);
+        const rebalanceAggregator = await RebalanceAggregator.attach(indexInfo.metaAggregator);
+        const offChainIndex = await OffChainIndex.attach(indexInfo.offChainIndexSwap);
+
+        expect(await offChainIndex.owner()).to.be.equal(indexFactory.address);
+        expect(await indexSwap.owner()).to.be.equal(indexFactory.address);
+        expect(await rebalancing.owner()).to.be.equal(indexFactory.address);
+        expect(await feeModule0.owner()).to.be.equal(indexFactory.address);
+        expect(await offChainRebalance.owner()).to.be.equal(indexFactory.address);
+        expect(await rebalanceAggregator.owner()).to.be.equal(indexFactory.address);
+      });
+
       it("Invest 0.1BNB into Top10 fund", async () => {
         const VBep20Interface = await ethers.getContractAt(
           "VBep20Interface",
@@ -984,6 +1014,32 @@ describe.only("Tests for IndexFactory", () => {
             value: "2000000000000000000",
           },
         );
+        const indexSupplyAfter = await indexSwap3.totalSupply();
+        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
+        console.log(indexSupplyAfter);
+
+        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
+      });
+
+      it("Invest 2BNB into Top10 4th index fund should revert if bnb value is greater than 0 and investment token is not bnb", async () => {
+        const indexSupplyBefore = await indexSwap3.totalSupply();
+        // console.log("2bnb before", indexSupplyBefore);
+        await expect(
+          indexSwap3.investInFund(
+            {
+              _slippage: ["100", "100"],
+              _lpSlippage: ["200", "200"],
+              _to: owner.address,
+              _tokenAmount: "2000000000000000000",
+              _swapHandler: swapHandler.address,
+              _token: iaddress.busdAddress,
+            },
+            {
+              value: "2000000000000000000",
+            },
+          ),
+        ).to.be.revertedWithCustomError(indexSwap, "InvalidToken");
         const indexSupplyAfter = await indexSwap3.totalSupply();
         // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
@@ -1656,6 +1712,23 @@ describe.only("Tests for IndexFactory", () => {
         });
       });
 
+      it("print values", async () => {
+        const vault = await indexSwap.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const bal1 = await ERC20.attach(iaddress.ethAddress).balanceOf(vault);
+        const bal2 = await ERC20.attach(iaddress.btcAddress).balanceOf(vault);
+        const bal3 = await ERC20.attach(iaddress.wbnbAddress).balanceOf(vault);
+
+        const bal1USD = await priceOracle.getPriceTokenUSD18Decimals(iaddress.ethAddress, bal1);
+        const bal2USD = await priceOracle.getPriceTokenUSD18Decimals(iaddress.btcAddress, bal2);
+        const bal3USD = await priceOracle.getPriceTokenUSD18Decimals(iaddress.wbnbAddress, bal3);
+
+        const total = Number(bal1USD) + Number(bal2USD) + Number(bal3USD);
+        console.log("percent 1", Number(bal1USD) / Number(total));
+        console.log("percent 2", Number(bal2USD) / Number(total));
+        console.log("percent 3", Number(bal3USD) / Number(total));
+      });
+
       it("should update tokens", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await rebalancing.updateTokens({
@@ -1697,7 +1770,7 @@ describe.only("Tests for IndexFactory", () => {
       it("should revert unpause", async () => {
         await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
           rebalancing,
-          "TenMinutesPassOrRebalancingHasToBeCalled",
+          "FifteenMinutesNotExcedeed",
         );
       });
 

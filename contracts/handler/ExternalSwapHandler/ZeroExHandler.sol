@@ -14,8 +14,8 @@ import {ExternalSlippageControl} from "../ExternalSlippageControl.sol";
 contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl {
   using SafeERC20Upgradeable for IERC20Upgradeable;
   using SafeMathUpgradeable for uint;
-  address public swapTarget;
-  IPriceOracle public oracle;
+  address internal swapTarget;
+  IPriceOracle internal oracle;
 
   function init(address _swapTarget, address _oracle) external initializer {
     swapTarget = _swapTarget;

@@ -35,10 +35,10 @@ import {FunctionParameters} from "contracts/FunctionParameters.sol";
 contract WombatHandler is IHandler, SlippageControl {
   using SafeMathUpgradeable for uint256;
 
-  address public constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
-  IWombat public MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
+  address internal constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
+  IWombat internal MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
 
-  address public constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
+  address internal constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(

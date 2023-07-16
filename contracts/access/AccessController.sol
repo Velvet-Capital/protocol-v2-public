@@ -12,7 +12,6 @@
 pragma solidity 0.8.16;
 
 import {AccessControl} from "@openzeppelin/contracts-4.8.2/access/AccessControl.sol";
-import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
 import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";

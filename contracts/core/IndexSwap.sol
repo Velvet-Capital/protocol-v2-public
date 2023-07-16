@@ -17,7 +17,7 @@ pragma solidity 0.8.16;
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IIndexSwap} from "../core/IIndexSwap.sol";
 import "../core/IndexSwapLibrary.sol";
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
@@ -34,7 +34,7 @@ import {FunctionParameters} from "../FunctionParameters.sol";
 
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
-contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
   /**
    * @dev Token record data structure
    * @param lastDenormUpdate timestamp of last denorm change
@@ -81,7 +81,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   IExchange internal _exchange;
   IAssetManagerConfig internal _iAssetManagerConfig;
   address internal WETH;
-  address public owner;
   // Total denormalized weight of the pool.
   uint256 internal constant _TOTAL_WEIGHT = 10_000;
 
@@ -125,7 +124,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   function init(FunctionParameters.IndexSwapInitData calldata initData) external initializer {
     __ERC20_init(initData._name, initData._symbol);
     __UUPSUpgradeable_init();
-    owner = msg.sender;
+    __Ownable_init();
     _vault = initData._vault;
     _module = initData._module;
     _accessController = IAccessController(initData._accessController);
@@ -171,24 +170,17 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     _;
   }
 
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
-    }
-    _;
-  }
-
   /**
    * @notice This function mints new shares to a particular address of the specific amount
    */
-  function mintShares(address _to, uint256 _amount) public virtual onlyMinter {
+  function mintShares(address _to, uint256 _amount) external virtual onlyMinter {
     _mint(_to, _amount);
   }
 
   /**
    * @notice This function burns the specific amount of shares of a particular address
    */
-  function burnShares(address _to, uint256 _amount) public virtual nonReentrant onlyMinter {
+  function burnShares(address _to, uint256 _amount) external virtual onlyMinter {
     _burn(_to, _amount);
   }
 
@@ -212,7 +204,10 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     );
     address _token = investData._token;
     uint256 _amount = investData._tokenAmount;
-    if (msg.value > 0 && WETH == _token) {
+    if (msg.value > 0) {
+      if (!(WETH == _token)) {
+        revert ErrorLibrary.InvalidToken();
+      }
       _amount = msg.value;
       IndexSwapLibrary._checkInvestmentValue(_amount, _iAssetManagerConfig);
     } else {
@@ -440,7 +435,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param _to The address to which the index tokens are minted.
    * @param _mintAmount The amount of index tokens to mint.
    */
-  function mintInvest(address _to, uint256 _mintAmount) external nonReentrant onlyMinter {
+  function mintInvest(address _to, uint256 _mintAmount) external onlyMinter {
     _mintInvest(_to, _mintAmount);
   }
 
@@ -451,7 +446,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param _mintAmount The amount of index tokens to burn.
    * @return exitFee The exit fee charged for the burn operation.
    */
-  function burnWithdraw(address _to, uint256 _mintAmount) external nonReentrant onlyMinter returns (uint256 exitFee) {
+  function burnWithdraw(address _to, uint256 _mintAmount) external onlyMinter returns (uint256 exitFee) {
     exitFee = _burnWithdraw(_to, _mintAmount);
   }
 
@@ -480,7 +475,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will pause the InvestInFund() and Withdrawal() called by the rebalancing contract.
     @param _state The state is bool value which needs to input by the Index Manager.
   */
-  function setPaused(bool _state) external virtual nonReentrant onlyRebalancerContract {
+  function setPaused(bool _state) external virtual onlyRebalancerContract {
     _setPaused(_state);
   }
 
@@ -493,7 +488,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will set lastRebalanced time called by the rebalancing contract.
     @param _time The time is block.timestamp, the moment when rebalance is done
   */
-  function setLastRebalance(uint256 _time) external virtual nonReentrant onlyRebalancerContract {
+  function setLastRebalance(uint256 _time) external virtual onlyRebalancerContract {
     _setLastRebalance(_time);
   }
 
@@ -505,7 +500,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will update the redeemed value
     @param _state The state is bool value which needs to input by the Index Manager.
   */
-  function setRedeemed(bool _state) external virtual nonReentrant onlyRebalancerContract {
+  function setRedeemed(bool _state) external virtual onlyRebalancerContract {
     _setRedeemed(_state);
   }
 
@@ -519,10 +514,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param tokens The updated token list of the portfolio
    * @param denorms The new weights for for the portfolio
    */
-  function updateRecords(
-    address[] calldata tokens,
-    uint96[] calldata denorms
-  ) external virtual nonReentrant onlyRebalancerContract {
+  function updateRecords(address[] calldata tokens, uint96[] calldata denorms) external virtual onlyRebalancerContract {
     uint256 totalWeight = 0;
     for (uint256 i = 0; i < tokens.length; i++) {
       uint96 _denorm = denorms[i];
@@ -683,7 +675,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @notice Claims the token for the caller via the Exchange contract
    * @param tokens Addresses of the token for which the reward is to be claimed
    */
-  function claimTokens(address[] calldata tokens) external {
+  function claimTokens(address[] calldata tokens) external nonReentrant {
     _exchange.claimTokens(IIndexSwap(address(this)), tokens);
   }
 

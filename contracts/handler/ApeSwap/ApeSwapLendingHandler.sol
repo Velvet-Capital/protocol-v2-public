@@ -33,14 +33,14 @@ import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract ApeSwapLendingHandler is IHandler, Ownable {
-  address public constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
-  address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-  address public constant RAIN_MAKER = 0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa;
+  address internal constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
+  address internal constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+  address internal constant RAIN_MAKER = 0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa;
 
   event Velvet_ApeSwap_Mint(address _cAsset, uint256 _amount, address _to);
   event Velvet_ApeSwap_Redeem(address _cAsset, uint256 _amount, address _to, bool isWETH);
 
-  mapping(address => uint256) public pid;
+  mapping(address => uint256) internal pid;
 
   /**
    * @notice This function deposits assets to the ApeSwap protocol

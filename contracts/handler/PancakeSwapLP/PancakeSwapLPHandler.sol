@@ -38,16 +38,16 @@ import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   using SafeMathUpgradeable for uint256;
 
-  IPriceOracle public _oracle;
+  IPriceOracle internal _oracle;
 
-  mapping(address => uint256) public pid;
+  mapping(address => uint256) internal pid;
 
-  address public constant routerAddress = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
-  address public constant masterChefAddress = 0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652;
-  RouterInterface public router = RouterInterface(routerAddress);
-  IMasterChef public chefRouter = IMasterChef(masterChefAddress);
-  uint256 public constant divisor_int = 10_000;
-  address public constant MAIN_STAKING = 0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652;
+  address internal constant routerAddress = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+  address internal constant masterChefAddress = 0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652;
+  RouterInterface internal router = RouterInterface(routerAddress);
+  IMasterChef internal chefRouter = IMasterChef(masterChefAddress);
+  uint256 internal constant divisor_int = 10_000;
+  address internal constant MAIN_STAKING = 0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(

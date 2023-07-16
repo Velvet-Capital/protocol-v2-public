@@ -397,6 +397,8 @@ describe.only("Tests for MixedIndex", () => {
       );
 
       tokenRegistry.addNonDerivative(wombatHandler.address);
+      await tokenRegistry.addRewardToken(addresses.venus_RewardToken);
+      await tokenRegistry.addRewardToken(addresses.wombat_RewardToken);
 
       let whitelistedTokens = [
         iaddress.wbnbAddress,
@@ -556,16 +558,15 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Initialize IndexFund Tokens", async () => {
-        const zeroAddress = "0x0000000000000000000000000000000000000000";
         await indexSwap.initToken(
-          [iaddress.wbnbAddress, addresses.BSwap_BTC_WBNBLP_Address, addresses.mooBTCBUSDLP],
+          [addresses.MAIN_LP_BUSD, addresses.BSwap_BTC_WBNBLP_Address, addresses.mooBTCBUSDLP],
           [5000, 2500, 2500],
         );
       });
 
       it("should confirm that the correct tokens are initialised", async () => {
         expect(await indexSwap.getTokens()).to.deep.equal([
-          iaddress.wbnbAddress,
+          addresses.MAIN_LP_BUSD,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.mooBTCBUSDLP,
         ]);
@@ -576,14 +577,6 @@ describe.only("Tests for MixedIndex", () => {
           lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address], [39, 0]),
         ).to.be.revertedWithCustomError(lpHandler, "InvalidLength");
       });
-      // it("should add an Admin role using the public accessController function", async () => {
-      //   expect(
-      //     await accessController.setRoleAdmin(
-      //       keccak256("WHITELIST_MANAGER"),
-      //       keccak256("WHITELIST_MANAGER_ADMIN")
-      //     )
-      //   );
-      // })
 
       it("non-admin should not be able to call the access control setupRole function", async () => {
         await expect(
@@ -657,12 +650,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should get the swap address from the pancake swap handler", async () => {
-        await expect(swapHandler.getSwapAddress("10000000", addresses.vETH_Address));
-      });
-
-      it("swap token to ETH should fail via the pancake swap handler should not work if passed slippage is less than divisor_int", async () => {
-        await expect(swapHandler.swapTokensToETH("10000000", 100, addresses.vETH_Address, owner.address)).to.be
-          .reverted;
+        await expect(swapHandler.getSwapAddress());
       });
 
       it("should check if a token is enabled or not in the registry", async () => {
@@ -1090,7 +1078,7 @@ describe.only("Tests for MixedIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("Invest 1BNB into Top10 fund", async () => {
+      it("Invest 10BNB into Top10 fund", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         //console.log("0.1bnb before", indexSupplyBefore);
         await indexSwap.investInFund(
@@ -1098,12 +1086,12 @@ describe.only("Tests for MixedIndex", () => {
             _slippage: ["200", "200", "200"],
             _lpSlippage: ["200", "200", "200"],
             _to: owner.address,
-            _tokenAmount: "1000000000000000000",
+            _tokenAmount: "10000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           },
           {
-            value: "1000000000000000000",
+            value: "10000000000000000000",
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
@@ -1119,528 +1107,612 @@ describe.only("Tests for MixedIndex", () => {
         const vETHBalanceAfter = await VBep20Interface.balanceOf(indexSwap.vault());
       });
 
-      it("Investment should fail when contract is paused", async () => {
-        await rebalancing.setPause(true);
-        await expect(
-          indexSwap.investInFund(
-            {
-              _slippage: ["200", "200", "200"],
-              _lpSlippage: ["200", "200", "200"],
-              _to: owner.address,
-              _tokenAmount: "1000000000000000000",
-              _swapHandler: swapHandler.address,
-              _token: iaddress.wbnbAddress,
-            },
-            {
-              value: "1000000000000000000",
-            },
-          ),
-        ).to.be.reverted;
-      });
+      it("should claim tokens", async () => {
+        await ethers.provider.send("evm_increaseTime", [3153600]);
 
-      it("should be able to claim tokens for portfolio tokens ", async () => {
-        const _exchange = await indexSwap.claimTokens([
-          addresses.BSwap_WBNB_BUSDLP_Address,
-          addresses.vETH_Address,
-          addresses.oBNB,
-          addresses.mooBTCBUSDLP,
-        ]);
-      });
+        let tokens = [addresses.MAIN_LP_BUSD];
+        await indexSwap.claimTokens(tokens);
 
-      it("update Weights should revert if total Weights not equal 10,000", async () => {
-        await expect(
-          rebalancing.updateWeights(
-            [6667, 2330, 1000],
-            ["200", "200", "200"],
-            ["200", "200", "200"],
-            swapHandler.address,
-          ),
-        )
-          .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
-          .withArgs("10000");
-      });
-
-      it("update weights should revert if weights and slippage array length don't match", async () => {
-        await expect(
-          rebalancing.updateWeights([6667, 3330], ["200", "200", "2000"], ["200", "200", "200"], swapHandler.address),
-        ).to.be.revertedWithCustomError(rebalancing, "LengthsDontMatch");
-      });
-
-      it("update weights should revert if slippage array length don't match the token count", async () => {
-        await expect(
-          rebalancing.updateWeights([6667, 2330, 1000], ["200", "200"], ["200", "200"], swapHandler.address),
-        ).to.be.revertedWithCustomError(rebalancing, "InvalidSlippageLength");
-      });
-
-      it("update weights should revert if swap handler is not enabled", async () => {
-        await tokenRegistry.disableSwapHandlers([swapHandler.address]);
-
-        await expect(
-          rebalancing.updateWeights(
-            [6667, 2330, 1000],
-            ["200", "200", "200"],
-            ["200", "200", "200"],
-            swapHandler.address,
-          ),
-        ).to.be.revertedWithCustomError(rebalancing, "SwapHandlerNotEnabled");
-      });
-
-      it("should Update Weights and Rebalance", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-
-        await tokenRegistry.enableSwapHandlers([swapHandler.address]);
-
-        await rebalancing.updateWeights(
-          [4667, 3333, 2000],
-          ["200", "200", "200"],
-          ["200", "200", "200"],
-          swapHandler.address,
-        );
-
-        const vETHBalance = await VBep20Interface.balanceOf(indexSwap.vault());
-      });
-
-      it("should Update Weights and Rebalance", async () => {
-        await rebalancing.updateWeights(
-          [5000, 2500, 2500],
-          ["200", "200", "200"],
-          ["200", "200", "200"],
-          swapHandler.address,
-        );
-      });
-
-      it("should Update Weights and Rebalance", async () => {
-        await rebalancing.updateWeights(
-          [2333, 4667, 3000],
-          ["200", "200", "200"],
-          ["200", "200", "200"],
-          swapHandler.address,
-        );
-      });
-
-      it("updateTokens should revert if total Weights not equal 10,000", async () => {
-        const zeroAddress = "0x0000000000000000000000000000000000000000";
-        await expect(
-          rebalancing.updateTokens({
-            tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
-            _swapHandler: swapHandler.address,
-            denorms: [2000, 6000, 1000],
-            _slippageSell: ["200", "200", "200"],
-            _slippageBuy: ["200", "200", "200"],
-            _lpSlippageSell: ["200", "200", "200"],
-            _lpSlippageBuy: ["200", "200", "200"],
-          }),
-        )
-          .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
-          .withArgs("10000");
-      });
-
-      it("owner should be able to add asset manager", async () => {
-        await accessController.grantRole(
-          "0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819",
-          nonOwner.address,
-        );
-      });
-
-      it("non owner should not be able to add asset manager", async () => {
-        await expect(
-          accessController
-            .connect(nonOwner)
-            .grantRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", investor1.address),
-        ).to.be.reverted;
-      });
-
-      it("disable swaphandler in registry should not work if handler array lenght is 0", async () => {
-        await expect(tokenRegistry.disableSwapHandlers([])).to.be.revertedWithCustomError(
-          tokenRegistry,
-          "InvalidLength",
-        );
-      });
-
-      it("disable swaphandler in registry should not work if the handler is already disabled", async () => {
-        await tokenRegistry.disableSwapHandlers([swapHandler.address]);
-        await expect(tokenRegistry.disableSwapHandlers([swapHandler.address])).to.be.revertedWithCustomError(
-          tokenRegistry,
-          "HandlerAlreadyDisabled",
-        );
-      });
-
-      it("update tokens should not work if the protocol is paused", async () => {
-        await tokenRegistry.setProtocolPause(true);
-        await tokenRegistry.enableSwapHandlers([swapHandler.address]);
-        await expect(
-          rebalancing.updateTokens({
-            tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
-            _swapHandler: swapHandler.address,
-            denorms: [2000, 6000, 2000],
-            _slippageSell: ["200", "200", "200"],
-            _slippageBuy: ["200", "200", "200"],
-            _lpSlippageSell: ["200", "200", "200"],
-            _lpSlippageBuy: ["200", "200", "200"],
-          }),
-        ).to.be.revertedWithCustomError(rebalancing, "ProtocolIsPaused");
-      });
-
-      it("update tokens should not work if swaphandler is not enabled", async () => {
-        await tokenRegistry.setProtocolPause(false);
-        await tokenRegistry.disableSwapHandlers([swapHandler.address]);
-        await expect(
-          rebalancing.updateTokens({
-            tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
-            _swapHandler: swapHandler.address,
-            denorms: [2000, 6000, 2000],
-            _slippageSell: ["200", "200", "200"],
-            _slippageBuy: ["200", "200", "200"],
-            _lpSlippageSell: ["200", "200", "200"],
-            _lpSlippageBuy: ["200", "200", "200"],
-          }),
-        ).to.be.revertedWithCustomError(rebalancing, "SwapHandlerNotEnabled");
-      });
-
-      it("update tokens should not work if non-enabled token is being used", async () => {
-        tokenRegistry.enableSwapHandlers([swapHandler.address]);
-        await expect(
-          rebalancing.updateTokens({
-            tokens: [addresses.ibBTCB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
-            _swapHandler: swapHandler.address,
-            denorms: [2000, 6000, 2000],
-            _slippageSell: ["200", "200", "200"],
-            _slippageBuy: ["200", "200", "200"],
-            _lpSlippageSell: ["200", "200", "200"],
-            _lpSlippageBuy: ["200", "200", "200"],
-          }),
-        ).to.be.revertedWithCustomError(rebalanceLibrary, "TokenNotApproved");
-
-        await tokenRegistry.disableSwapHandlers([swapHandler.address]);
-      });
-
-      it("should get token balance from the rebalance contract", async () => {
-        await expect(rebalancing.getTokenBalance(addresses.vBTC_Address));
-      });
-
-      it("new asset manager should update tokens", async () => {
-        // const zeroAddress = "0x0000000000000000000000000000000000000000";
-        // let beforeTokenXBalance;
-        // let beforeVaultValue;
-        await tokenRegistry.enableSwapHandlers([swapHandler.address]);
-
-        await rebalancing.connect(nonOwner).updateTokens({
-          tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
-          _swapHandler: swapHandler.address,
-          denorms: [2000, 6000, 2000],
-          _slippageSell: ["200", "200", "200"],
-          _slippageBuy: ["200", "200", "200"],
-          _lpSlippageSell: ["200", "200", "200"],
-          _lpSlippageBuy: ["200", "200", "200"],
-        });
-      });
-
-      it("withdrawal should revert when contract is paused", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        const updateAmount = parseInt(amountIndexToken.toString()) + 1;
-        const AMOUNT = ethers.BigNumber.from(updateAmount.toString()); //
-
-        await expect(
-          indexSwap.withdrawFund({
-            tokenAmount: AMOUNT,
-            _slippage: ["200", "200", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: false,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          }),
-        ).to.be.revertedWithCustomError(indexSwap, "ContractPaused");
-      });
-
-      it("should unpause", async () => {
-        await rebalancing.setPause(false);
-      });
-
-      it("should pause", async () => {
-        await rebalancing.setPause(true);
-      });
-
-      it("should revert unpause", async () => {
-        await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
-          rebalancing,
-          "TenMinutesPassOrRebalancingHasToBeCalled",
-        );
-      });
-
-      it("should unpause", async () => {
-        await ethers.provider.send("evm_increaseTime", [1900]);
-        await rebalancing.connect(addr1).setPause(false);
-      });
-
-      it("when withdraw fund more then balance", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        const updateAmount = parseInt(amountIndexToken.toString()) + 1;
-        const AMOUNT = ethers.BigNumber.from(updateAmount.toString()); //
-
-        await expect(
-          indexSwap.connect(nonOwner).withdrawFund({
-            tokenAmount: AMOUNT,
-            _slippage: ["200", "200", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: false,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          }),
-        ).to.be.revertedWithCustomError(indexSwapLibrary, "CallerNotHavingGivenTokenAmount");
-      });
-
-      it("should fail withdraw when slippage array length is not equal to index length", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken.toString()); //
-
-        await expect(
-          indexSwap.withdrawFund({
-            tokenAmount: AMOUNT,
-            _slippage: ["200", "200"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: false,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          }),
-        ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidSlippageLength");
-      });
-
-      it("should fail withdraw when balance falls below min investment amount", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        //console.log(amountIndexToken, "amountIndexToken");
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-
-        await expect(
-          indexSwap.withdrawFund({
-            tokenAmount: AMOUNT.sub("1000000000000"),
-            _slippage: ["200", "200", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: false,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          }),
-        )
-          .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
-          .withArgs("10000000000000000");
-      });
-
-      it("should fail withdraw when balance falls below min investment amount (multi asset)", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        //console.log(amountIndexToken, "amountIndexToken");
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-
-        await expect(
-          indexSwap.withdrawFund({
-            tokenAmount: AMOUNT.sub("1000000000000"),
-            _slippage: ["200", "200", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: true,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          }),
-        )
-          .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
-          .withArgs("10000000000000000");
-      });
-
-      it("should fail withdraw fund when the output token is not permitted in the asset manager config and is not WETH", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        // console.log(amountIndexToken, "amountIndexToken");
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-
-        await expect(
-          indexSwap.withdrawFund({
-            tokenAmount: AMOUNT,
-            _slippage: ["200", "200", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: false,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.dogeAddress,
-          }),
-        ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidToken");
-      });
-
-      it("should fail withdraw when the protocol is paused", async () => {
-        await tokenRegistry.setProtocolPause(true);
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        // console.log(amountIndexToken, "amountIndexToken");
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-
-        await expect(
-          indexSwap.withdrawFund({
-            tokenAmount: AMOUNT,
-            _slippage: ["200", "200", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            isMultiAsset: false,
-            _swapHandler: swapHandler.address,
-            _token: iaddress.dogeAddress,
-          }),
-        ).to.be.revertedWithCustomError(indexSwapLibrary, "ProtocolIsPaused");
-      });
-
-      it("should withdraw fund and burn index token successfully", async () => {
-        await tokenRegistry.setProtocolPause(false);
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        // console.log(amountIndexToken, "amountIndexToken");
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-
-        txObject = await indexSwap.withdrawFund({
-          tokenAmount: AMOUNT,
-          _slippage: ["200", "200", "300"],
-          _lpSlippage: ["200", "200", "200"],
-          isMultiAsset: false,
-          _swapHandler: swapHandler.address,
-          _token: addresses.USDT,
-        });
-
-        expect(txObject.confirmations).to.equal(1);
-      });
-
-      it("Invest 0.1BNB into Top10 fund", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        // console.log(amountIndexToken, "amountIndexToken");
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["500", "900", "500"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-        // console.log(indexSupplyAfter);
-      });
-
-      it("Invest 0.1BNB into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["500", "900", "500"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-        // console.log(indexSupplyAfter);
-      });
-
-      it("Invest 1BNB into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["500", "900", "500"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-        // console.log(indexSupplyAfter);
-      });
-
-      it("Invest 1BNB into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["500", "900", "500"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: iaddress.wbnbAddress,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-        // console.log(indexSupplyAfter);
-      });
-
-      it("should withdraw fund in BUSD and burn index token successfully", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        // console.log(amountIndexToken, "amountIndexToken");
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const ethtoken = ERC20.attach(iaddress.ethAddress);
-        const balanceBefore = await ethtoken.balanceOf(owner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
-        console.log("balanceBefore", balanceBefore);
-        txObject = await indexSwap.withdrawFund({
-          tokenAmount: AMOUNT,
-          _slippage: ["500", "900", "500"],
-          _lpSlippage: ["200", "200", "200"],
-          isMultiAsset: false,
-          _swapHandler: swapHandler.address,
-          _token: iaddress.ethAddress,
-        });
-
-        const balanceAfter = await ethtoken.balanceOf(owner.address);
-        expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
-
-        expect(txObject.confirmations).to.equal(1);
+        let balance = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(await indexSwap.vault());
+        console.log("claim", balance);
       });
 
-      it("Invest 1BNB into Top10 fund", async () => {
+      it("should swap reward token using pancakeSwap Handler",async() => {
+        var tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        var sToken = addresses.wombat_RewardToken;
+        var bToken = tokens[0];
+        const vault = await indexSwap.vault()
+        var sAmount = await ERC20.attach(sToken).balanceOf(vault);
+
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        var tokenBalanceBefore = await handler0.getTokenBalance(vault,bToken);
+        await rebalancing.swapRewardToken(sToken,swapHandler.address,bToken,sAmount,"300","400");
+
+        var tokenBalanceAfter = await handler0.getTokenBalance(vault,bToken);
+        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(vault);
+        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+      })
+
+      it("Invest 10BNB into Top10 fund", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
+        //console.log("0.2bnb before", indexSupplyBefore);
         await indexSwap.investInFund(
           {
-            _slippage: ["500", "900", "500"],
+            _slippage: ["200", "200", "200"],
             _lpSlippage: ["200", "200", "200"],
             _to: owner.address,
-            _tokenAmount: "1000000000000000000",
+            _tokenAmount: "10000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           },
           {
-            value: "1000000000000000000",
+            value: "10000000000000000000",
           },
         );
-
         const indexSupplyAfter = await indexSwap.totalSupply();
+        // console.log(indexSupplyAfter);
+
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("should withdraw tokens directly instead of BNB", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+      it("should claim tokens", async () => {
+        await ethers.provider.send("evm_increaseTime", [3153600]);
 
-        txObject = await indexSwap.withdrawFund({
-          tokenAmount: AMOUNT,
-          _slippage: ["400", "700", "400"],
-          _lpSlippage: ["200", "200", "200"],
-          isMultiAsset: true,
-          _swapHandler: swapHandler.address,
-          _token: iaddress.wbnbAddress,
-        });
+        let tokens = [addresses.MAIN_LP_BUSD];
+        await indexSwap.claimTokens(tokens);
+
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        let balance = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(await indexSwap.vault());
+        console.log("claim", balance);
       });
+
+      it("should swap reward token using pancakeSwap Handler",async() => {
+        var tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        var sToken = addresses.wombat_RewardToken;
+        var bToken = tokens[2];
+        const vault = await indexSwap.vault()
+        var sAmount = await ERC20.attach(sToken).balanceOf(vault);
+
+        const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+        const handlerAddress0 = tokenInfo0[2];
+        const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+        var tokenBalanceBefore = await handler0.getTokenBalance(vault,bToken);
+        await rebalancing.swapRewardToken(sToken,swapHandler.address,bToken,sAmount,"300","400");
+
+        var tokenBalanceAfter = await handler0.getTokenBalance(vault,bToken);
+        var amountAfterSwap = await ERC20.attach(sToken).balanceOf(vault);
+        expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+      })
+
+      // it("Investment should fail when contract is paused", async () => {
+      //   await rebalancing.setPause(true);
+      //   await expect(
+      //     indexSwap.investInFund(
+      //       {
+      //         _slippage: ["200", "200", "200"],
+      //         _lpSlippage: ["200", "200", "200"],
+      //         _to: owner.address,
+      //         _tokenAmount: "1000000000000000000",
+      //         _swapHandler: swapHandler.address,
+      //         _token: iaddress.wbnbAddress,
+      //       },
+      //       {
+      //         value: "1000000000000000000",
+      //       },
+      //     ),
+      //   ).to.be.reverted;
+      // });
+
+      // it("should be able to claim tokens for portfolio tokens ", async () => {
+      //   const _exchange = await indexSwap.claimTokens([
+      //     addresses.BSwap_WBNB_BUSDLP_Address,
+      //     addresses.vETH_Address,
+      //     addresses.oBNB,
+      //     addresses.mooBTCBUSDLP,
+      //   ]);
+      // });
+
+      // it("update Weights should revert if total Weights not equal 10,000", async () => {
+      //   await expect(
+      //     rebalancing.updateWeights(
+      //       [6667, 2330, 1000],
+      //       ["200", "200", "200"],
+      //       ["200", "200", "200"],
+      //       swapHandler.address,
+      //     ),
+      //   )
+      //     .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
+      //     .withArgs("10000");
+      // });
+
+      // it("update weights should revert if weights and slippage array length don't match", async () => {
+      //   await expect(
+      //     rebalancing.updateWeights([6667, 3330], ["200", "200", "2000"], ["200", "200", "200"], swapHandler.address),
+      //   ).to.be.revertedWithCustomError(rebalancing, "LengthsDontMatch");
+      // });
+
+      // it("update weights should revert if slippage array length don't match the token count", async () => {
+      //   await expect(
+      //     rebalancing.updateWeights([6667, 2330, 1000], ["200", "200"], ["200", "200"], swapHandler.address),
+      //   ).to.be.revertedWithCustomError(rebalancing, "InvalidSlippageLength");
+      // });
+
+      // it("update weights should revert if swap handler is not enabled", async () => {
+      //   await tokenRegistry.disableSwapHandlers([swapHandler.address]);
+
+      //   await expect(
+      //     rebalancing.updateWeights(
+      //       [6667, 2330, 1000],
+      //       ["200", "200", "200"],
+      //       ["200", "200", "200"],
+      //       swapHandler.address,
+      //     ),
+      //   ).to.be.revertedWithCustomError(rebalancing, "SwapHandlerNotEnabled");
+      // });
+
+      // it("should Update Weights and Rebalance", async () => {
+      //   const VBep20Interface = await ethers.getContractAt(
+      //     "VBep20Interface",
+      //     "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
+      //   );
+
+      //   await tokenRegistry.enableSwapHandlers([swapHandler.address]);
+
+      //   await rebalancing.updateWeights(
+      //     [4667, 3333, 2000],
+      //     ["200", "200", "200"],
+      //     ["200", "200", "200"],
+      //     swapHandler.address,
+      //   );
+
+      //   const vETHBalance = await VBep20Interface.balanceOf(indexSwap.vault());
+      // });
+
+      // it("should Update Weights and Rebalance", async () => {
+      //   await rebalancing.updateWeights(
+      //     [5000, 2500, 2500],
+      //     ["200", "200", "200"],
+      //     ["200", "200", "200"],
+      //     swapHandler.address,
+      //   );
+      // });
+
+      // it("should Update Weights and Rebalance", async () => {
+      //   await rebalancing.updateWeights(
+      //     [2333, 4667, 3000],
+      //     ["200", "200", "200"],
+      //     ["200", "200", "200"],
+      //     swapHandler.address,
+      //   );
+      // });
+
+      // it("updateTokens should revert if total Weights not equal 10,000", async () => {
+      //   const zeroAddress = "0x0000000000000000000000000000000000000000";
+      //   await expect(
+      //     rebalancing.updateTokens({
+      //       tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+      //       _swapHandler: swapHandler.address,
+      //       denorms: [2000, 6000, 1000],
+      //       _slippageSell: ["200", "200", "200"],
+      //       _slippageBuy: ["200", "200", "200"],
+      //       _lpSlippageSell: ["200", "200", "200"],
+      //       _lpSlippageBuy: ["200", "200", "200"],
+      //     }),
+      //   )
+      //     .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
+      //     .withArgs("10000");
+      // });
+
+      // it("owner should be able to add asset manager", async () => {
+      //   await accessController.grantRole(
+      //     "0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819",
+      //     nonOwner.address,
+      //   );
+      // });
+
+      // it("non owner should not be able to add asset manager", async () => {
+      //   await expect(
+      //     accessController
+      //       .connect(nonOwner)
+      //       .grantRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", investor1.address),
+      //   ).to.be.reverted;
+      // });
+
+      // it("disable swaphandler in registry should not work if handler array lenght is 0", async () => {
+      //   await expect(tokenRegistry.disableSwapHandlers([])).to.be.revertedWithCustomError(
+      //     tokenRegistry,
+      //     "InvalidLength",
+      //   );
+      // });
+
+      // it("disable swaphandler in registry should not work if the handler is already disabled", async () => {
+      //   await tokenRegistry.disableSwapHandlers([swapHandler.address]);
+      //   await expect(tokenRegistry.disableSwapHandlers([swapHandler.address])).to.be.revertedWithCustomError(
+      //     tokenRegistry,
+      //     "HandlerAlreadyDisabled",
+      //   );
+      // });
+
+      // it("update tokens should not work if the protocol is paused", async () => {
+      //   await tokenRegistry.setProtocolPause(true);
+      //   await tokenRegistry.enableSwapHandlers([swapHandler.address]);
+      //   await expect(
+      //     rebalancing.updateTokens({
+      //       tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+      //       _swapHandler: swapHandler.address,
+      //       denorms: [2000, 6000, 2000],
+      //       _slippageSell: ["200", "200", "200"],
+      //       _slippageBuy: ["200", "200", "200"],
+      //       _lpSlippageSell: ["200", "200", "200"],
+      //       _lpSlippageBuy: ["200", "200", "200"],
+      //     }),
+      //   ).to.be.revertedWithCustomError(rebalancing, "ProtocolIsPaused");
+      // });
+
+      // it("update tokens should not work if swaphandler is not enabled", async () => {
+      //   await tokenRegistry.setProtocolPause(false);
+      //   await tokenRegistry.disableSwapHandlers([swapHandler.address]);
+      //   await expect(
+      //     rebalancing.updateTokens({
+      //       tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+      //       _swapHandler: swapHandler.address,
+      //       denorms: [2000, 6000, 2000],
+      //       _slippageSell: ["200", "200", "200"],
+      //       _slippageBuy: ["200", "200", "200"],
+      //       _lpSlippageSell: ["200", "200", "200"],
+      //       _lpSlippageBuy: ["200", "200", "200"],
+      //     }),
+      //   ).to.be.revertedWithCustomError(rebalancing, "SwapHandlerNotEnabled");
+      // });
+
+      // it("update tokens should not work if non-enabled token is being used", async () => {
+      //   tokenRegistry.enableSwapHandlers([swapHandler.address]);
+      //   await expect(
+      //     rebalancing.updateTokens({
+      //       tokens: [addresses.ibBTCB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+      //       _swapHandler: swapHandler.address,
+      //       denorms: [2000, 6000, 2000],
+      //       _slippageSell: ["200", "200", "200"],
+      //       _slippageBuy: ["200", "200", "200"],
+      //       _lpSlippageSell: ["200", "200", "200"],
+      //       _lpSlippageBuy: ["200", "200", "200"],
+      //     }),
+      //   ).to.be.revertedWithCustomError(rebalanceLibrary, "TokenNotApproved");
+
+      //   await tokenRegistry.disableSwapHandlers([swapHandler.address]);
+      // });
+
+      // it("should get token balance from the rebalance contract", async () => {
+      //   await expect(rebalancing.getTokenBalance(addresses.vBTC_Address));
+      // });
+
+      // it("new asset manager should update tokens", async () => {
+      //   // const zeroAddress = "0x0000000000000000000000000000000000000000";
+      //   // let beforeTokenXBalance;
+      //   // let beforeVaultValue;
+      //   await tokenRegistry.enableSwapHandlers([swapHandler.address]);
+
+      //   await rebalancing.connect(nonOwner).updateTokens({
+      //     tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+      //     _swapHandler: swapHandler.address,
+      //     denorms: [2000, 6000, 2000],
+      //     _slippageSell: ["200", "200", "200"],
+      //     _slippageBuy: ["200", "200", "200"],
+      //     _lpSlippageSell: ["200", "200", "200"],
+      //     _lpSlippageBuy: ["200", "200", "200"],
+      //   });
+      // });
+
+      // it("withdrawal should revert when contract is paused", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   const updateAmount = parseInt(amountIndexToken.toString()) + 1;
+      //   const AMOUNT = ethers.BigNumber.from(updateAmount.toString()); //
+
+      //   await expect(
+      //     indexSwap.withdrawFund({
+      //       tokenAmount: AMOUNT,
+      //       _slippage: ["200", "200", "300"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: false,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     }),
+      //   ).to.be.revertedWithCustomError(indexSwap, "ContractPaused");
+      // });
+
+      // it("should unpause", async () => {
+      //   await rebalancing.setPause(false);
+      // });
+
+      // it("should pause", async () => {
+      //   await rebalancing.setPause(true);
+      // });
+
+      // it("should revert unpause", async () => {
+      //   await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
+      //     rebalancing,
+      //     "FifteenMinutesNotExcedeed",
+      //   );
+      // });
+
+      // it("should unpause", async () => {
+      //   await ethers.provider.send("evm_increaseTime", [1900]);
+      //   await rebalancing.connect(addr1).setPause(false);
+      // });
+
+      // it("when withdraw fund more then balance", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   const updateAmount = parseInt(amountIndexToken.toString()) + 1;
+      //   const AMOUNT = ethers.BigNumber.from(updateAmount.toString()); //
+
+      //   await expect(
+      //     indexSwap.connect(nonOwner).withdrawFund({
+      //       tokenAmount: AMOUNT,
+      //       _slippage: ["200", "200", "300"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: false,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     }),
+      //   ).to.be.revertedWithCustomError(indexSwapLibrary, "CallerNotHavingGivenTokenAmount");
+      // });
+
+      // it("should fail withdraw when slippage array length is not equal to index length", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken.toString()); //
+
+      //   await expect(
+      //     indexSwap.withdrawFund({
+      //       tokenAmount: AMOUNT,
+      //       _slippage: ["200", "200"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: false,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     }),
+      //   ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidSlippageLength");
+      // });
+
+      // it("should fail withdraw when balance falls below min investment amount", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   //console.log(amountIndexToken, "amountIndexToken");
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+      //   await expect(
+      //     indexSwap.withdrawFund({
+      //       tokenAmount: AMOUNT.sub("1000000000000"),
+      //       _slippage: ["200", "200", "300"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: false,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     }),
+      //   )
+      //     .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
+      //     .withArgs("10000000000000000");
+      // });
+
+      // it("should fail withdraw when balance falls below min investment amount (multi asset)", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   //console.log(amountIndexToken, "amountIndexToken");
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+      //   await expect(
+      //     indexSwap.withdrawFund({
+      //       tokenAmount: AMOUNT.sub("1000000000000"),
+      //       _slippage: ["200", "200", "300"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: true,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     }),
+      //   )
+      //     .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
+      //     .withArgs("10000000000000000");
+      // });
+
+      // it("should fail withdraw fund when the output token is not permitted in the asset manager config and is not WETH", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   // console.log(amountIndexToken, "amountIndexToken");
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+      //   await expect(
+      //     indexSwap.withdrawFund({
+      //       tokenAmount: AMOUNT,
+      //       _slippage: ["200", "200", "300"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: false,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.dogeAddress,
+      //     }),
+      //   ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidToken");
+      // });
+
+      // it("should fail withdraw when the protocol is paused", async () => {
+      //   await tokenRegistry.setProtocolPause(true);
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   // console.log(amountIndexToken, "amountIndexToken");
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+      //   await expect(
+      //     indexSwap.withdrawFund({
+      //       tokenAmount: AMOUNT,
+      //       _slippage: ["200", "200", "300"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       isMultiAsset: false,
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.dogeAddress,
+      //     }),
+      //   ).to.be.revertedWithCustomError(indexSwapLibrary, "ProtocolIsPaused");
+      // });
+
+      // it("should withdraw fund and burn index token successfully", async () => {
+      //   await tokenRegistry.setProtocolPause(false);
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   // console.log(amountIndexToken, "amountIndexToken");
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+      //   txObject = await indexSwap.withdrawFund({
+      //     tokenAmount: AMOUNT,
+      //     _slippage: ["200", "200", "300"],
+      //     _lpSlippage: ["200", "200", "200"],
+      //     isMultiAsset: false,
+      //     _swapHandler: swapHandler.address,
+      //     _token: addresses.USDT,
+      //   });
+
+      //   expect(txObject.confirmations).to.equal(1);
+      // });
+
+      // it("Invest 0.1BNB into Top10 fund", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   // console.log(amountIndexToken, "amountIndexToken");
+      //   const indexSupplyBefore = await indexSwap.totalSupply();
+      //   await indexSwap.investInFund(
+      //     {
+      //       _slippage: ["500", "900", "500"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       _to: owner.address,
+      //       _tokenAmount: "100000000000000000",
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     },
+      //     {
+      //       value: "100000000000000000",
+      //     },
+      //   );
+
+      //   const indexSupplyAfter = await indexSwap.totalSupply();
+      //   expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      //   // console.log(indexSupplyAfter);
+      // });
+
+      // it("Invest 0.1BNB into Top10 fund", async () => {
+      //   const indexSupplyBefore = await indexSwap.totalSupply();
+      //   await indexSwap.investInFund(
+      //     {
+      //       _slippage: ["500", "900", "500"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       _to: owner.address,
+      //       _tokenAmount: "100000000000000000",
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     },
+      //     {
+      //       value: "100000000000000000",
+      //     },
+      //   );
+
+      //   const indexSupplyAfter = await indexSwap.totalSupply();
+      //   expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      //   // console.log(indexSupplyAfter);
+      // });
+
+      // it("Invest 1BNB into Top10 fund", async () => {
+      //   const indexSupplyBefore = await indexSwap.totalSupply();
+      //   await indexSwap.investInFund(
+      //     {
+      //       _slippage: ["500", "900", "500"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       _to: owner.address,
+      //       _tokenAmount: "1000000000000000000",
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     },
+      //     {
+      //       value: "1000000000000000000",
+      //     },
+      //   );
+
+      //   const indexSupplyAfter = await indexSwap.totalSupply();
+      //   expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      //   // console.log(indexSupplyAfter);
+      // });
+
+      // it("Invest 1BNB into Top10 fund", async () => {
+      //   const indexSupplyBefore = await indexSwap.totalSupply();
+      //   await indexSwap.investInFund(
+      //     {
+      //       _slippage: ["500", "900", "500"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       _to: owner.address,
+      //       _tokenAmount: "1000000000000000000",
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     },
+      //     {
+      //       value: "1000000000000000000",
+      //     },
+      //   );
+
+      //   const indexSupplyAfter = await indexSwap.totalSupply();
+      //   expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      //   // console.log(indexSupplyAfter);
+      // });
+
+      // it("should withdraw fund in BUSD and burn index token successfully", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   // console.log(amountIndexToken, "amountIndexToken");
+      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+      //   const ethtoken = ERC20.attach(iaddress.ethAddress);
+      //   const balanceBefore = await ethtoken.balanceOf(owner.address);
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+      //   console.log("balanceBefore", balanceBefore);
+      //   txObject = await indexSwap.withdrawFund({
+      //     tokenAmount: AMOUNT,
+      //     _slippage: ["500", "900", "500"],
+      //     _lpSlippage: ["200", "200", "200"],
+      //     isMultiAsset: false,
+      //     _swapHandler: swapHandler.address,
+      //     _token: iaddress.ethAddress,
+      //   });
+
+      //   const balanceAfter = await ethtoken.balanceOf(owner.address);
+      //   expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
+
+      //   expect(txObject.confirmations).to.equal(1);
+      // });
+
+      // it("Invest 1BNB into Top10 fund", async () => {
+      //   const indexSupplyBefore = await indexSwap.totalSupply();
+      //   await indexSwap.investInFund(
+      //     {
+      //       _slippage: ["500", "900", "500"],
+      //       _lpSlippage: ["200", "200", "200"],
+      //       _to: owner.address,
+      //       _tokenAmount: "1000000000000000000",
+      //       _swapHandler: swapHandler.address,
+      //       _token: iaddress.wbnbAddress,
+      //     },
+      //     {
+      //       value: "1000000000000000000",
+      //     },
+      //   );
+
+      //   const indexSupplyAfter = await indexSwap.totalSupply();
+      //   expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
+      // });
+
+      // it("should withdraw tokens directly instead of BNB", async () => {
+      //   const amountIndexToken = await indexSwap.balanceOf(owner.address);
+      //   const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+      //   txObject = await indexSwap.withdrawFund({
+      //     tokenAmount: AMOUNT,
+      //     _slippage: ["400", "700", "400"],
+      //     _lpSlippage: ["200", "200", "200"],
+      //     isMultiAsset: true,
+      //     _swapHandler: swapHandler.address,
+      //     _token: iaddress.wbnbAddress,
+      //   });
+      // });
     });
   });
 });

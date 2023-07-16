@@ -12,8 +12,8 @@ import {FunctionParameters} from "../FunctionParameters.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-  IAccessController public accessController;
-  ITokenRegistry public tokenRegistry;
+  IAccessController internal accessController;
+  ITokenRegistry internal tokenRegistry;
 
   uint256 public MAX_INVESTMENTAMOUNT;
   uint256 public MIN_INVESTMENTAMOUNT;
@@ -176,7 +176,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
         revert ErrorLibrary.InvalidTokenAddress();
       }
 
-      if (_permittedTokens[_newTokens[i]] != false) {
+      if (_permittedTokens[_newTokens[i]]) {
         revert ErrorLibrary.AddressAlreadyApproved();
       }
 
