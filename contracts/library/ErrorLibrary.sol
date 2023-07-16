@@ -150,8 +150,8 @@ library ErrorLibrary {
   error OnlyAssetManagerCanCallUnpause();
   /// @notice Thrown when trying to redeem token that is not staked
   error TokensNotStaked();
-  /// @notice Thrown when account other than asset manager is pausing
-  error TenMinutesPassOrRebalancingHasToBeCalled();
+  /// @notice Thrown when account other than asset manager is trying to revert or unpause
+  error FifteenMinutesNotExcedeed();
   /// @notice Thrown when swapping weight is zero
   error WeightNotGreaterThan0();
   /// @notice Thrown when dividing by zero

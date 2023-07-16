@@ -7,7 +7,7 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {IExchange} from "../core/IExchange.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 import {IIndexSwap} from "../core/IIndexSwap.sol";
@@ -26,20 +26,19 @@ import {RebalanceLibrary} from "./RebalanceLibrary.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 
-contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
   using SafeMathUpgradeable for uint256;
-  IIndexSwap public index;
+  IIndexSwap internal index;
 
-  AccessController public accessController;
-  IAssetManagerConfig public assetManagerConfig;
-  ITokenRegistry public tokenRegistry;
-  IExchange public exchange;
+  AccessController internal accessController;
+  IAssetManagerConfig internal assetManagerConfig;
+  ITokenRegistry internal tokenRegistry;
+  IExchange internal exchange;
 
-  address public WETH;
+  address internal WETH;
   address internal vault;
   address internal tokenRedeemed;
   address internal _contract;
-  address public owner;
   mapping(address => uint256[]) public redeemedAmounts;
   IWETH public wETH;
 
@@ -80,8 +79,8 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     address _assetManagerConfig,
     address _vault
   ) external initializer {
+    __Ownable_init();
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     address zeroAddress = address(0);
     if (
       _index == zeroAddress ||
@@ -118,28 +117,27 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     _;
   }
 
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
-    }
-    _;
-  }
-
   /**
-   * @notice The function redeems Reward Token from Vault
-   * @param _token address of token to redeem
-   * @param _amount amount of token to redeem
+   * @notice The function swaps reward token from vault to index token
+   * @param inputData This is a struct of params required
    */
-  function redeemRewardToken(address _token, uint256 _amount) external virtual nonReentrant onlyAssetManager {
+  function swapRewardToken(ExchangeData.ExSwapData memory inputData) external virtual nonReentrant onlyAssetManager {
     if (getProtocolState() == true) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
-    if (!tokenRegistry.isRewardToken(_token)) {
+    address sellToken = inputData.sellTokenAddress[0];
+    if (!tokenRegistry.isRewardToken(sellToken)) {
       revert ErrorLibrary.NotRewardToken();
     }
-    exchange._pullFromVaultRewards(_token, _amount, _contract);
-    setRedeemed(true);
-    emit RedeemReward(block.timestamp, _token, _amount);
+    if (getRedeemed() == true) {
+      revert ErrorLibrary.AlreadyOngoingOperation();
+    }
+    if (getDenorm(inputData.portfolioToken) == 0) {
+      revert ErrorLibrary.TokenNotIndexToken();
+    }
+    _swapAndDeposit(inputData);
+    // exchange._pullFromVaultRewards(_token, _amount, _contract);
+    emit RedeemReward(block.timestamp, sellToken, inputData.sellAmount[0]);
   }
 
   /**
@@ -153,13 +151,13 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     address token
   ) external virtual nonReentrant onlyAssetManager {
     _validateProtocolAndRedeemState();
-    if (index.getRecord(token).denorm == 0) {
+    if (getDenorm(token) == 0) {
       revert ErrorLibrary.TokenNotIndexToken();
     }
     setPaused(true);
-    ITokenRegistry.TokenRecord memory tokenInfo = tokenRegistry.getTokenInformation(token);
+    ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(token);
     IHandler handler = IHandler(tokenInfo.handler);
-    uint256[] memory balanceBefore = RebalanceLibrary.checkUnderlyingBalances(token, handler, _contract);
+    uint256[] memory balanceBefore = RebalanceLibrary.getUnderlyingBalances(token, handler, _contract);
     exchange._pullFromVault(token, swapAmounts, _contract);
     tokenRedeemed = token;
     address[] memory underlying = handler.getUnderlying(token);
@@ -167,13 +165,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     if (!tokenInfo.primary) {
       TransferHelper.safeTransfer(token, address(handler), swapAmount);
       handler.redeem(
-        FunctionParameters.RedeemData(
-          swapAmount,
-          _lpSlippage,
-          _contract,
-          token,
-          exchange.isWETH(token, address(handler))
-        )
+        FunctionParameters.RedeemData(swapAmount, _lpSlippage, _contract, token, isWETH(token, address(handler)))
       );
       for (uint256 j = 0; j < underlying.length; j++) {
         if (underlying[j] == WETH) {
@@ -182,7 +174,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
       }
     }
     for (uint256 i = 0; i < underlying.length; i++) {
-      uint256 balanceAfter = RebalanceLibrary.checkUnderlyingBalance(underlying[i], _contract);
+      uint256 balanceAfter = getBalance(underlying[i], _contract);
       redeemedAmounts[token].push(balanceAfter.sub(balanceBefore[i]));
     }
     setRedeemed(true);
@@ -199,10 +191,10 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     if (getRedeemed() == false) {
       revert ErrorLibrary.NotRedeemed();
     }
-    if (!tokenRegistry.isExternalSwapHandler(_data.swapHandler)) {
+    if (!isExternalSwapHandler(_data.swapHandler)) {
       revert ErrorLibrary.SwapHandlerNotEnabled();
     }
-    ITokenRegistry.TokenRecord memory tokenInfo = tokenRegistry.getTokenInformation(_data.portfolioToken);
+    ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(_data.portfolioToken);
     IHandler handler = IHandler(tokenInfo.handler);
     uint balanceBefore = handler.getTokenBalance(vault, _data.portfolioToken);
 
@@ -252,12 +244,31 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     if (getRedeemed() == true) {
       revert ErrorLibrary.AlreadyOngoingOperation();
     }
+    if (getTokenInfo(inputData.sellTokenAddress[0]).primary == false) {
+      revert ErrorLibrary.NotPrimaryToken();
+    }
     address[] memory tokens = index.getTokens();
+    _swapAndDeposit(inputData);
+    address[] memory newTokens = RebalanceLibrary.getNewTokens(tokens, inputData.portfolioToken);
+    RebalanceLibrary.setRecord(index, newTokens, inputData.portfolioToken);
+    emit swapPrimaryTokenSwap(
+      block.timestamp,
+      inputData.sellTokenAddress,
+      inputData.buyTokenAddress,
+      inputData.sellAmount,
+      inputData.protocolFee,
+      inputData.portfolioToken,
+      newTokens
+    );
+  }
 
-    ITokenRegistry.TokenRecord memory tokenInfo = tokenRegistry.getTokenInformation(inputData.portfolioToken);
+  function _swapAndDeposit(ExchangeData.ExSwapData memory inputData) internal {
+    if (!isExternalSwapHandler(inputData.swapHandler)) {
+      revert ErrorLibrary.SwapHandlerNotEnabled();
+    }
+    ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(inputData.portfolioToken);
     IHandler handler = IHandler(tokenInfo.handler);
     uint balanceBefore = handler.getTokenBalance(vault, inputData.portfolioToken);
-
     for (uint256 i = 0; i < inputData.callData.length; i++) {
       address buyToken = inputData.buyTokenAddress[i];
       address sellToken = inputData.sellTokenAddress[i];
@@ -282,21 +293,10 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     if (balanceAfter.sub(balanceBefore) == 0) {
       revert ErrorLibrary.SwapFailed();
     }
-    address[] memory newTokens = RebalanceLibrary.getNewTokens(tokens, inputData.portfolioToken);
-    RebalanceLibrary.setRecord(index, newTokens, inputData.portfolioToken);
-    emit swapPrimaryTokenSwap(
-      block.timestamp,
-      inputData.sellTokenAddress,
-      inputData.buyTokenAddress,
-      inputData.sellAmount,
-      inputData.protocolFee,
-      inputData.portfolioToken,
-      newTokens
-    );
   }
 
   function _deposit(address portfolioToken, uint lpSlippage) internal {
-    ITokenRegistry.TokenRecord memory tokenInfo = tokenRegistry.getTokenInformation(portfolioToken);
+    ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(portfolioToken);
     IHandler handler = IHandler(tokenInfo.handler);
     address[] memory underlying = handler.getUnderlying(portfolioToken);
     uint256[] memory swapAmount = new uint256[](underlying.length);
@@ -307,22 +307,22 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
         address _token = underlying[i];
         if (_token == WETH) {
           //If two underlying checks, which one is bnb
-          wETH.withdraw(IERC20Upgradeable(WETH).balanceOf(_contract));
+          wETH.withdraw(getBalance(WETH, _contract));
           swapAmount[i] = _contract.balance;
         } else {
-          swapAmount[i] = IERC20Upgradeable(_token).balanceOf(_contract);
+          swapAmount[i] = getBalance(_token, _contract);
 
           TransferHelper.safeTransfer(_token, address(handler), swapAmount[i]);
         }
       }
-      if (exchange.isWETH(portfolioToken, address(handler))) {
+      if (isWETH(portfolioToken, address(handler))) {
         handler.deposit{value: _contract.balance}(portfolioToken, swapAmount, lpSlippage, vault, vault);
       } else {
         handler.deposit(portfolioToken, swapAmount, lpSlippage, vault, vault);
       }
     } else {
       address _token = underlying[0];
-      swapAmount[0] = IERC20Upgradeable(_token).balanceOf(_contract);
+      swapAmount[0] = getBalance(_token, _contract);
       TransferHelper.safeTransfer(_token, vault, swapAmount[0]);
     }
   }
@@ -376,8 +376,8 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
       validateToken(buyToken);
 
       // Get the handlers for the sell and buy tokens
-      ITokenRegistry.TokenRecord memory sellTokenInfo = tokenRegistry.getTokenInformation(sellToken);
-      ITokenRegistry.TokenRecord memory buyTokenInfo = tokenRegistry.getTokenInformation(buyToken);
+      ITokenRegistry.TokenRecord memory sellTokenInfo = getTokenInfo(sellToken);
+      ITokenRegistry.TokenRecord memory buyTokenInfo = getTokenInfo(buyToken);
       IHandler sellTokenHandler = IHandler(sellTokenInfo.handler);
       IHandler buyTokenHandler = IHandler(buyTokenInfo.handler);
 
@@ -481,15 +481,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @param _lpSlippage slippage for lpTokens
    */
   function revertRedeem(uint256 _lpSlippage) external nonReentrant onlyAssetManager {
-    if (getRedeemed() == false) {
-      revert ErrorLibrary.NotRedeemed();
-    }
-    uint256[] memory amounts = redeemedAmounts[tokenRedeemed];
-    _revertRedeem(amounts, _lpSlippage, tokenRedeemed);
-    delete redeemedAmounts[tokenRedeemed];
-    setRedeemed(false);
-    setPaused(false);
-    emit RevertRedeem();
+    _revert(_lpSlippage);
   }
 
   function _revert(uint256 _lpSlippage) internal {
@@ -509,9 +501,10 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    */
   function revertSellByUser(uint256 _lpSlippage) external nonReentrant {
     uint256 _lastPaused = index.getLastPaused();
-    if (block.timestamp >= (_lastPaused + 15 minutes)) {
-      _revert(_lpSlippage);
+    if (block.timestamp < (_lastPaused + 15 minutes)) {
+      revert ErrorLibrary.FifteenMinutesNotExcedeed();
     }
+    _revert(_lpSlippage);
   }
 
   /**
@@ -532,12 +525,12 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    * @param _lpSlippage slippage for lpTokens
    */
   function _revertRedeem(uint256[] memory amounts, uint256 _lpSlippage, address token) internal {
-    ITokenRegistry.TokenRecord memory tokenInfo = tokenRegistry.getTokenInformation(token);
+    ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(token);
     if (!tokenInfo.primary) {
       IHandler handler = IHandler(tokenInfo.handler);
       address[] memory underlying = handler.getUnderlying(token);
       //check for WETH
-      if (exchange.isWETH(token, address(handler))) {
+      if (isWETH(token, address(handler))) {
         //This Library fucntion to determine which of the underlying token is ETH(Mainly for LP) and withdraws the wbnb
         //And give index of non-WETH so that we can transfer that token and give amount of wbnb withdrawn
         (uint256 ethBalance, uint256 _index) = RebalanceLibrary.getEthBalance(WETH, underlying, amounts);
@@ -586,7 +579,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     uint256 slippage,
     IHandler sellTokenHandler
   ) internal {
-    // IERC20Upgradeable sellToken = IERC20Upgradeable(sellTokenAddress);
     TransferHelper.safeTransfer(sellTokenAddress, address(sellTokenHandler), sellAmount);
     sellTokenHandler.redeem(
       FunctionParameters.RedeemData(
@@ -594,7 +586,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
         slippage,
         _contract,
         sellTokenAddress,
-        exchange.isWETH(sellTokenAddress, address(sellTokenHandler))
+        isWETH(sellTokenAddress, address(sellTokenHandler))
       )
     );
   }
@@ -608,7 +600,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     bool isPrimary
   ) internal returns (uint256) {
     address _token = sellTokenHandler.getUnderlying(sellTokenAddress)[0];
-    uint256 _balance = IERC20Upgradeable(_token).balanceOf(_contract);
+    uint256 _balance = getBalance(_token, _contract);
     if (_token == WETH && !isPrimary) {
       // If the sell token's underlying token is WETH and it's not the primary token, withdraw WETH balance
       wETH.withdraw(_balance);
@@ -628,9 +620,9 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     uint256 slippage,
     IHandler buyTokenHandler
   ) internal {
-    if (!tokenRegistry.getTokenInformation(buyTokenAddress).primary) {
+    if (!getTokenInfo(buyTokenAddress).primary) {
       // If the buy token is not the primary token
-      if (exchange.isWETH(buyTokenAddress, address(buyTokenHandler))) {
+      if (isWETH(buyTokenAddress, address(buyTokenHandler))) {
         // If the buy token's underlying token is WETH, deposit the entire balance of the contract
         buyTokenHandler.deposit{value: _contract.balance}(buyTokenAddress, depositAmount, slippage, vault, vault);
       } else {
@@ -649,7 +641,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
         wETH.deposit{value: _contract.balance}();
       }
       // Transfer the sell token's underlying token balance to the vault
-      TransferHelper.safeTransfer(_token, vault, IERC20Upgradeable(_token).balanceOf(_contract));
+      TransferHelper.safeTransfer(_token, vault, getBalance(_token, _contract));
     }
   }
 
@@ -709,6 +701,41 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    */
   function getProtocolState() internal returns (bool) {
     return tokenRegistry.getProtocolState();
+  }
+
+  /**
+   * @notice This function returns denorm for particular token
+   */
+  function getDenorm(address token) internal view returns (uint256) {
+    return index.getRecord(token).denorm;
+  }
+
+  /**
+   * @notice This function returns whether externalSwapHandler is enable or not
+   */
+  function isExternalSwapHandler(address handler) internal view returns (bool) {
+    return tokenRegistry.isExternalSwapHandler(handler);
+  }
+
+  /**
+   * @notice This internal returns token information
+   */
+  function getTokenInfo(address _token) internal view returns (ITokenRegistry.TokenRecord memory) {
+    return tokenRegistry.getTokenInformation(_token);
+  }
+
+  /**
+   * @notice This internal returns whether the token has any eth underlying or not
+   */
+  function isWETH(address token, address handler) internal view returns (bool) {
+    return exchange.isWETH(token, handler);
+  }
+
+  /**
+   * @notice This internal function returns balance of token
+   */
+  function getBalance(address _token, address _of) internal view returns (uint256) {
+    return IERC20Upgradeable(_token).balanceOf(_of);
   }
 
   receive() external payable {}

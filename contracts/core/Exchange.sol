@@ -19,7 +19,7 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IIndexSwap} from "./IIndexSwap.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
@@ -40,12 +40,11 @@ import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.s
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 
-contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable, OwnableUpgradeable {
   IAccessController internal accessController;
   IVelvetSafeModule internal safe;
   IPriceOracle internal oracle;
   ITokenRegistry internal tokenRegistry;
-  address public owner;
   address internal WETH;
   address internal zeroAddress;
 
@@ -73,7 +72,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     address _tokenRegistry
   ) external initializer {
     __UUPSUpgradeable_init();
-    owner = msg.sender;
+    __Ownable_init();
     zeroAddress = address(0);
     if (
       _accessController == zeroAddress ||
@@ -112,20 +111,13 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     _;
   }
 
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
-    }
-    _;
-  }
-
   /**
    * @notice The function claims additional reward tokens
    * @dev Requires the tokens to be send to this contract address before swapping
    * @param _index The index to claim for
    * @param _tokens The derivative tokens to claim for
    */
-  function claimTokens(IIndexSwap _index, address[] calldata _tokens) external nonReentrant onlyIndexManager {
+  function claimTokens(IIndexSwap _index, address[] calldata _tokens) external onlyIndexManager {
     for (uint256 i = 0; i < _tokens.length; i++) {
       address _token = _tokens[i];
       IHandler handler = IHandler(getTokenInfo(_token).handler);
@@ -172,7 +164,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
   /**
    * @notice Transfer tokens from vault to a specific address
    */
-  function _pullFromVaultRewards(address token, uint256 amount, address to) external nonReentrant onlyIndexManager {
+  function _pullFromVaultRewards(address token, uint256 amount, address to) external onlyIndexManager {
     _safeTokenTransfer(token, amount, to);
   }
 
@@ -236,7 +228,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    */
   function swapETHToToken(
     FunctionParameters.SwapETHToTokenPublicData memory inputData
-  ) public payable onlyIndexManager {
+  ) external payable onlyIndexManager {
     _swapETHToToken(
       FunctionParameters.SwapETHToTokenData(
         inputData._token,
@@ -309,7 +301,8 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
           swapHandler,
           swapAmount,
           slippage,
-          to
+          to,
+          tokenInfo.enabled
         );
       }
     }
@@ -335,7 +328,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
     ITokenRegistry.TokenRecord memory tokenInfoOut = getTokenInfo(tokenOut);
     if (!tokenInfoIn.primary || !tokenInfoOut.primary) {
       if (inputData._isInvesting) {
-        swapResult = _swapTokenToTokenInvest(inputData);
+        swapResult = _swapTokenToTokenInvest(inputData, tokenInfoIn.enabled);
       } else {
         swapResult = _swapTokenToTokenWithdraw(inputData);
       }
@@ -371,7 +364,8 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
           inputData._swapAmount,
           inputData._slippage,
           tokenOut,
-          inputData._to
+          inputData._to,
+          tokenInfoIn.enabled
         );
       }
     }
@@ -384,60 +378,58 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    * @return swapResult Final amount after swap
    */
   function _swapTokenToTokenInvest(
-    FunctionParameters.SwapTokenToTokenData memory inputData
+    FunctionParameters.SwapTokenToTokenData memory inputData,
+    bool isEnabled
   ) internal returns (uint256[] memory) {
-    address tokenIn = inputData._tokenIn;
-    address tokenOut = inputData._tokenOut;
-    IHandler handler = IHandler(getTokenInfo(tokenOut).handler);
+    IHandler handler = IHandler(getTokenInfo(inputData._tokenOut).handler);
     ISwapHandler swapHandler = ISwapHandler(inputData._swapHandler);
-    address[] memory underlying = handler.getUnderlying(tokenOut);
+    address[] memory underlying = handler.getUnderlying(inputData._tokenOut);
     uint256[] memory swapResult = new uint256[](underlying.length);
-    if (IERC20Upgradeable(tokenIn).balanceOf(address(this)) == 0) {
-      revert ErrorLibrary.ZeroBalanceAmount();
-    }
-    if (IERC20Upgradeable(tokenIn).balanceOf(address(this)) < inputData._swapAmount) {
+    if (IERC20Upgradeable(inputData._tokenIn).balanceOf(address(this)) < inputData._swapAmount) {
       revert ErrorLibrary.InvalidAmount();
     }
-    uint256 swapValue = underlying.length > 1 ? inputData._swapAmount.div(2) : inputData._swapAmount;
-
+    uint256 swapValue = getSwapVaule(underlying.length, inputData._swapAmount);
     for (uint256 i = 0; i < underlying.length; i++) {
-      address underlyingToken = underlying[i];
-      if (tokenIn == underlyingToken) {
+      if (inputData._tokenIn == underlying[i] && inputData._tokenIn != WETH) {
         swapResult[i] = swapValue;
-        if (underlyingToken != WETH) {
-          TransferHelper.safeTransfer(address(tokenIn), address(handler), swapValue);
-        }
-      } else if (underlyingToken == WETH) {
+        TransferHelper.safeTransfer(inputData._tokenIn, address(handler), swapValue);
+      } else if (underlying[i] == WETH) {
         swapResult[i] = IndexSwapLibrary.transferAndSwapTokenToETH(
-          tokenIn,
+          inputData._tokenIn,
           swapHandler,
           swapValue,
           inputData._slippage,
-          address(this)
+          address(this),
+          isEnabled
         );
       } else {
         swapResult[i] = IndexSwapLibrary.transferAndSwapTokenToToken(
-          tokenIn,
+          inputData._tokenIn,
           swapHandler,
           swapValue,
           inputData._slippage,
-          underlyingToken,
-          address(handler)
+          underlying[i],
+          address(handler),
+          isEnabled
         );
       }
     }
-    if (isWETH(tokenOut, address(handler))) {
+    if (isWETH(inputData._tokenOut, address(handler))) {
       handler.deposit{value: address(this).balance}(
-        tokenOut,
+        inputData._tokenOut,
         swapResult,
         inputData._lpSlippage,
         inputData._to,
         inputData._toUser
       );
     } else {
-      handler.deposit(tokenOut, swapResult, inputData._lpSlippage, inputData._to, inputData._toUser);
+      handler.deposit(inputData._tokenOut, swapResult, inputData._lpSlippage, inputData._to, inputData._toUser);
     }
     return swapResult;
+  }
+
+  function getSwapVaule(uint256 len, uint256 amount) internal pure returns (uint256) {
+    return (len > 1 ? amount.div(2) : amount);
   }
 
   /**
@@ -503,7 +495,8 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
             swapAmount,
             slippage,
             tokenOut,
-            to
+            to,
+            true
           );
         }
       }
@@ -532,7 +525,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    */
   function _swapTokenToTokens(
     FunctionParameters.SwapTokenToTokensData memory inputData
-  ) external payable virtual nonReentrant onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
+  ) external payable virtual onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
     IIndexSwap _index = IIndexSwap(inputData._index);
     address[] memory _tokens = _index.getTokens();
     for (uint256 i = 0; i < _tokens.length; i++) {
@@ -596,7 +589,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable 
    */
   function swapOffChainTokens(
     ExchangeData.IndexOperationData memory inputdata
-  ) external virtual nonReentrant onlyIndexManager returns (uint256, uint256) {
+  ) external virtual onlyIndexManager returns (uint256, uint256) {
     IndexSwapLibrary._whitelistAndHandlerCheck(inputdata._token, inputdata.inputData._offChainHandler, inputdata.index);
     address vault = inputdata.index.vault();
     //Checks if token is non primary

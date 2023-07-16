@@ -38,9 +38,9 @@ import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 
 contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   using SafeMathUpgradeable for uint256;
-  uint256 public constant DIVISOR_INT = 10_000;
-  address public immutable lpHandlerAddress;
-  IPriceOracle public _oracle;
+  uint256 internal constant DIVISOR_INT = 10_000;
+  address internal immutable lpHandlerAddress;
+  IPriceOracle internal _oracle;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(

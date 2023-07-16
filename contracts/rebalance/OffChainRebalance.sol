@@ -8,7 +8,7 @@ import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeabl
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {IndexSwapLibrary} from "../core/IndexSwapLibrary.sol";
 import {IExchange} from "../core/IExchange.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 import {IIndexSwap} from "../core/IIndexSwap.sol";
@@ -26,7 +26,7 @@ import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 import {IRebalanceAggregator} from "./IRebalanceAggregator.sol";
 
-contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
   using SafeMathUpgradeable for uint256;
   using SafeMathUpgradeable for uint96;
   IIndexSwap internal index;
@@ -42,7 +42,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   address internal vault;
   address internal _contract;
   address internal zeroAddress;
-  address public owner;
   struct RebalanceData {
     uint96[] oldWeight;
     address[] oldTokens;
@@ -86,8 +85,8 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     address _vault,
     address _aggregator
   ) external initializer {
+    __Ownable_init();
     __UUPSUpgradeable_init();
-    owner = msg.sender;
     zeroAddress = address(0);
     if (
       _index == zeroAddress ||
@@ -118,13 +117,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     _;
   }
 
-  modifier onlyOwner() {
-    if (msg.sender != owner) {
-      revert ErrorLibrary.CallerNotOwner();
-    }
-    _;
-  }
-
   function getCurrentWeights() public returns (uint96[] memory) {
     return RebalanceLibrary.getCurrentWeights(index, getTokens());
   }
@@ -133,7 +125,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
    * @notice The function is 1st transaction of ZeroEx Update Weight,called to pull and redeem tokens
    * @param inputData NewWeights and LpSlippage in struct
    */
-  function enableRebalance(FunctionParameters.EnableRebalanceData memory inputData) external virtual onlyAssetManager {
+  function enableRebalance(
+    FunctionParameters.EnableRebalanceData memory inputData
+  ) external virtual nonReentrant onlyAssetManager {
     RebalanceLibrary.validateEnableRebalance(index, tokenRegistry);
     //Keeping track of oldWeights and OldTokens for further use
     address[] memory _tokens = setRebalanceDataAndPause();
@@ -154,15 +148,8 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     address[] memory _newTokens,
     uint96[] memory _newWeights,
     uint256[] calldata _lpSlippage
-  ) public virtual onlyAssetManager {
-    RebalanceLibrary.validateUpdateRecord(_newTokens, assetManagerConfig, tokenRegistry);
-    setRebalanceDataAndPause();
-    _pullAndRedeemForUpdateTokens(_newWeights, _newTokens, _lpSlippage);
-    index.updateTokenList(_newTokens);
-    updateRecord(_newTokens, _newWeights);
-    pullAndRedeemForUpdateWeights(_lpSlippage);
-    step = Steps.FirstEnable;
-    emit EnableRebalanceAndUpdateRecord(_newTokens, _newWeights);
+  ) public virtual nonReentrant onlyAssetManager {
+    _enableRebalanceAndUpdateRecord(_newTokens, _newWeights, _lpSlippage);
   }
 
   /**
@@ -237,7 +224,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     RebalanceLibrary.beforePullAndRedeem(index, assetManagerConfig, token);
     ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(token);
     IHandler handler = IHandler(tokenInfo.handler);
-    uint256[] memory balanceBefore = RebalanceLibrary.checkUnderlyingBalances(token, handler, _contract);
+    uint256[] memory balanceBefore = RebalanceLibrary.getUnderlyingBalances(token, handler, _contract);
     address[] memory underlying = handler.getUnderlying(token);
     exchange._pullFromVault(token, swapAmount, _contract);
     modifiedTokens.push(token);
@@ -259,7 +246,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       }
     }
     for (uint256 i = 0; i < underlying.length; i++) {
-      uint balanceAfter = IERC20Upgradeable(underlying[i]).balanceOf(_contract);
+      uint balanceAfter = getBalance(underlying[i], _contract);
       redeemedAmounts[token].push(balanceAfter.sub(balanceBefore[i]));
     }
   }
@@ -298,7 +285,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       updateWeightStateData,
       (address[], address[], uint256[], uint256)
     );
-    uint256 balance = IERC20Upgradeable(WETH).balanceOf(_contract);
+    uint256 balance = getBalance(WETH, _contract);
     TransferHelper.safeTransfer(WETH, address(exchange), balance);
     uint256 underlyingIndex;
     uint256 inputIndex;
@@ -334,7 +321,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       RebalanceLibrary._transferAndSwapUsingOffChainHandler(
         _token,
         WETH,
-        IERC20Upgradeable(_token).balanceOf(_contract),
+        getBalance(_token, _contract),
         _contract,
         _sellSwapData[i],
         _offChainHandler,
@@ -396,7 +383,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   ) external virtual nonReentrant onlyAssetManager {
     address[] memory tokens = getTokens();
     setPaused(true);
-    IndexSwapLibrary.checkPrimaryAndHandler(tokenRegistry, tokens, offChainHandler);
+    validatePrimaryAndHandler(tokens, offChainHandler);
     address[] memory sellTokens;
     updateRecord(tokens, newWeights);
     pullAndRedeemForUpdateWeights(lpSlippage);
@@ -423,9 +410,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     address offChainHandler
   ) external virtual nonReentrant onlyAssetManager {
     setPaused(true);
-    IndexSwapLibrary.checkPrimaryAndHandler(tokenRegistry, getTokens(), offChainHandler);
+    validatePrimaryAndHandler(getTokens(), offChainHandler);
     address[] memory sellTokens;
-    enableRebalanceAndUpdateRecord(_newTokens, _newWeights, _lpSlippage);
+    _enableRebalanceAndUpdateRecord(_newTokens, _newWeights, _lpSlippage);
     (sellTokens, , , ) = abi.decode(updateWeightStateData, (address[], address[], uint256[], uint256));
     uint256 _index = 0;
     _index = _swap(sellTokens, offChainHandler, swapData, _index);
@@ -434,6 +421,21 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
     step = Steps.SecondSell;
     emit ENABLE_AND_UPDATE_PRIMARY_TOKENS(msg.sender, _newTokens, _newWeights);
+  }
+
+  function _enableRebalanceAndUpdateRecord(
+    address[] memory _newTokens,
+    uint96[] memory _newWeights,
+    uint256[] calldata _lpSlippage
+  ) internal {
+    RebalanceLibrary.validateUpdateRecord(_newTokens, assetManagerConfig, tokenRegistry);
+    setRebalanceDataAndPause();
+    _pullAndRedeemForUpdateTokens(_newWeights, _newTokens, _lpSlippage);
+    index.updateTokenList(_newTokens);
+    updateRecord(_newTokens, _newWeights);
+    pullAndRedeemForUpdateWeights(_lpSlippage);
+    step = Steps.FirstEnable;
+    emit EnableRebalanceAndUpdateRecord(_newTokens, _newWeights);
   }
 
   /**
@@ -455,7 +457,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         RebalanceLibrary._transferAndSwapUsingOffChainHandler(
           _token,
           WETH,
-          IERC20Upgradeable(_token).balanceOf(_contract),
+          getBalance(_token, _contract),
           _contract,
           swapData[_index],
           offChainHandler,
@@ -474,12 +476,15 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     _revertSell();
   }
 
+  /**
+   * @notice The function is helper function for revertSellTokens
+   */
   function _revertSell() internal {
     if (Steps.SecondSell != step) {
       revert ErrorLibrary.InvalidExecution();
     }
     RebalanceLibrary.beforeRevertCheck(index);
-    TransferHelper.safeTransfer(WETH, vault, IERC20Upgradeable(WETH).balanceOf(_contract));
+    TransferHelper.safeTransfer(WETH, vault, getBalance(WETH, _contract));
 
     address[] memory newTokens = RebalanceLibrary.getNewTokens(rebalanceData.oldTokens, WETH);
     RebalanceLibrary.setRecord(index, newTokens, WETH);
@@ -495,6 +500,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     _revertEnableRebalancing(_lpSlippage);
   }
 
+  /**
+   * @notice The function is helper function for revertEnableRebalancing
+   */
   function _revertEnableRebalancing(uint256[] calldata _lpSlippage) internal {
     //checks
     if (Steps.FirstEnable != step) {
@@ -523,22 +531,27 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     emit REVERT_ENABLE_REBALANCING(msg.sender);
   }
 
+  /**
+   * @notice The function reverts back the token to the vault again to old state,if only 1 transaction out of 3 is executed(enebaleRebalance) and it executed by user after 15 minutes is passed
+   * @param _lpSlippage array of lpSlippage
+   */
   function revertEnableRebalancingByUser(uint256[] calldata _lpSlippage) external nonReentrant {
-    if (isUserEnabled()) {
-      _revertEnableRebalancing(_lpSlippage);
-    }
+    validateUser();
+    _revertEnableRebalancing(_lpSlippage);
   }
 
+  /**
+   * @notice The function reverts back WETH back to vault,updating the tokenList and weights accordingly,if only 2 transaction out of 3 is executed(ExternalSell) and it executed by user after 15 minutes is passed
+   */
   function revertSellByUser() external nonReentrant {
-    if (isUserEnabled()) {
-      _revertSell();
-    }
+    validateUser();
+    _revertSell();
   }
 
   /**
    * @notice The function gives the bool value, after checking for lastRebalance and lastPaused, for user to take action
    */
-  function isUserEnabled() internal view returns (bool status) {
+  function isUserRevertEnabled() internal view returns (bool status) {
     uint256 _lastPaused = index.getLastPaused();
     status = (block.timestamp >= (_lastPaused + 15 minutes));
   }
@@ -598,10 +611,33 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   }
 
   /**
-   * @notice This internal returns token information
+   * @notice This internal function returns token information
    */
   function getTokenInfo(address _token) internal view returns (ITokenRegistry.TokenRecord memory) {
     return tokenRegistry.getTokenInformation(_token);
+  }
+
+  /**
+   * @notice This internal function returns balance of token
+   */
+  function getBalance(address _token, address _of) internal view returns (uint256) {
+    return IERC20Upgradeable(_token).balanceOf(_of);
+  }
+
+  /**
+   * @notice This internal function checks for primary tokens and handler
+   */
+  function validatePrimaryAndHandler(address[] memory tokens, address handler) internal view {
+    IndexSwapLibrary.checkPrimaryAndHandler(tokenRegistry, tokens, handler);
+  }
+
+  /**
+   * @notice This internal function checks for user validation to execute function
+   */
+  function validateUser() internal view {
+    if (!isUserRevertEnabled()) {
+      revert ErrorLibrary.FifteenMinutesNotExcedeed();
+    }
   }
 
   // important to receive ETH

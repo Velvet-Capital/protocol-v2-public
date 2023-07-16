@@ -41,8 +41,8 @@ contract BeefyHandler is IHandler {
     bool isWETH
   );
 
-  address public constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
-  address public constant MOO_VENUS_BNB = address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71);
+  address internal constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+  address internal constant MOO_VENUS_BNB = address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71);
 
   /**
    * @notice This function deposits assets to the Beefy protocol

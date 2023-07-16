@@ -7,7 +7,7 @@ interface ISwapHandler {
 
   function getSwapAddress(uint256 _swapAmount, address _t) external view returns (address);
 
-  function swapTokensToETH(uint256 _swapAmount, uint256 _slippage, address _t, address _to) external returns (uint256);
+  function swapTokensToETH(uint256 _swapAmount, uint256 _slippage, address _t, address _to, bool isEnabled) external returns (uint256);
 
   function swapETHToTokens(uint256 _slippage, address _t, address _to) external payable returns (uint256);
 
@@ -16,7 +16,8 @@ interface ISwapHandler {
     uint256 _slippage,
     address _tokenIn,
     address _tokenOut,
-    address _to
+    address _to,
+    bool isEnabled
   ) external returns (uint256 swapResult);
 
   function getPathForETH(address crypto) external view returns (address[] memory);

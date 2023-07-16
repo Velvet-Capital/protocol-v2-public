@@ -37,10 +37,6 @@ import {
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
 
-import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@safe-global/protocol-kit";
-import { EthersAdapter } from "@safe-global/protocol-kit";
-import { SafeTransactionDataPartial } from "@safe-global/safe-core-sdk-types";
-
 var chai = require("chai");
 //use default BigNumber
 chai.use(require("chai-bignumber")());
@@ -815,7 +811,7 @@ describe.only("Tests for MixedIndex", () => {
       it("should revert unpause", async () => {
         await expect(rebalancing.connect(addr1).setPause(false)).to.be.revertedWithCustomError(
           rebalancing,
-          "TenMinutesPassOrRebalancingHasToBeCalled",
+          "FifteenMinutesNotExcedeed",
         );
       });
 

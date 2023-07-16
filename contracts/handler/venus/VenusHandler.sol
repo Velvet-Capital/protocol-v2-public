@@ -30,7 +30,7 @@ import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "contracts/FunctionParameters.sol";
 
 contract VenusHandler is IHandler {
-  address public constant COMPTROLLER = 0xfD36E2c2a6789Db23113685031d7F16329158384;
+  address internal constant COMPTROLLER = 0xfD36E2c2a6789Db23113685031d7F16329158384;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(

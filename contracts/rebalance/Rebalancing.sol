@@ -30,23 +30,21 @@ import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
 import {IAssetManagerConfig} from "../registry/IAssetManagerConfig.sol";
 
-import {IExternalSwapHandler} from "../handler/IExternalSwapHandler.sol";
-import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
-
 import {RebalanceLibrary} from "./RebalanceLibrary.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
+import {IHandler} from "../handler/IHandler.sol";
 
 contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
-  IIndexSwap public index;
-  AccessController public accessController;
-  ITokenRegistry public tokenRegistry;
-  IAssetManagerConfig public assetManagerConfig;
-  IExchange public exchange;
+  IIndexSwap internal index;
+  AccessController internal accessController;
+  ITokenRegistry internal tokenRegistry;
+  IAssetManagerConfig internal assetManagerConfig;
+  IExchange internal exchange;
 
   using SafeMathUpgradeable for uint256;
 
-  IPriceOracle public oracle;
+  IPriceOracle internal oracle;
 
   event UpdatedWeights(uint256 time, uint96[] indexed newDenorms);
   event UpdatedTokens(uint256 time, address[] indexed newTokens, uint96[] indexed newDenorms);
@@ -89,7 +87,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
       }
       _setPaused(_state);
     } else {
-      if (index.getRedeemed() != false) {
+      if (getRedeemed()) {
         revert ErrorLibrary.TokensNotStaked();
       }
       uint256 _lastPaused = index.getLastPaused();
@@ -97,7 +95,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
         _setPaused(_state);
       } else {
         if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
-          revert ErrorLibrary.TenMinutesPassOrRebalancingHasToBeCalled();
+          revert ErrorLibrary.FifteenMinutesNotExcedeed();
         }
         _setPaused(_state);
       }
@@ -193,7 +191,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
     (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(index), tokens);
 
-    uint256 contractBalanceInUSD = oracle.getUsdEthPrice(address(this).balance);
+    uint256 contractBalanceInUSD = oracle.getEthUsdPrice(address(this).balance);
     vaultBalance = vaultBalance.add(contractBalanceInUSD);
 
     for (uint256 i = 0; i < tokens.length; i++) {
@@ -234,7 +232,6 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
   /**
    * @notice The function rebalances the portfolio to the updated tokens with the updated weights
    * @param inputData The input calldata passed to the function
-
    */
   function updateTokens(
     FunctionParameters.UpdateTokens calldata inputData
@@ -320,6 +317,67 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     );
   }
 
+  /**
+   * @notice This function swaps reward token to index token
+   * @param rewardToken address of reward token to swap
+   * @param swapHandler address fo swaphandler
+   * @param buyToken address of buyToken token
+   * @param amount amount of reward token to swap
+   * @param slippage amount of slippage
+   * @param _lpSlippage amount of lpSlippage
+   */
+  function swapRewardToken(
+    address rewardToken,
+    address swapHandler,
+    address buyToken,
+    uint256 amount,
+    uint256 slippage,
+    uint256 _lpSlippage
+  ) external nonReentrant onlyAssetManager {
+    validateUpdate(swapHandler);
+    if (!tokenRegistry.isRewardToken(rewardToken)) {
+      revert ErrorLibrary.NotRewardToken();
+    }
+    if (index.getRecord(buyToken).denorm == 0) {
+      revert ErrorLibrary.TokenNotIndexToken();
+    }
+    _swapRewardToken(rewardToken, swapHandler, buyToken, amount, slippage, _lpSlippage);
+  }
+
+  /**
+   * @notice This internal function is helper function of swapRewardToken
+   */
+  function _swapRewardToken(
+    address rewardToken,
+    address swapHandler,
+    address buyToken,
+    uint256 amount,
+    uint256 slippage,
+    uint256 _lpSlippage
+  ) internal {
+    IHandler handler = IHandler(tokenRegistry.getTokenInformation(buyToken).handler);
+    address vault = index.vault();
+    uint balanceBefore = handler.getTokenBalance(vault, buyToken);
+    exchange._pullFromVaultRewards(rewardToken, amount, address(exchange));
+    exchange._swapTokenToToken(
+      FunctionParameters.SwapTokenToTokenData(
+        rewardToken,
+        buyToken,
+        vault,
+        swapHandler,
+        vault,
+        amount,
+        slippage,
+        _lpSlippage,
+        true
+      )
+    );
+    uint balanceAfter = handler.getTokenBalance(vault, buyToken);
+    if (balanceAfter.sub(balanceBefore) == 0) {
+      revert ErrorLibrary.SwapFailed();
+    }
+  }
+
   function _setPaused(bool _state) internal {
     index.setPaused(_state);
   }
@@ -331,7 +389,11 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     if (!(tokenRegistry.isSwapHandlerEnabled(_swapHandler))) {
       revert ErrorLibrary.SwapHandlerNotEnabled();
     }
-    if (index.getRedeemed()) revert ErrorLibrary.AlreadyOngoingOperation();
+    if (getRedeemed()) revert ErrorLibrary.AlreadyOngoingOperation();
+  }
+
+  function getRedeemed() internal view returns (bool) {
+    return index.getRedeemed();
   }
 
   // important to receive ETH
