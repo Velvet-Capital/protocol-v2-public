@@ -4,7 +4,7 @@ import { ethers, upgrades } from "hardhat";
 import { chainIdToAddresses } from "../scripts/networkVariables";
 import console from "console";
 
-import { tokenAddresses } from "./Deployments.test";
+import { tokenAddresses, priceOracle } from "./Deployments.test";
 
 var chai = require("chai");
 //use default BigNumber
@@ -23,7 +23,7 @@ var endTokenValue = 0;
 let dataArray: any;
 let tokenAddresses1: any;
 let urChoice: any;
-let priceOracle: any;
+// let priceOracle: any;
 
 // console.log(
 //   "\n<-------------------------------------------------->"
@@ -38,11 +38,11 @@ let priceOracle: any;
 let wishInput = 0;
 
 async function deployPriceOracle() {
-  const PriceOracle = await ethers.getContractFactory("PriceOracle");
-  priceOracle = await PriceOracle.deploy();
-  await priceOracle.deployed();
+  // const PriceOracle = await ethers.getContractFactory("PriceOracle");
+  // priceOracle = await PriceOracle.deploy();
+  // await priceOracle.deployed();
 
-  await tokenAddresses(priceOracle, true);
+  await tokenAddresses();
 }
 
 if (wishInput == 0) {
@@ -125,7 +125,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               handlerVariable = await deployHandler.deploy(priceOracle.address);
             }
           } else {
-            handlerVariable = await deployHandler.deploy();
+            handlerVariable = await deployHandler.deploy(priceOracle.address);
             await handlerVariable.deployed();
           }
 
@@ -259,6 +259,127 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
             }
             const balanceAfter = await token.balanceOf(owner.address);
             expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
+          });
+
+          it("return values of deposit should be greater than 0", async () => {
+            const time = Math.floor(Date.now() / 1000) + 1000000000;
+            const token = await ethers.getContractAt("VBep20Interface", dataArray[tokenVariable]);
+            const swapping = await ethers.getContractAt("IUniswapV2Router02", addresses.PancakeSwapRouterAddress);
+            const result = await handlerVariable.getUnderlying(dataArray[tokenVariable]);
+            const token1 = result[0];
+            const token1Count = await ethers.getContractAt("VBep20Interface", token1);
+            await token.connect(owner).approve(addresses.PancakeSwapRouterAddress, "10000000000000000000");
+            await token1Count.connect(owner).approve(addresses.PancakeSwapRouterAddress, "10000000000000000000");
+            const balanceBefore = await token.balanceOf(owner.address);
+            const path1 = async () => {
+              let path = new Array(2);
+              path[0] = await swapping.WETH();
+              path[1] = token1;
+              return path;
+            };
+            const Path1 = await path1();
+            let depositResult;
+            if (result[1]) {
+              //if token is lp token
+              const token2 = result[1];
+              const token2Count = await ethers.getContractAt("VBep20Interface", token2);
+              await token2Count.connect(owner).approve(addresses.PancakeSwapRouterAddress, "10000000000000000000");
+              const path2 = async () => {
+                let path = new Array(2);
+                path[0] = await swapping.WETH();
+                path[1] = token2;
+                return path;
+              };
+              const Path2 = await path2();
+              if (token1.toUpperCase() != addresses.WETH_Address.toUpperCase()) {
+                const swapResult1 = await swapping
+                  .connect(owner)
+                  .swapExactETHForTokens(200, Path1, handlerVariable.address, time, {
+                    value: "1000000000000000000",
+                  });
+              }
+              if (token2.toUpperCase() != addresses.WETH_Address.toUpperCase()) {
+                const swapResult2 = await swapping
+                  .connect(owner)
+                  .swapExactETHForTokens(200, Path2, handlerVariable.address, time, {
+                    value: "1000000000000000000",
+                  });
+              }
+              if (token2.toUpperCase() != addresses.WETH_Address.toUpperCase()) {
+                const swapResult2 = await swapping
+                  .connect(owner)
+                  .swapExactETHForTokens(200, Path2, handlerVariable.address, time, {
+                    value: "1000000000000000000",
+                  });
+              }
+              const balanceAfterToken1 = await token1Count.balanceOf(handlerVariable.address);
+              const balanceAfterToken2 = await token2Count.balanceOf(handlerVariable.address);
+
+              if (handlerJSON[protocolVariable - 1].handlerInit == "true") {
+                handlerVariable.addOrUpdateProtocolSlippage("700");
+              }
+
+              if (token1.toUpperCase() == addresses.WETH_Address.toUpperCase()) {
+                depositResult = await handlerVariable.callStatic.deposit(
+                  dataArray[tokenVariable],
+                  ["1000000000000000000", balanceAfterToken2],
+                  "600",
+                  owner.address,
+                  owner.address,
+                  {
+                    value: "1000000000000000000",
+                  },
+                );
+              } else if (token2.toUpperCase() == addresses.WETH_Address.toUpperCase()) {
+                depositResult = await handlerVariable.callStatic.deposit(
+                  dataArray[tokenVariable],
+                  [balanceAfterToken1, "1000000000000000000"],
+                  "600",
+                  owner.address,
+                  owner.address,
+                  {
+                    value: "1000000000000000000",
+                  },
+                );
+              } else {
+                depositResult = await handlerVariable.callStatic.deposit(
+                  dataArray[tokenVariable],
+                  [balanceAfterToken1, balanceAfterToken2],
+                  "600",
+                  owner.address,
+                  owner.address,
+                );
+              }
+            } else {
+              //if token is not lp token
+              if (token1.toUpperCase() == addresses.WETH_Address.toUpperCase()) {
+                depositResult = await handlerVariable.callStatic.deposit(
+                  dataArray[tokenVariable],
+                  ["1000000000000000000"],
+                  "600",
+                  owner.address,
+                  owner.address,
+                  {
+                    value: "1000000000000000000",
+                  },
+                );
+              } else {
+                const swapResult1 = await swapping
+                  .connect(owner)
+                  .swapExactETHForTokens(200, Path1, handlerVariable.address, time, {
+                    value: "1000000000000000000",
+                  });
+                const handlerbalance = await token1Count.balanceOf(handlerVariable.address);
+                depositResult = await handlerVariable.callStatic.deposit(
+                  dataArray[tokenVariable],
+                  [handlerbalance],
+                  "600",
+                  owner.address,
+                  owner.address,
+                );
+              }
+            }
+            expect(Number(depositResult)).to.be.greaterThan(0);
           });
 
           it("should redeem tokens", async () => {
@@ -413,13 +534,11 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
             expect(Number(result)).to.be.greaterThan(0);
           });
 
-          it("should get the underlying token balance", async () => {
+          it("should get the token price in USD", async () => {
             const token = await ethers.getContractAt("VBep20Interface", dataArray[tokenVariable]);
-            const tokenBalance = await handlerVariable.callStatic.getUnderlyingBalance(owner.address, token.address);
-            if (tokenBalance[1]) {
-              expect(Number(tokenBalance[1])).to.be.greaterThan(0);
-            }
-            expect(Number(tokenBalance[0])).to.be.greaterThan(0);
+            const tokenBalance = await handlerVariable.callStatic.getTokenBalanceUSD(owner.address, token.address);
+
+            expect(Number(tokenBalance)).to.be.greaterThan(0);
           });
         });
       });

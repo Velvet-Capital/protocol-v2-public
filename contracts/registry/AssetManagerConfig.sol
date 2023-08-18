@@ -63,6 +63,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function is used to init the assetmanager-config data while deployment
+   * @param initData Input parameters passed as a struct
    */
   function init(FunctionParameters.AssetManagerConfigInitData calldata initData) external initializer {
     __UUPSUpgradeable_init();
@@ -118,6 +119,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function updates the newManagementFee (staging)
+   * @param _newManagementFee The new proposed management fee (integral) value - has to be in the range of min and max fee values
    */
   function proposeNewManagementFee(uint256 _newManagementFee) public virtual onlyAssetManager {
     if (_newManagementFee > tokenRegistry.maxManagementFee()) {
@@ -150,6 +152,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function updates the newPerformanceFee (staging)
+   * @param _newPerformanceFee The new proposed performance fee (integral) value
    */
   function proposeNewPerformanceFee(uint256 _newPerformanceFee) public virtual onlyAssetManager {
     if (_newPerformanceFee > tokenRegistry.maxPerformanceFee()) {
@@ -162,6 +165,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function permits a portfolio token from the asset manager side
+   * @param _newTokens Array of the tokens to be permitted by the asset manager
    */
   function setPermittedTokens(address[] calldata _newTokens) external virtual onlyAssetManager {
     if (_newTokens.length == 0) {
@@ -187,6 +191,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function removes permission from a previously permitted token
+   * @param _tokens Address of the tokens to be revoked permission by the asset manager
    */
   function deletePermittedTokens(address[] calldata _tokens) external virtual onlyAssetManager {
     if (_tokens.length == 0) {
@@ -206,6 +211,8 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function checks if a token is permitted or not
+   * @param _token Address of the token to be checked for
+   * @return Boolean return value for is the token permitted in the asset manager config or not
    */
   function isTokenPermitted(address _token) public view virtual returns (bool) {
     if (_token == address(0)) {
@@ -230,6 +237,8 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function allows the asset manager to update the transferability of a fund
+   * @param _transferable Boolean parameter for is the fund transferable or not
+   * @param _publicTransfer Boolean parameter for is the fund transferable to public or not
    */
   function updateTransferability(bool _transferable, bool _publicTransfer) public virtual onlyAssetManager {
     transferable = _transferable;
@@ -271,6 +280,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function update the address of assetManagerTreasury
+   * @param _newAssetManagementTreasury New proposed address of the asset manager treasury
    */
   function updateAssetManagerTreasury(address _newAssetManagementTreasury) public virtual onlyAssetManager {
     assetManagerTreasury = _newAssetManagementTreasury;
@@ -279,6 +289,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function whitelists users which can invest in a particular index
+   * @param users Array of user addresses to be whitelisted by the asset manager
    */
   function addWhitelistedUser(address[] calldata users) public virtual onlyWhitelistManager {
     uint256 len = users.length;
@@ -290,6 +301,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function removes a previously whitelisted user
+   * @param users Array of user addresses to be removed from whiteist by the asset manager
    */
   function removeWhitelistedUser(address[] calldata users) public virtual onlyWhitelistManager {
     uint256 len = users.length;
@@ -301,6 +313,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   /**
    * @notice This function explicitly adds tokens to the whitelisted list
+   * @param tokens Array of token addresses to be whitelisted
    */
   function addTokensToWhitelist(address[] calldata tokens) internal virtual {
     uint256 len = tokens.length;

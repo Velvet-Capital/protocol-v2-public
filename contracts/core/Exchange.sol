@@ -18,7 +18,6 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IIndexSwap} from "./IIndexSwap.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
@@ -30,7 +29,7 @@ import {IAccessController} from "../access/IAccessController.sol";
 import {IVelvetSafeModule} from "../vault/IVelvetSafeModule.sol";
 
 import {ISwapHandler} from "../handler/ISwapHandler.sol";
-
+import {IExternalSwapHandler} from "../handler/IExternalSwapHandler.sol";
 import {IExchange} from "./IExchange.sol";
 import {IHandler} from "../handler/IHandler.sol";
 import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
@@ -52,11 +51,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     _disableInitializers();
   }
 
-  using SafeMathUpgradeable for uint256;
-
   event TokensClaimed(uint256 indexed time, address indexed _index, address[] _tokens);
-
-  event RewardTokensDistributed(address indexed _index, address indexed _rewardToken, uint256 indexed diff);
 
   /**
    * @notice This function is used to init the Exchange while deployment
@@ -73,7 +68,6 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
   ) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
-    zeroAddress = address(0);
     if (
       _accessController == zeroAddress ||
       _module == zeroAddress ||
@@ -96,7 +90,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    */
   function isWETH(address _token, address _protocol) public view virtual returns (bool) {
     IHandler protocol = IHandler(_protocol);
-    address[] memory underlying = protocol.getUnderlying(_token);
+    address[] memory underlying = getUnderlying(protocol, _token);
     address _token1 = underlying[0];
     if (underlying.length == 1) {
       return _token1 == WETH;
@@ -122,7 +116,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
       address _token = _tokens[i];
       IHandler handler = IHandler(getTokenInfo(_token).handler);
 
-      (bytes memory callData, address callAddress) = handler.getClaimTokenCalldata(_token, _index.vault());
+      (bytes memory callData, address callAddress) = handler.getClaimTokenCalldata(_token, getVault(_index));
 
       if (callAddress != zeroAddress) {
         safe.executeWallet(callAddress, callData);
@@ -154,15 +148,20 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    * @param amount Amount of the token to be pulled
    * @param to Address where the pulled token has to be sent
    */
-
   function _safeTokenTransfer(address token, uint256 amount, address to) internal {
     bytes memory inputData = abi.encodeWithSelector(IERC20Upgradeable.transfer.selector, to, amount);
 
-    safe.executeWallet(token, inputData);
+    (, bytes memory data) = safe.executeWallet(token, inputData);
+    bool success = abi.decode(data, (bool));
+
+    if (!(data.length == 0 || success)) revert ErrorLibrary.TransferFailed();
   }
 
   /**
    * @notice Transfer tokens from vault to a specific address
+   * @param token The address of the token being transferred
+   * @param amount Amount of the token to be transferred
+   * @param to The address to be transferred to
    */
   function _pullFromVaultRewards(address token, uint256 amount, address to) external onlyIndexManager {
     _safeTokenTransfer(token, amount, to);
@@ -172,7 +171,9 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    * @notice The function is called from the `swapETHToToken` function and is used to swap ETH to a specific token
    * @param inputData Contains the input params for the function
    */
-  function _swapETHToToken(FunctionParameters.SwapETHToTokenData memory inputData) internal returns (uint256[] memory) {
+  function _swapETHToToken(
+    FunctionParameters.SwapETHToTokenData memory inputData
+  ) internal returns (uint256 _mintedAmount) {
     address token = inputData._token;
     ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(token);
     IHandler handler = IHandler(tokenInfo.handler);
@@ -181,31 +182,37 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
       revert ErrorLibrary.SwapHandlerNotEnabled();
     }
     address user = inputData._toUser;
-    address[] memory underlying = handler.getUnderlying(token);
+    address[] memory underlying = getUnderlying(handler, token);
     uint256[] memory swapResult = new uint256[](underlying.length);
-    uint256 swapValue = underlying.length > 1 ? inputData._swapAmount.div(2) : inputData._swapAmount;
+    uint256[] memory swapValue = getSwapValue(underlying.length, inputData._swapAmount);
     address to = inputData._to;
 
     if (isWETH(token, address(handler))) {
       for (uint256 i = 0; i < underlying.length; i++) {
-        swapResult[i] = swapValue;
+        swapResult[i] = swapValue[i];
       }
 
       if (tokenInfo.primary) {
-        IWETH(token).deposit{value: swapValue}();
+        IWETH(token).deposit{value: swapValue[0]}();
         if (to != address(this)) {
-          IWETH(token).transfer(to, swapValue);
+          IWETH(token).transfer(to, swapValue[0]);
         }
+        _mintedAmount = getPriceTokenUSD18Decimals(WETH, swapValue[0]);
       } else {
         if (underlying.length > 1) {
           uint256 t = underlying[0] == WETH ? 1 : 0;
-          swapResult[t] = swapHandler.swapETHToTokens{value: swapValue}(
+          swapResult[t] = swapHandler.swapETHToTokens{value: swapValue[t]}(
             inputData._slippage,
             underlying[t],
             address(handler)
           );
         }
-        handler.deposit{value: swapValue}(token, swapResult, inputData._lpSlippage, to, user);
+
+        if (underlying[0] == WETH) {
+          _mintedAmount = handler.deposit{value: swapValue[0]}(token, swapResult, inputData._lpSlippage, to, user);
+        } else {
+          _mintedAmount = handler.deposit{value: swapValue[1]}(token, swapResult, inputData._lpSlippage, to, user);
+        }
       }
     } else {
       address _toAddress = to;
@@ -213,13 +220,14 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         _toAddress = address(handler);
       }
       for (uint256 i = 0; i < underlying.length; i++) {
-        swapResult[i] = swapHandler.swapETHToTokens{value: swapValue}(inputData._slippage, underlying[i], _toAddress);
+        swapResult[i] = swapHandler.swapETHToTokens{value: swapValue[i]}(
+          inputData._slippage,
+          underlying[i],
+          _toAddress
+        );
       }
-      if (!tokenInfo.primary) {
-        handler.deposit(token, swapResult, inputData._lpSlippage, to, user);
-      }
+      _mintedAmount = handler.deposit(token, swapResult, inputData._lpSlippage, to, user);
     }
-    return swapResult;
   }
 
   /**
@@ -228,18 +236,19 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    */
   function swapETHToToken(
     FunctionParameters.SwapETHToTokenPublicData memory inputData
-  ) external payable onlyIndexManager {
-    _swapETHToToken(
-      FunctionParameters.SwapETHToTokenData(
-        inputData._token,
-        inputData._to,
-        inputData._swapHandler,
-        inputData._toUser,
-        inputData._slippage,
-        inputData._lpSlippage,
-        msg.value
-      )
-    );
+  ) external payable onlyIndexManager returns (uint256) {
+    return
+      _swapETHToToken(
+        FunctionParameters.SwapETHToTokenData(
+          inputData._token,
+          inputData._to,
+          inputData._swapHandler,
+          inputData._toUser,
+          inputData._slippage,
+          inputData._lpSlippage,
+          msg.value
+        )
+      );
   }
 
   /**
@@ -259,7 +268,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     if (!(tokenRegistry.isSwapHandlerEnabled(address(swapHandler)))) {
       revert ErrorLibrary.SwapHandlerNotEnabled();
     }
-    address[] memory underlying = handler.getUnderlying(_token);
+    address[] memory underlying = getUnderlying(handler, _token);
     uint256[] memory swapResult = new uint256[](underlying.length);
 
     if (!tokenInfo.primary) {
@@ -290,8 +299,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         require(success, "Transfer failed.");
       } else {
         if (!tokenInfo.primary) {
-          IERC20Upgradeable token = IERC20Upgradeable(underlyingToken);
-          swapAmount = token.balanceOf(address(this));
+          swapAmount = getBalance(underlyingToken, address(this));
         }
         if (swapAmount == 0) {
           revert ErrorLibrary.ZeroBalanceAmount();
@@ -312,11 +320,11 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
   /**
    * @notice This function swaps one token to another
    * @param inputData Includes the input params
-   * @return swapResult Final outcome after swap
+   * @return _mintedAmount The amount swapped and deposited into the third party protocols
    */
   function _swapTokenToToken(
     FunctionParameters.SwapTokenToTokenData memory inputData
-  ) public onlyIndexManager returns (uint256[] memory) {
+  ) public onlyIndexManager returns (uint256 _mintedAmount) {
     ISwapHandler swapHandler = ISwapHandler(inputData._swapHandler);
     if (!(tokenRegistry.isSwapHandlerEnabled(address(swapHandler)))) {
       revert ErrorLibrary.SwapHandlerNotEnabled();
@@ -328,7 +336,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     ITokenRegistry.TokenRecord memory tokenInfoOut = getTokenInfo(tokenOut);
     if (!tokenInfoIn.primary || !tokenInfoOut.primary) {
       if (inputData._isInvesting) {
-        swapResult = _swapTokenToTokenInvest(inputData, tokenInfoIn.enabled);
+        _mintedAmount = _swapTokenToTokenInvest(inputData, tokenInfoIn.enabled);
       } else {
         swapResult = _swapTokenToTokenWithdraw(inputData);
       }
@@ -340,7 +348,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         if (inputData._isInvesting) {
           to = address(this);
         }
-        _swapTokenToETH(
+        swapResult = _swapTokenToETH(
           FunctionParameters.SwapTokenToETHData(
             tokenIn,
             to,
@@ -368,36 +376,37 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
           tokenInfoIn.enabled
         );
       }
+
+      _mintedAmount = getPriceTokenUSD18Decimals(tokenOut, swapResult[0]);
     }
-    return swapResult;
   }
 
   /**
    * @notice This function swaps one token to another while investing
    * @param inputData Includes the input params
-   * @return swapResult Final amount after swap
+   * @return _mintedAmount Final amount after swap and depositing into third party protocols
    */
   function _swapTokenToTokenInvest(
     FunctionParameters.SwapTokenToTokenData memory inputData,
     bool isEnabled
-  ) internal returns (uint256[] memory) {
+  ) internal returns (uint256 _mintedAmount) {
     IHandler handler = IHandler(getTokenInfo(inputData._tokenOut).handler);
     ISwapHandler swapHandler = ISwapHandler(inputData._swapHandler);
-    address[] memory underlying = handler.getUnderlying(inputData._tokenOut);
+    address[] memory underlying = getUnderlying(handler, inputData._tokenOut);
     uint256[] memory swapResult = new uint256[](underlying.length);
-    if (IERC20Upgradeable(inputData._tokenIn).balanceOf(address(this)) < inputData._swapAmount) {
+    if (getBalance(inputData._tokenIn, address(this)) < inputData._swapAmount) {
       revert ErrorLibrary.InvalidAmount();
     }
-    uint256 swapValue = getSwapVaule(underlying.length, inputData._swapAmount);
+    uint256[] memory swapValue = getSwapValue(underlying.length, inputData._swapAmount);
     for (uint256 i = 0; i < underlying.length; i++) {
       if (inputData._tokenIn == underlying[i] && inputData._tokenIn != WETH) {
-        swapResult[i] = swapValue;
-        TransferHelper.safeTransfer(inputData._tokenIn, address(handler), swapValue);
+        swapResult[i] = swapValue[i];
+        TransferHelper.safeTransfer(inputData._tokenIn, address(handler), swapValue[i]);
       } else if (underlying[i] == WETH) {
         swapResult[i] = IndexSwapLibrary.transferAndSwapTokenToETH(
           inputData._tokenIn,
           swapHandler,
-          swapValue,
+          swapValue[i],
           inputData._slippage,
           address(this),
           isEnabled
@@ -406,7 +415,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         swapResult[i] = IndexSwapLibrary.transferAndSwapTokenToToken(
           inputData._tokenIn,
           swapHandler,
-          swapValue,
+          swapValue[i],
           inputData._slippage,
           underlying[i],
           address(handler),
@@ -415,7 +424,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
       }
     }
     if (isWETH(inputData._tokenOut, address(handler))) {
-      handler.deposit{value: address(this).balance}(
+      _mintedAmount = handler.deposit{value: address(this).balance}(
         inputData._tokenOut,
         swapResult,
         inputData._lpSlippage,
@@ -423,13 +432,30 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         inputData._toUser
       );
     } else {
-      handler.deposit(inputData._tokenOut, swapResult, inputData._lpSlippage, inputData._to, inputData._toUser);
+      _mintedAmount = handler.deposit(
+        inputData._tokenOut,
+        swapResult,
+        inputData._lpSlippage,
+        inputData._to,
+        inputData._toUser
+      );
     }
-    return swapResult;
   }
 
-  function getSwapVaule(uint256 len, uint256 amount) internal pure returns (uint256) {
-    return (len > 1 ? amount.div(2) : amount);
+  /**
+   * @notice This function is used to determine the swap amount while investing, as per the underlying length
+   * @param len Lenght of the underlying token array
+   * @param amount Swap amount that is to be tweaked as per the underlying length
+   */
+  function getSwapValue(uint256 len, uint256 amount) internal pure returns (uint256[] memory) {
+    uint256[] memory swapValue = new uint256[](len);
+    if (len > 1) {
+      swapValue[0] = amount / 2;
+      swapValue[1] = amount - swapValue[0];
+    } else {
+      swapValue[0] = amount;
+    }
+    return swapValue;
   }
 
   /**
@@ -444,7 +470,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     uint256 slippage = inputData._slippage;
     IHandler handler = IHandler(getTokenInfo(tokenIn).handler);
     ISwapHandler swapHandler = ISwapHandler(inputData._swapHandler);
-    address[] memory underlying = handler.getUnderlying(tokenIn);
+    address[] memory underlying = getUnderlying(handler, tokenIn);
     uint256[] memory swapResult = new uint256[](underlying.length);
     address tokenOut = inputData._tokenOut;
     address to = inputData._to;
@@ -472,8 +498,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
       );
       for (uint256 i = 0; i < underlying.length; i++) {
         address underlyingToken = underlying[i];
-        IERC20Upgradeable token = IERC20Upgradeable(underlyingToken);
-        uint256 swapAmount = token.balanceOf(address(this));
+        uint256 swapAmount = getBalance(underlyingToken, address(this));
         if (underlyingToken == tokenOut) {
           if (swapAmount == 0) {
             revert ErrorLibrary.ZeroBalanceAmount();
@@ -505,7 +530,12 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
   }
 
   /**
-   * @notice Calculates the swap amount based on the passed params
+   * @notice This function is used to calculate the swap amount based on the passed params
+   * @param _totalSupply Total supply of the index
+   * @param _tokenAmount Token amount which will be used to calculate the swap amount
+   * @param _amount The swap amount (in case totalSupply != 0) value calculated from the IndexSwapLibrary
+   * @param _denorm The weight (denorm) of the passed token
+   * @return swapAmount The final swap amount
    */
   function getSwapAmount(
     uint256 _totalSupply,
@@ -514,7 +544,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     uint256 _denorm
   ) internal pure virtual returns (uint256 swapAmount) {
     if (_totalSupply == 0) {
-      swapAmount = _tokenAmount.mul(_denorm).div(10_000);
+      swapAmount = (_tokenAmount * _denorm) / 10_000;
     } else {
       swapAmount = _amount;
     }
@@ -522,14 +552,17 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
 
   /**
    * @notice Swaps one token to another based on the input
+   * @param inputData Includes the input params
+   * @return investedAmountAfterSlippage Final invested amount after slippage
    */
   function _swapTokenToTokens(
-    FunctionParameters.SwapTokenToTokensData memory inputData
+    FunctionParameters.SwapTokenToTokensData memory inputData,
+    uint256 balanceBefore
   ) external payable virtual onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
     IIndexSwap _index = IIndexSwap(inputData._index);
     address[] memory _tokens = _index.getTokens();
+    address vault = getVault(_index);
     for (uint256 i = 0; i < _tokens.length; i++) {
-      address vault = _index.vault();
       address _token = _tokens[i];
       uint256 swapAmount = getSwapAmount(
         inputData._totalSupply,
@@ -538,109 +571,144 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         uint256(_index.getRecord(_token).denorm)
       );
 
-      IHandler handler = IHandler(getTokenInfo(_token).handler);
-      address[] memory underlying = handler.getUnderlying(_token);
-      uint256[] memory swapResult = new uint256[](underlying.length);
       if (WETH == inputData._inputToken) {
         if (address(this).balance < swapAmount) {
           revert ErrorLibrary.NotEnoughBNB();
         }
-        swapResult = _swapETHToToken(
-          FunctionParameters.SwapETHToTokenData(
-            _token,
-            vault,
-            inputData._swapHandler,
-            inputData._toUser,
-            inputData._slippage[i],
-            inputData._lpSlippage[i],
-            swapAmount
-          )
-        );
+        investedAmountAfterSlippage =
+          investedAmountAfterSlippage +
+          _swapETHToToken(
+            FunctionParameters.SwapETHToTokenData(
+              _token,
+              vault,
+              inputData._swapHandler,
+              inputData._toUser,
+              inputData._slippage[i],
+              inputData._lpSlippage[i],
+              swapAmount
+            )
+          );
       } else if (inputData._inputToken == _token) {
-        swapResult[0] = swapAmount;
+        investedAmountAfterSlippage = investedAmountAfterSlippage + getPriceTokenUSD18Decimals(_token, swapAmount);
         TransferHelper.safeTransfer(inputData._inputToken, vault, swapAmount);
       } else {
-        swapResult = _swapTokenToToken(
-          FunctionParameters.SwapTokenToTokenData(
-            inputData._inputToken,
-            _token,
-            vault,
-            inputData._swapHandler,
-            inputData._toUser,
-            swapAmount,
-            inputData._slippage[i],
-            inputData._lpSlippage[i],
-            true
-          )
-        );
-      }
-      for (uint256 j = 0; j < swapResult.length; j++) {
-        investedAmountAfterSlippage = investedAmountAfterSlippage.add(
-          oracle.getPriceTokenUSD18Decimals(underlying[j], swapResult[j])
-        );
+        investedAmountAfterSlippage =
+          investedAmountAfterSlippage +
+          _swapTokenToToken(
+            FunctionParameters.SwapTokenToTokenData(
+              inputData._inputToken,
+              _token,
+              vault,
+              inputData._swapHandler,
+              inputData._toUser,
+              swapAmount,
+              inputData._slippage[i],
+              inputData._lpSlippage[i],
+              true
+            )
+          );
       }
     }
+
+    // Refund any leftover ETH/Investment token from Exchange handler back to the User
+    uint256 balanceAfter = IndexSwapLibrary.checkBalance(inputData._inputToken, address(this), WETH);
+    returnUninvestedFunds(inputData._inputToken, inputData._toUser, balanceAfter - balanceBefore);
   }
 
   /**
-   * @notice The function swaps and calculate the balance in usd and underlyIndex - used in offchainindexswap
-   * @return balanceInUSD get balanceInUsd after swap
+   * @notice Performs off-chain investment using the ZeroEx protocol
+   * @param inputData The ZeroExData struct containing the off-chain investment details:
+   *   - _buyToken: The array of tokens to be bought during the off-chain investment
+   *   - _tokens: The array of tokens involved in the off-chain investment
+   *   - _offChainHandler: The address of the off-chain handler contract
+   *   - _buyAmount: The array of buy amounts for each token during the off-chain investment
+   *   - _buySwapData: The array of buy swap data for each token during the off-chain investment
+   * @param _lpSlippage The array of slippage percentages for each token during the off-chain investment
+   * @return investedAmountAfterSlippage The resulting balance in USD after the off-chain investment and after depositing into third party protocols
+   */
+  function _swapTokenToTokensOffChain(
+    ExchangeData.InputData memory inputData,
+    IIndexSwap index,
+    uint256[] calldata _lpSlippage,
+    address[] memory _tokens,
+    uint256[] calldata _buyAmount,
+    uint256 balanceBefore,
+    address _toUser
+  ) external virtual returns (uint256 investedAmountAfterSlippage) {
+    uint256 underlyingIndex;
+    uint256 _mintedAmount;
+    for (uint256 i = 0; i < _tokens.length; i++) {
+      // Get the handler contract for the current token
+      // Perform off-chain token swap using the exchange contract
+      (_mintedAmount, underlyingIndex) = _swapOffChainTokens(
+        ExchangeData.IndexOperationData(
+          inputData,
+          index,
+          underlyingIndex,
+          _lpSlippage[i],
+          _buyAmount[i],
+          _tokens[i],
+          _toUser
+        )
+      );
+      investedAmountAfterSlippage = investedAmountAfterSlippage + _mintedAmount;
+    }
+
+    // Refund any leftover ETH/Investment token from Exchange handler back to the User
+    uint256 balanceAfter = IndexSwapLibrary.checkBalance(inputData.sellTokenAddress, address(this), WETH);
+    returnUninvestedFunds(inputData.sellTokenAddress, _toUser, balanceAfter - balanceBefore);
+  }
+
+  /**
+   * @notice The function is helper function of swapOffChainTokens
+   * @return _mintedAmount get balanceInUsd after swap and after deposit
    * @return underlyingIndex is used to keep track of interations
    */
-  function swapOffChainTokens(
+  function _swapOffChainTokens(
     ExchangeData.IndexOperationData memory inputdata
-  ) external virtual onlyIndexManager returns (uint256, uint256) {
-    IndexSwapLibrary._whitelistAndHandlerCheck(inputdata._token, inputdata.inputData._offChainHandler, inputdata.index);
-    address vault = inputdata.index.vault();
+  ) internal returns (uint256 _mintedAmount, uint256) {
+    address vault = getVault(inputdata.index);
     //Checks if token is non primary
     IHandler handler = IHandler(getTokenInfo(inputdata._token).handler);
     if (!getTokenInfo(inputdata._token).primary) {
-      address[] memory underlying = handler.getUnderlying(inputdata._token);
+      address[] memory underlying = getUnderlying(handler, inputdata._token);
       uint256[] memory swapResult = new uint256[](underlying.length);
-      uint256 ethBalance = 0;
+      uint256 ethBalance;
       //Loops for underlying token
       for (uint256 j = 0; j < underlying.length; j++) {
         address _underlying = underlying[j];
         uint256 _amount = inputdata.inputData.buyAmount[inputdata.indexValue];
+        bool _isweth = _underlying == WETH;
         validateAmount(inputdata._buyAmount, _amount, underlying.length);
-        //Checks if sellToken == unserlying(buyToken) and buyToken should not be equal to eth(buyToken != eth)
+        //Checks if sellToken == underlying(buyToken) and buyToken should not be equal to eth (buyToken != eth)
         if (inputdata.inputData.sellTokenAddress == _underlying && _underlying != WETH) {
           swapResult[j] = _amount;
-          inputdata.balance = getBalanceAndTransfer(
-            swapResult[j],
-            inputdata.balance,
-            _underlying,
-            address(handler),
-            false
-          );
+          getBalanceAndTransfer(_amount, _underlying, address(handler), false);
         }
         //Checks if sellToken == eth(buyToken) and buyToken == ETH
-        else if (_underlying == WETH && inputdata.inputData.sellTokenAddress == WETH) {
+        else if (_isweth && inputdata.inputData.sellTokenAddress == WETH) {
           swapResult[j] = _amount;
           ethBalance = _amount;
-          inputdata.balance = inputdata.balance.add(oracle.getPriceTokenUSD18Decimals(_underlying, ethBalance));
           IWETH(_underlying).withdraw(ethBalance);
         }
         //If non of the above condition satisifes
         else {
-          (inputdata.balance, swapResult[j]) = swapAndCalculate(
+          swapResult[j] = swapAndCalculate(
             inputdata.inputData,
-            inputdata.balance,
             address(handler),
             inputdata.indexValue,
-            inputdata.protocolFee,
-            _underlying == WETH,
+            _isweth,
             _underlying
           );
         }
 
-        inputdata.indexValue = inputdata.indexValue.add(1);
-        if (_underlying == WETH) {
+        inputdata.indexValue = inputdata.indexValue + 1;
+        if (_isweth) {
           ethBalance = swapResult[j];
         }
       }
       //It deposit tokens and send to vault
-      handlerDeposit(
+      _mintedAmount = handlerDeposit(
         handler,
         inputdata._token,
         vault,
@@ -649,93 +717,147 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         ethBalance,
         inputdata._toUser
       );
-      return (inputdata.balance, inputdata.indexValue);
+      return (_mintedAmount, inputdata.indexValue);
     }
-    //If Token Is Not Primary
+    //If Token Is Primary
     else {
-      //If sellToken == buyToken
-      uint256 balanceInUSD;
       uint256 _amount = inputdata.inputData.buyAmount[inputdata.indexValue];
       validateAmount(inputdata._buyAmount, _amount, 1);
+
+      //If sellToken == buyToken
       if (inputdata.inputData.sellTokenAddress == inputdata._token) {
-        balanceInUSD = getBalanceAndTransfer(_amount, inputdata.balance, inputdata._token, vault, false);
+        getBalanceAndTransfer(_amount, inputdata._token, vault, false);
+        _mintedAmount = getPriceTokenUSD18Decimals(inputdata._token, _amount);
       }
-      //If above condfiton does not satifies or (buyToken != sellToken)
+      //If above conditon does not satifies or (buyToken != sellToken)
       else {
-        (balanceInUSD, ) = swapAndCalculate(
+        uint256 _swapResult = swapAndCalculate(
           inputdata.inputData,
-          inputdata.balance,
           vault,
           inputdata.indexValue,
-          inputdata.protocolFee,
           false,
           inputdata._token
         );
+        _mintedAmount = getPriceTokenUSD18Decimals(inputdata._token, _swapResult);
       }
 
-      inputdata.indexValue = inputdata.indexValue.add(1);
-      return (balanceInUSD, inputdata.indexValue);
+      inputdata.indexValue = inputdata.indexValue + 1;
+      return (_mintedAmount, inputdata.indexValue);
     }
+  }
+
+  /**
+   * @notice The function swaps and calculate the balance in usd and underlyIndex - used in offchainindexswap
+   * @return _mintedAmount get balanceInUsd after swap and after deposit
+   * @return underlyingIndex is used to keep track of interations
+   */
+  function swapOffChainTokens(
+    ExchangeData.IndexOperationData memory inputdata
+  ) external virtual onlyIndexManager returns (uint256, uint256) {
+    return _swapOffChainTokens(inputdata);
   }
 
   /**
    * @notice This function validates the buy amount value during off-chain swap of tokens.
    * (Due to market conditions, the value returned by the function when called from frontend and via contract may differ.
    * Hence we represent it as percentage value)
+   * @param expectedAmount Buy amount passed
+   * @param userAmount Amount of the token passed to be validated
+   * @param underlyingLen Lenght of the underlying token array
    */
-  function validateAmount(uint256 expectedAmount, uint256 userAmount, uint256 len) internal pure {
-    uint256 PERCENTIn18Decimal = 10 ** 22;
-    uint256 diff = expectedAmount.div(len).mul(PERCENTIn18Decimal).div(userAmount);
-    uint256 diffPercentage = diff < PERCENTIn18Decimal ? PERCENTIn18Decimal.sub(diff) : diff.sub(PERCENTIn18Decimal);
-    if (diffPercentage > PERCENTIn18Decimal) {
-      revert ErrorLibrary.InvalidBuyValues();
+  function validateAmount(uint256 expectedAmount, uint256 userAmount, uint256 underlyingLen) internal pure {
+    uint256 exceptedRangeDecimal = 10 ** 6;
+    uint256[] memory diff = new uint256[](underlyingLen);
+
+    if (underlyingLen > 1) {
+      uint amount0 = expectedAmount / underlyingLen;
+      uint amount1 = expectedAmount - amount0;
+
+      diff[0] = getdiff(userAmount, amount0, exceptedRangeDecimal);
+
+      diff[1] = getdiff(userAmount, amount1, exceptedRangeDecimal);
+    } else {
+      diff[0] = getdiff(userAmount, expectedAmount, exceptedRangeDecimal);
     }
+    for (uint256 j = 0; j < underlyingLen; j++) {
+      if (diff[j] > exceptedRangeDecimal) {
+        revert ErrorLibrary.InvalidBuyValues();
+      }
+    }
+  }
+
+  /**
+   * @notice This function is used to return any uninvested funds left in the Exchange handler during OffChain/Onchain investment
+   * @param _token Address of the deposit token whose undeposited dust is left stuck in the contract
+   * @param _to Address where the uninvested funds have to be sent
+   */
+  function returnUninvestedFunds(address _token, address _to, uint256 _balance) internal {
+    if (_token != WETH) {
+      TransferHelper.safeTransfer(_token, _to, _balance);
+    } else {
+      (bool success, ) = payable(_to).call{value: _balance}("");
+      if (!success) {
+        revert ErrorLibrary.ETHTransferFailed();
+      }
+    }
+  }
+
+  /**
+   * @notice This function calculates the difference between user's amount and
+   * @param _userAmount Amount of the token passed to be validated
+   * @param _calcAmount calculated amount to check for diff
+   * @param _exceptedRangeDecimal Accepted range of check value
+   */
+  function getdiff(uint _userAmount, uint _calcAmount, uint _exceptedRangeDecimal) internal pure returns (uint) {
+    return
+      _userAmount > _calcAmount
+        ? (_userAmount * _exceptedRangeDecimal) / _calcAmount
+        : (_calcAmount * _exceptedRangeDecimal) / _userAmount;
   }
 
   /**
    * @notice The function swapToken using zeroExHandler and calcualte the swapAmount in USD
-   * @return balanceInUSD get balanceInUsd after swap
+   * @param inputData Input parameters passed as a struct
+   * @param _to Address to which the token is transferred to after balance calculation
+   * @param _index Index of array, need to be accessed for swapping
+   * @param isETH Boolean parameter for if the token is ETH (native) or not
+   * @param _token Address of the token
    * @return swapRes returns the amount obtained after swap
    */
   function swapAndCalculate(
     ExchangeData.InputData memory inputData,
-    uint256 balance,
     address _to,
     uint256 _index,
-    uint256 _protocolFee,
     bool isETH,
     address _token
-  ) internal virtual returns (uint256 balanceInUSD, uint256 swapRes) {
-    uint256 balanceBefore = IERC20Upgradeable(_token).balanceOf(address(this));
-    IndexSwapLibrary._transferAndSwapUsingOffChainHandler(
-      inputData.sellTokenAddress,
+  ) internal virtual returns (uint256 swapRes) {
+    uint256 balanceBefore = getBalance(_token, address(this));
+    uint256 amount = inputData.buyAmount[_index];
+    address sellToken = inputData.sellTokenAddress;
+    TransferHelper.safeTransfer(sellToken, inputData._offChainHandler, amount);
+    IExternalSwapHandler(inputData._offChainHandler).swap(
+      sellToken,
       _token,
-      inputData.buyAmount[_index],
-      address(this),
+      amount,
       inputData._buySwapData[_index],
-      inputData._offChainHandler,
-      _protocolFee
+      address(this)
     );
-    uint256 balanceAfter = IERC20Upgradeable(_token).balanceOf(address(this));
-    swapRes = balanceAfter.sub(balanceBefore);
+    uint256 balanceAfter = getBalance(_token, address(this));
+    swapRes = balanceAfter - balanceBefore;
     if (swapRes <= 0) {
       revert ErrorLibrary.InvalidAmount();
     }
-    balanceInUSD = getBalanceAndTransfer(swapRes, balance, _token, _to, isETH);
+    getBalanceAndTransfer(swapRes, _token, _to, isETH);
   }
 
   /**
    * @notice This internal function returns balanceInusd and transfer token to "_to" address
-   * @return balanceInUSD get balanceInUsd using oracle and amount to transfer
+   * @param _amount Amount of the token whose balance in USD is required
+   * @param _token Address of the token
+   * @param _to Address to which the token is to be transferred
+   * @param isETH Boolean parameter for if the token is ETH (native) or not
    */
-  function getBalanceAndTransfer(
-    uint256 _amount,
-    uint256 _balance,
-    address _token,
-    address _to,
-    bool isETH
-  ) internal virtual returns (uint256 balanceInUSD) {
-    balanceInUSD = _balance.add(oracle.getPriceTokenUSD18Decimals(_token, _amount));
+  function getBalanceAndTransfer(uint256 _amount, address _token, address _to, bool isETH) internal virtual {
     if (isETH) {
       IWETH(_token).withdraw(_amount);
     } else {
@@ -745,6 +867,13 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
 
   /**
    * @notice This internal function deposit tokens to vault using other handlers
+   * @param handler Instance of the handler associated with the token
+   * @param _token Address of the token
+   * @param _to Vault address (where the tokens have to be deposited)
+   * @param swapResult Amount to be deposited after swap
+   * @param _lpSlippage The lp slippage value passed for the deposit
+   * @param ethBalance The native token value passed during the call (if any)
+   * @param user User's address that would receive the index tokens
    */
   function handlerDeposit(
     IHandler handler,
@@ -754,20 +883,58 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     uint256 _lpSlippage,
     uint256 ethBalance,
     address user
-  ) internal virtual {
+  ) internal virtual returns (uint256 _mintedAmount) {
     if (isWETH(_token, address(handler))) {
-      handler.deposit{value: ethBalance}(_token, swapResult, _lpSlippage, _to, user);
+      _mintedAmount = handler.deposit{value: ethBalance}(_token, swapResult, _lpSlippage, _to, user);
       //If Not BNB
     } else {
-      handler.deposit(_token, swapResult, _lpSlippage, _to, user);
+      _mintedAmount = handler.deposit(_token, swapResult, _lpSlippage, _to, user);
     }
   }
 
   /**
    * @notice This internal returns token information
+   * @param _token Address of the token whose info is required
+   * @return TokenRecord instance of the information associated with the token
    */
   function getTokenInfo(address _token) internal view returns (ITokenRegistry.TokenRecord memory) {
     return tokenRegistry.getTokenInformation(_token);
+  }
+
+  /**
+   * @notice This internal function returns balance of token
+   * @param _token Address of the token
+   * @param _of Address whose balance of the token is required
+   * @return Token balance of the address passed
+   */
+  function getBalance(address _token, address _of) internal view returns (uint256) {
+    return IERC20Upgradeable(_token).balanceOf(_of);
+  }
+
+  /**
+   * @notice This internal function returns address of vault
+   * @param _index Instance of the current IndexSwap
+   * @return Address of the vault associated with the the current index
+   */
+  function getVault(IIndexSwap _index) internal view returns (address) {
+    return _index.vault();
+  }
+
+  /**
+   * @notice This internal function returns price of token in usd
+   * @param _token Address of the token whose price in USD is required
+   * @param _amount The amount of the token passed
+   * @return Final price of the token in USD and expressed in 18 decimals
+   */
+  function getPriceTokenUSD18Decimals(address _token, uint256 _amount) internal view returns (uint256) {
+    return oracle.getPriceTokenUSD18Decimals(_token, _amount);
+  }
+
+  /**
+   * @notice This internal function returns underlying address of token
+   */
+  function getUnderlying(IHandler handler, address token) internal view returns (address[] memory) {
+    return handler.getUnderlying(token);
   }
 
   // important to receive ETH

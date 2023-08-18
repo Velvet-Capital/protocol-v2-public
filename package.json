@@ -19,6 +19,7 @@
     "deployBsc:common": "npx hardhat run scripts/deployPersistentBsc.ts --network bscMainnet",
     "verify:network": "hardhat verify --network",
     "test": "npx hardhat test",
+    "testAll": "npx hardhat test test/AllGenericHandlers.test.ts && npx hardhat test test/FeeWithMockOracle.test.ts && npx hardhat test test/IndexFactory.test.ts && npx hardhat test test/IndexSwap_1.test.ts && npx hardhat test test/IndexSwap_2.test.ts && npx hardhat test test/OffChainIndexSwap.test.ts && npx hardhat test test/PriceOracle.test.ts && npx hardhat test test/RebalanceAggregator.test.ts && npx hardhat test test/ZeroExSwap.test.ts && npx hardhat test test/TimeDependentTest.test.ts",
     "coverage": "npx hardhat coverage",
     "account": "npx hardhat accounts",
     "postinstall": "husky install",

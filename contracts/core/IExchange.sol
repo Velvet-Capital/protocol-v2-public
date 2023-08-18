@@ -54,13 +54,21 @@ interface IExchange {
    * @param inputData includes the input parmas
    * @return swapResult The outcome amount in ETH afer swapping
    */
-  function _swapTokenToToken(
-    FunctionParameters.SwapTokenToTokenData memory inputData
-  ) external returns (uint256[] memory);
+  function _swapTokenToToken(FunctionParameters.SwapTokenToTokenData memory inputData) external returns (uint256);
 
   function _swapTokenToTokens(
-    FunctionParameters.SwapTokenToTokensData memory inputData
+    FunctionParameters.SwapTokenToTokensData memory inputData,uint256 balanceBefore
   ) external payable returns (uint256 investedAmountAfterSlippage);
+
+  function _swapTokenToTokensOffChain(
+    ExchangeData.InputData memory inputData,
+    IIndexSwap index,
+    uint256[] calldata _lpSlippage,
+    address[] memory _tokens,
+    uint256[] calldata _buyAmount,
+    uint256 balanceBefore,
+    address _toUser
+  ) external returns (uint256 investedAmountAfterSlippage);
 
   function swapOffChainTokens(
     ExchangeData.IndexOperationData memory inputdata

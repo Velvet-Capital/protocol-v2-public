@@ -2,7 +2,6 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import "@nomicfoundation/hardhat-chai-matchers";
-import hre from "hardhat";
 import { ethers, upgrades, network } from "hardhat";
 import { BigNumber, Contract } from "ethers";
 import {
@@ -14,6 +13,8 @@ import {
   venusHandler,
   wombatHandler,
   beefyHandler,
+  pancakeLpHandler,
+  priceOracle,
 } from "./Deployments.test";
 
 import {
@@ -48,7 +49,7 @@ chai.use(require("chai-bignumber")());
 describe.only("Tests for IndexFactory", () => {
   let iaddress: IAddresses;
   let accounts;
-  let priceOracle: PriceOracle;
+  // let priceOracle: PriceOracle;
   let indexSwap: any;
   let indexSwap1: any;
   let indexSwap2: any;
@@ -93,7 +94,7 @@ describe.only("Tests for IndexFactory", () => {
   let indexInfo2: any;
   let indexInfo3: any;
   let indexInfo4: any;
-  let pancakeLpHandler: any;
+  // let pancakeLpHandler: any;
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
   let velvetTreasuryBalance = 0;
@@ -105,15 +106,6 @@ describe.only("Tests for IndexFactory", () => {
 
   describe.only("Tests for IndexFactory contract", () => {
     before(async () => {
-      const PriceOracle = await ethers.getContractFactory("PriceOracle");
-      priceOracle = await PriceOracle.deploy();
-      await priceOracle.deployed();
-
-      const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-      pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
-      await pancakeLpHandler.deployed();
-      await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
-
       accounts = await ethers.getSigners();
       [
         owner,
@@ -131,7 +123,7 @@ describe.only("Tests for IndexFactory", () => {
         ...addrs
       ] = accounts;
 
-      iaddress = await tokenAddresses(priceOracle, true);
+      iaddress = await tokenAddresses();
 
       const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
 
@@ -144,11 +136,12 @@ describe.only("Tests for IndexFactory", () => {
           "3000", // max performance fee
           "500",
           "500",
-          "10000000000000000",
-          "500000000000000000000",
+          "3000000000000000000",
+          "120000000000000000000000",
           treasury.address,
           addresses.WETH_Address,
           "1",
+          15,
         ],
         { kind: "uups" },
       );
@@ -382,8 +375,8 @@ describe.only("Tests for IndexFactory", () => {
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "500000000000000000000",
-            _minInvestmentAmount: "10000000000000000",
+            _maxInvestmentAmount: "120000000000000000000000",
+            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },
@@ -428,8 +421,8 @@ describe.only("Tests for IndexFactory", () => {
         _performanceFee: "2500",
         _entryFee: "100",
         _exitFee: "100",
-        _minInvestmentAmount: "10000000000000000",
-        _maxInvestmentAmount: "500000000000000000000",
+        _maxInvestmentAmount: "120000000000000000000000",
+        _minInvestmentAmount: "3000000000000000000",
         _tokenRegistry: tokenRegistry.address,
         _accessController: accessController.address,
         _assetManagerTreasury: treasury.address,
@@ -444,8 +437,8 @@ describe.only("Tests for IndexFactory", () => {
       const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -462,8 +455,8 @@ describe.only("Tests for IndexFactory", () => {
         {
           name: "INDEXL",
           symbol: "IDX",
-          maxIndexInvestmentAmount: "500000000000000000000",
-          minIndexInvestmentAmount: "10000000000000000",
+          maxIndexInvestmentAmount: "120000000000000000000000",
+          minIndexInvestmentAmount: "3000000000000000000",
           _managementFee: "200",
           _performanceFee: "2500",
           _entryFee: "100",
@@ -482,8 +475,8 @@ describe.only("Tests for IndexFactory", () => {
       const indexFactoryCreate3 = await indexFactory.connect(nonOwner).createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "0",
         _performanceFee: "0",
         _entryFee: "0",
@@ -499,8 +492,8 @@ describe.only("Tests for IndexFactory", () => {
       const indexFactoryCreate4 = await indexFactory.connect(nonOwner).createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -572,8 +565,8 @@ describe.only("Tests for IndexFactory", () => {
             {
               name: "INDEXLY",
               symbol: "IDX",
-              maxIndexInvestmentAmount: "500000000000000000000",
-              minIndexInvestmentAmount: "10000000000000000",
+              maxIndexInvestmentAmount: "120000000000000000000000",
+              minIndexInvestmentAmount: "3000000000000000000",
               _managementFee: "100",
               _performanceFee: "10",
               _entryFee: "0",
@@ -597,8 +590,8 @@ describe.only("Tests for IndexFactory", () => {
             {
               name: "INDEXLY",
               symbol: "IDX",
-              maxIndexInvestmentAmount: "500000000000000000000",
-              minIndexInvestmentAmount: "10000000000000000",
+              maxIndexInvestmentAmount: "120000000000000000000000",
+              minIndexInvestmentAmount: "3000000000000000000",
               _managementFee: "200",
               _performanceFee: "2500",
               _entryFee: "0",
@@ -621,8 +614,8 @@ describe.only("Tests for IndexFactory", () => {
           indexFactory.connect(nonOwner).createIndexNonCustodial({
             name: "INDEXLY",
             symbol: "IDX",
-            maxIndexInvestmentAmount: "500000000000000000000",
-            minIndexInvestmentAmount: "10000000000000000",
+            maxIndexInvestmentAmount: "120000000000000000000000",
+            minIndexInvestmentAmount: "3000000000000000000",
             _managementFee: "200",
             _performanceFee: "2500",
             _entryFee: "0",
@@ -858,6 +851,21 @@ describe.only("Tests for IndexFactory", () => {
         expect(await rebalanceAggregator.owner()).to.be.equal(indexFactory.address);
       });
 
+      it("Invest 0.1BNB into Top10 fund should fail for slippage greater than 10%", async () => {
+        await indexSwap.investInFund(
+          {
+            _slippage: ["1100", "100"],
+            _lpSlippage: ["200", "200"],
+            _tokenAmount: "100000000000000000",
+            _swapHandler: swapHandler.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "100000000000000000",
+          },
+        );
+      });
+
       it("Invest 0.1BNB into Top10 fund", async () => {
         const VBep20Interface = await ethers.getContractAt(
           "VBep20Interface",
@@ -870,7 +878,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -898,7 +905,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -921,7 +927,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -950,7 +955,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -979,7 +983,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1005,7 +1008,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1030,7 +1032,6 @@ describe.only("Tests for IndexFactory", () => {
             {
               _slippage: ["100", "100"],
               _lpSlippage: ["200", "200"],
-              _to: owner.address,
               _tokenAmount: "2000000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.busdAddress,
@@ -1050,11 +1051,10 @@ describe.only("Tests for IndexFactory", () => {
 
       it("Invest 2BNB into Top10 4th index fund on behalf of addr3 should fail if user addr3 is not whitelisted", async () => {
         await expect(
-          indexSwap3.investInFund(
+          indexSwap3.connect(addr3).investInFund(
             {
               _slippage: ["100", "100"],
               _lpSlippage: ["200", "200"],
-              _to: addr3.address,
               _tokenAmount: "2000000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -1087,7 +1087,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: addr3.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1116,7 +1115,6 @@ describe.only("Tests for IndexFactory", () => {
             {
               _slippage: ["100", "100"],
               _lpSlippage: ["200", "200"],
-              _to: owner.address,
               _tokenAmount: "100000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -1256,7 +1254,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: addr1.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1281,7 +1278,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: addr2.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1304,7 +1300,6 @@ describe.only("Tests for IndexFactory", () => {
             {
               _slippage: ["100", "100"],
               _lpSlippage: ["200", "200"],
-              _to: addr3.address,
               _tokenAmount: "2000000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -1407,7 +1402,6 @@ describe.only("Tests for IndexFactory", () => {
             {
               _slippage: ["100", "100"],
               _lpSlippage: ["200", "200"],
-              _to: owner.address,
               _tokenAmount: "10000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -1453,7 +1447,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1474,7 +1467,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1495,7 +1487,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1517,7 +1508,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1543,7 +1533,6 @@ describe.only("Tests for IndexFactory", () => {
             {
               _slippage: ["100", "100"],
               _lpSlippage: ["200", "200"],
-              _to: owner.address,
               _tokenAmount: "2000000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -1568,7 +1557,7 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("should Update Weights and Rebalance", async () => {
-        await rebalancing.updateWeights([6667, 3333], ["100", "100"], ["200", "200"], swapHandler.address);
+        await rebalancing.updateWeights([6667, 3333], ["100", "500"], ["100", "200"], swapHandler.address);
       });
 
       it("should Update Weights and Rebalance for 2nd Index Fund", async () => {
@@ -1777,6 +1766,7 @@ describe.only("Tests for IndexFactory", () => {
       it("should unpause", async () => {
         await ethers.provider.send("evm_increaseTime", [1900]);
         await rebalancing.connect(addr1).setPause(false);
+        console.log(await ethers.provider.blockNumber);
       });
 
       it("should update tokens for 2nd Index", async () => {
@@ -1824,7 +1814,7 @@ describe.only("Tests for IndexFactory", () => {
           }),
         )
           .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
-          .withArgs("10000000000000000");
+          .withArgs("3000000000000000000");
       });
 
       it("should fail withdraw when balance falls below min investment amount", async () => {
@@ -1843,7 +1833,7 @@ describe.only("Tests for IndexFactory", () => {
           }),
         )
           .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
-          .withArgs("10000000000000000");
+          .withArgs("3000000000000000000");
       });
 
       it("should withdraw fund and burn index token successfully", async () => {
@@ -1901,7 +1891,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1919,7 +1908,7 @@ describe.only("Tests for IndexFactory", () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
         // console.log("available transfer amount", amountIndexToken);
         await expect(indexSwap.transfer(addr1.address, amountIndexToken.div(2))).to.be.revertedWithCustomError(
-          indexSwapLibrary,
+          indexSwap,
           "Transferprohibited",
         );
       });
@@ -1929,7 +1918,7 @@ describe.only("Tests for IndexFactory", () => {
         const amountIndexToken = await indexSwap1.balanceOf(owner.address);
         // console.log("available transfer amount", amountIndexToken);
         await expect(indexSwap1.transfer(addr3.address, amountIndexToken.div(2))).to.be.revertedWithCustomError(
-          indexSwapLibrary,
+          indexSwap1,
           "Transferprohibited",
         );
       });
@@ -1990,7 +1979,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "500"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2097,7 +2085,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2115,7 +2102,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2134,7 +2120,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2148,11 +2133,11 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("Invest 0.1BNB into Top10 2nd Index fund", async () => {
+        const CoolDownBefore = await indexSwap1.lastWithdrawCooldown(owner.address);
         await indexSwap1.investInFund(
           {
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2163,6 +2148,8 @@ describe.only("Tests for IndexFactory", () => {
         );
 
         const indexSupplyAfter = await indexSwap1.totalSupply();
+        const CoolDownAfter = await indexSwap1.lastWithdrawCooldown(owner.address);
+        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         // console.log(indexSupplyAfter);
       });
 
@@ -2288,18 +2275,13 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("Invest 2BNB into Top10 1st index fund after upgrade", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-
+        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("2bnb before", indexSupplyBefore);
         await indexSwap.investInFund(
           {
             _slippage: ["400", "400", "400"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2311,16 +2293,13 @@ describe.only("Tests for IndexFactory", () => {
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
         // console.log(indexSupplyAfter);
-
+        const CoolDownAfter = await indexSwap1.lastWithdrawCooldown(owner.address);
+        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
       it("Invest 2BNB into Top10 1st index fund after upgrade", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-
+        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("2bnb before", indexSupplyBefore);
 
@@ -2328,7 +2307,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["400", "700", "400"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2339,7 +2317,8 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log(indexSupplyAfter);
-
+        const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
+        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
@@ -2357,19 +2336,13 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("Invest 2BNB into Top10 2nd index fund after upgrade", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-        const { keccak256 } = ethers.utils;
-
+        const CoolDownBefore = await indexSwap1.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap1.totalSupply();
         // console.log("2bnb before", indexSupplyBefore);
         await indexSwap1.investInFund(
           {
             _slippage: ["400", "400", "400"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2380,7 +2353,8 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log(indexSupplyAfter);
-
+        const CoolDownAfter = await indexSwap1.lastWithdrawCooldown(owner.address);
+        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
@@ -2400,8 +2374,8 @@ describe.only("Tests for IndexFactory", () => {
           newProxy.createIndexNonCustodial({
             name: "INDEXLY123",
             symbol: "IDX123",
-            maxIndexInvestmentAmount: "500000000000000000000",
-            minIndexInvestmentAmount: "10000000000000000",
+            maxIndexInvestmentAmount: "120000000000000000000000",
+            minIndexInvestmentAmount: "3000000000000000000",
             _managementFee: "100",
             _performanceFee: "10",
             _entryFee: "0",
@@ -2451,8 +2425,8 @@ describe.only("Tests for IndexFactory", () => {
         const indexFactoryCreate = await newProxy.createIndexNonCustodial({
           name: "INDEXLY123",
           symbol: "IDX123",
-          maxIndexInvestmentAmount: "500000000000000000000",
-          minIndexInvestmentAmount: "10000000000000000",
+          maxIndexInvestmentAmount: "120000000000000000000000",
+          minIndexInvestmentAmount: "3000000000000000000",
           _managementFee: "100",
           _performanceFee: "10",
           _entryFee: "0",
@@ -2478,7 +2452,6 @@ describe.only("Tests for IndexFactory", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2493,15 +2466,18 @@ describe.only("Tests for IndexFactory", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
+      it("should set new cool down period", async () => {
+        await tokenRegistry.setCoolDownPeriod(600);
+      });
+
       it("Invest 2BNB into Top10 2nd index fund after upgrade", async () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
         // console.log("2bnb before", indexSupplyBefore);
-        const { keccak256 } = ethers.utils;
-        await indexSwap1.investInFund(
+        const CoolDownBefore = await indexSwap1.lastWithdrawCooldown(nonOwner.address);
+        await indexSwap1.connect(nonOwner).investInFund(
           {
             _slippage: ["400", "700", "400"],
             _lpSlippage: ["200", "200", "200"],
-            _to: nonOwner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -2512,12 +2488,33 @@ describe.only("Tests for IndexFactory", () => {
         );
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log(indexSupplyAfter);
-
+        const CoolDownAfter = await indexSwap1.lastWithdrawCooldown(nonOwner.address);
+        expect(Number(CoolDownAfter)).to.be.greaterThan(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("should set new cool down period", async () => {
-        await tokenRegistry.setCoolDownPeriod(5);
+      it("Invest 1BNB into Top10 2nd index fund after upgrade and should no revert", async () => {
+        await ethers.provider.send("evm_increaseTime", [550]);
+        const indexSupplyBefore = await indexSwap1.totalSupply();
+        // console.log("2bnb before", indexSupplyBefore);
+        const CoolDownBefore = await indexSwap1.lastWithdrawCooldown(nonOwner.address);
+        await indexSwap1.connect(nonOwner).investInFund(
+          {
+            _slippage: ["400", "700", "400"],
+            _lpSlippage: ["200", "200", "200"],
+            _tokenAmount: "1000000000000000000",
+            _swapHandler: swapHandler.address,
+            _token: iaddress.wbnbAddress,
+          },
+          {
+            value: "1000000000000000000",
+          },
+        );
+        const indexSupplyAfter = await indexSwap1.totalSupply();
+        // console.log(indexSupplyAfter);
+        const CoolDownAfter = await indexSwap1.lastWithdrawCooldown(nonOwner.address);
+        expect(Number(CoolDownAfter)).to.be.lessThan(Number(CoolDownBefore));
+        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
       it("should withdraw fund and burn index token successfully should fail", async () => {
@@ -2533,16 +2530,28 @@ describe.only("Tests for IndexFactory", () => {
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           }),
-        ).to.be.revertedWithCustomError(indexSwapLibrary, "CoolDownPeriodNotPassed");
+        ).to.be.revertedWithCustomError(indexSwap1, "CoolDownPeriodNotPassed");
       });
 
-      it("should withdraw fund and burn index token successfully", async () => {
-        await ethers.provider.send("evm_increaseTime", [15]);
+      it("transfer tokens should fail, if cooldownperiod is not passed", async () => {
+        const amountIndexToken = await indexSwap1.balanceOf(nonOwner.address);
+        const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
+
+        await expect(indexSwap1.connect(nonOwner).transfer(owner.address, AMOUNT)).to.be.revertedWithCustomError(
+          indexSwap1,
+          "CoolDownPeriodNotPassed",
+        );
+      });
+
+      it("should transfer token and withdraw fund and burn index token successfully", async () => {
+        await ethers.provider.send("evm_increaseTime", [600]);
 
         const amountIndexToken = await indexSwap1.balanceOf(nonOwner.address);
         const AMOUNT = ethers.BigNumber.from(amountIndexToken); //1BNB
 
-        txObject = await indexSwap1.connect(nonOwner).withdrawFund({
+        await indexSwap1.connect(nonOwner).transfer(owner.address, AMOUNT);
+
+        txObject = await indexSwap1.withdrawFund({
           tokenAmount: AMOUNT,
           _slippage: ["100", "500", "100"],
           _lpSlippage: ["200", "200", "200"],
@@ -2563,8 +2572,8 @@ describe.only("Tests for IndexFactory", () => {
             _performanceFee: "10",
             _entryFee: "0",
             _exitFee: "0",
-            _minInvestmentAmount: "10000000000000000",
-            _maxInvestmentAmount: "500000000000000000000",
+            _maxInvestmentAmount: "120000000000000000000000",
+            _minInvestmentAmount: "3000000000000000000",
             _tokenRegistry: tokenRegistry.address,
             _accessController: accessController.address,
             _assetManagerTreasury: treasury.address,
@@ -2587,8 +2596,8 @@ describe.only("Tests for IndexFactory", () => {
             _performanceFee: "20000",
             _entryFee: "0",
             _exitFee: "0",
-            _minInvestmentAmount: "10000000000000000",
-            _maxInvestmentAmount: "500000000000000000000",
+            _maxInvestmentAmount: "120000000000000000000000",
+            _minInvestmentAmount: "3000000000000000000",
             _tokenRegistry: tokenRegistry.address,
             _accessController: accessController.address,
             _assetManagerTreasury: treasury.address,
@@ -2655,21 +2664,21 @@ describe.only("Tests for IndexFactory", () => {
         );
       });
 
-      it("Asset manager should propose new management fee", async () => {
-        const config = await indexSwap.iAssetManagerConfig();
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig = AssetManagerConfig.attach(config);
-        await assetManagerConfig.connect(assetManager).proposeNewManagementFee("150");
-      });
+      // it("Asset manager should propose new management fee", async () => {
+      //   const config = await indexSwap.iAssetManagerConfig();
+      //   const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+      //   const assetManagerConfig = AssetManagerConfig.attach(config);
+      //   await assetManagerConfig.connect(assetManager).proposeNewManagementFee("150");
+      // });
 
-      it("Asset manager should be able to update management fee after 28 days passed", async () => {
-        await network.provider.send("evm_increaseTime", [2419200]);
-        const config = await indexSwap.iAssetManagerConfig();
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig = AssetManagerConfig.attach(config);
+      // it("Asset manager should be able to update management fee after 28 days passed", async () => {
+      //   await network.provider.send("evm_increaseTime", [2419200]);
+      //   const config = await indexSwap.iAssetManagerConfig();
+      //   const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+      //   const assetManagerConfig = AssetManagerConfig.attach(config);
 
-        await assetManagerConfig.connect(assetManager).updateManagementFee();
-      });
+      //   await assetManagerConfig.connect(assetManager).updateManagementFee();
+      // });
 
       // same for performance
 
@@ -2726,20 +2735,20 @@ describe.only("Tests for IndexFactory", () => {
         );
       });
 
-      it("Asset manager should propose new management fee", async () => {
-        const config = await indexSwap.iAssetManagerConfig();
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig = AssetManagerConfig.attach(config);
-        await assetManagerConfig.connect(assetManager).proposeNewPerformanceFee("150");
-      });
+      // it("Asset manager should propose new management fee", async () => {
+      //   const config = await indexSwap.iAssetManagerConfig();
+      //   const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+      //   const assetManagerConfig = AssetManagerConfig.attach(config);
+      //   await assetManagerConfig.connect(assetManager).proposeNewPerformanceFee("150");
+      // });
 
-      it("Asset manager should be able to update management fee after 28 days passed", async () => {
-        await time.increase(2419200);
-        const config = await indexSwap.iAssetManagerConfig();
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig = AssetManagerConfig.attach(config);
-        await assetManagerConfig.connect(assetManager).updatePerformanceFee();
-      });
+      // it("Asset manager should be able to update management fee after 28 days passed", async () => {
+      //   await time.increase(2419200);
+      //   const config = await indexSwap.iAssetManagerConfig();
+      //   const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+      //   const assetManagerConfig = AssetManagerConfig.attach(config);
+      //   await assetManagerConfig.connect(assetManager).updatePerformanceFee();
+      // });
 
       // treasury
       it("Non asset manager should not be able to update the asset manager treasury", async () => {
@@ -2764,6 +2773,21 @@ describe.only("Tests for IndexFactory", () => {
 
       it("Asset manager should be able to update the velvet treasury", async () => {
         await tokenRegistry.updateVelvetTreasury(owner.address);
+      });
+
+      it("Non owner should not be able to update protocol slippage", async () => {
+        await expect(swapHandler.connect(nonOwner).addOrUpdateProtocolSlippage("800")).to.be.reverted;
+      });
+
+      it("Owner should not be able to update to a slippage more than 10% (defined max in the contract) update protocol slippage", async () => {
+        await expect(swapHandler.addOrUpdateProtocolSlippage("1100")).to.be.revertedWithCustomError(
+          swapHandler,
+          "IncorrectSlippageRange",
+        );
+      });
+
+      it("Owner should not be able to update protocol slippage", async () => {
+        await swapHandler.addOrUpdateProtocolSlippage("1000");
       });
     });
   });

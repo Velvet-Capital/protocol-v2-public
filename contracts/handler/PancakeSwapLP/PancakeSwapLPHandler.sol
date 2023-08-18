@@ -19,8 +19,7 @@
 pragma solidity 0.8.16;
 
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {LPInterface} from "../interfaces/LPInterface.sol";
 import {RouterInterface} from "../interfaces/RouterInterface.sol";
 import {FactoryInterface} from "../interfaces/FactoryInterface.sol";
@@ -34,10 +33,9 @@ import {FullMath} from "../libraries/FullMath.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
+import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
 
 contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
-  using SafeMathUpgradeable for uint256;
-
   IPriceOracle internal _oracle;
 
   mapping(address => uint256) internal pid;
@@ -60,7 +58,7 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   );
 
   constructor(address _priceOracle) {
-    require(_priceOracle != address(0), "Oracle having zero address");
+    if ((_priceOracle) == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -77,11 +75,11 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     uint256 _lpSlippage,
     address _to,
     address user
-  ) public payable override {
+  ) public payable override returns (uint256 _mintedAmount) {
     address[] memory t = getUnderlying(_lpAsset);
-    uint p1 = _oracle.getPriceTokenUSD18Decimals(t[0], 1000000000000000000);
-    uint p2 = _oracle.getPriceTokenUSD18Decimals(t[1], 1000000000000000000);
-    _deposit(_lpAsset, _amount, _lpSlippage, _to, address(router), user, p1, p2);
+    uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
+    uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
+    _mintedAmount = _deposit(_lpAsset, _amount, _lpSlippage, _to, address(router), user, address(_oracle), p1, p2);
     emit Deposit(block.timestamp, msg.sender, _lpAsset, _amount, _to);
   }
 
@@ -90,8 +88,8 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
    */
   function redeem(FunctionParameters.RedeemData calldata inputData) public override {
     address[] memory t = getUnderlying(inputData._yieldAsset);
-    uint p1 = _oracle.getPriceTokenUSD18Decimals(t[0], 1000000000000000000);
-    uint p2 = _oracle.getPriceTokenUSD18Decimals(t[1], 1000000000000000000);
+    uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
+    uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
     _redeem(inputData, routerAddress, p1, p2);
     emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
@@ -116,26 +114,15 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   }
 
   /**
-   * @notice This function returns the underlying asset balance of the passed address
-   * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
-   * @return tokenBalance t token's underlying asset balance of the holder
-   */
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
-    return _getUnderlyingBalance(_tokenHolder, t);
-  }
-
-  /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
    * @param t Address of the protocol token
-   * @return finalLB value of the lp asset t
    */
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {
-    uint lB = _calculatePrice(t, address(_oracle));
-    uint256 balance = _getTokenBalance(_tokenHolder, t);
-    uint finalLB = lB.mul(balance).div(10 ** 18);
-    return finalLB;
+  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    return _calculatePriceForBalance(t, address(_oracle),_getTokenBalance(_tokenHolder, t));
   }
 
   /**
@@ -164,6 +151,8 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
       delete (pid[_lpTokens[i]]);
     }
   }
+
+  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {}
 
   function encodeData(address t, uint256 _amount) public view returns (bytes memory) {}
 

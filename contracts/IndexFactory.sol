@@ -126,8 +126,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
     gnosisFallbackLibrary = initData._gnosisFallbackLibrary;
     gnosisMultisendLibrary = initData._gnosisMultisendLibrary;
     gnosisSafeProxyFactory = initData._gnosisSafeProxyFactory;
-    indexId = 0;
-    indexCreationPause = false;
   }
 
   /**
@@ -136,7 +134,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
    */
   function createIndexNonCustodial(
     FunctionParameters.IndexCreationInitData memory initData
-  ) public virtual nonReentrant {
+  ) external virtual nonReentrant {
     address[] memory _owner = new address[](1);
     _owner[0] = address(0x0000000000000000000000000000000000000000);
     _createIndex(initData, false, _owner, 1);
@@ -152,7 +150,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
     FunctionParameters.IndexCreationInitData memory initData,
     address[] memory _owners,
     uint256 _threshold
-  ) public virtual nonReentrant {
+  ) external virtual nonReentrant {
     if (_owners.length == 0) {
       revert ErrorLibrary.NoOwnerPassed();
     }
@@ -164,6 +162,10 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This internal function enables to create a new portfolio according to given inputs
+   * @param initData Input params passed as a struct
+   * @param _custodial Boolean param as to whether the fund is custodial or non-custodial
+   * @param _owner Address of the owner of the fund
+   * @param _threshold Number of signers required for the multi-sig fund creation
    */
   function _createIndex(
     FunctionParameters.IndexCreationInitData memory initData,
@@ -339,6 +341,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function returns the IndexSwap address at the given index id
+   * @param indexfundId Integral id of the index fund whose IndexSwap address is to be retrieved
+   * @return Return the IndexSwap address of the fund
    */
   function getIndexList(uint256 indexfundId) external view virtual returns (address) {
     return address(IndexSwapInfolList[indexfundId].indexSwap);
@@ -346,6 +350,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the IndexSwap contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeIndexSwap(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseIndexSwapAddress(_newImpl);
@@ -355,6 +361,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the Exchange contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeExchange(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseExchangeHandlerAddress(_newImpl);
@@ -364,6 +372,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the AssetManagerConfig contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeAssetManagerConfig(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseAssetManagerConfigAddress(_newImpl);
@@ -373,6 +383,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the OffChainRebalance contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeOffchainRebalance(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseOffChainRebalancingAddress(_newImpl);
@@ -382,6 +394,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the OffChainIndexSwap contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeOffChainIndex(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseOffChainIndexSwapAddress(_newImpl);
@@ -391,6 +405,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the FeeModule contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeFeeModule(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setFeeModuleImplementationAddress(_newImpl);
@@ -400,6 +416,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the Rebalance Aggregator contract
+   * @param _proxy Proxy address
+   * @param _newImpl New implementation address
    */
   function upgradeRebalanceAggregator(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setRebalanceAggregatorAddress(_newImpl);
@@ -409,6 +427,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to upgrade the Rebalance contract
+   * @param _proxy Proxy address for the rebalancing contract
+   * @param _newImpl New implementation address
    */
   function upgradeRebalance(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseRebalancingAddress(_newImpl);
@@ -418,6 +438,8 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is the base UUPS upgrade function used to make all the upgrades happen
+   * @param _proxy Address of the upgrade proxy contract
+   * @param _newImpl Address of the new implementation that is the module to be upgraded to
    */
   function _upgrade(address[] calldata _proxy, address _newImpl) internal virtual onlyOwner {
     if (ITokenRegistry(tokenRegistry).getProtocolState() == false) {
@@ -433,6 +455,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function allows us to pause or unpause the index creation state
+   * @param _state Boolean parameter to set the index creation state of the factory
    */
   function setIndexCreationState(bool _state) public virtual onlyOwner {
     indexCreationPause = _state;
@@ -441,6 +464,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base indexswap address
+   * @param _indexSwap Address of the IndexSwap module to set as base
    */
   function _setBaseIndexSwapAddress(address _indexSwap) internal {
     baseIndexSwapAddress = _indexSwap;
@@ -448,6 +472,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base exchange handler address
+   * @param _exchange Address of the Exchange module to set as base
    */
   function _setBaseExchangeHandlerAddress(address _exchange) internal {
     baseExchangeHandlerAddress = _exchange;
@@ -455,6 +480,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base asset manager config address
+   * @param _config Address of the AssetManager Config to set as base
    */
   function _setBaseAssetManagerConfigAddress(address _config) internal {
     baseAssetManagerConfigAddress = _config;
@@ -462,6 +488,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base offchain-rebalance address
+   * @param _offchainRebalance Address of the Offchain Rebalance module to set as base
    */
   function _setBaseOffChainRebalancingAddress(address _offchainRebalance) internal {
     baseOffChainRebalancingAddress = _offchainRebalance;
@@ -469,6 +496,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base offchain-indexswap address
+   * @param _offchainIndexSwap Address of the Offchain IndexSwap to set as base
    */
   function _setBaseOffChainIndexSwapAddress(address _offchainIndexSwap) internal {
     baseOffChainIndexSwapAddress = _offchainIndexSwap;
@@ -476,6 +504,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the fee module implementation address
+   * @param _feeModule Address of the fee module address to set as base
    */
   function _setFeeModuleImplementationAddress(address _feeModule) internal {
     feeModuleImplementationAddress = _feeModule;
@@ -483,6 +512,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base rebalance aggregator address
+   * @param _rebalanceAggregator Address of the rebalance aggregator module address to set as base
    */
   function _setRebalanceAggregatorAddress(address _rebalanceAggregator) internal {
     baseRebalanceAggregatorAddress = _rebalanceAggregator;
@@ -490,6 +520,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   /**
    * @notice This function is used to set the base rebalancing address
+   * @param _rebalance Address of the rebalance module address to set as base
    */
   function _setBaseRebalancingAddress(address _rebalance) internal {
     baseRebalancingAddress = _rebalance;

@@ -8,12 +8,10 @@ import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.so
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {ApproveControl} from "../ApproveControl.sol";
 import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 import {ExternalSlippageControl} from "../ExternalSlippageControl.sol";
 
 contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl {
   using SafeERC20Upgradeable for IERC20Upgradeable;
-  using SafeMathUpgradeable for uint;
   address internal swapTarget;
   IPriceOracle internal oracle;
 
@@ -26,7 +24,6 @@ contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl
     address sellTokenAddress,
     address buyTokenAddress,
     uint256 sellAmount,
-    uint256 protocolFee,
     bytes memory callData,
     address _to
   ) public payable {
@@ -34,19 +31,14 @@ contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl
     if (tokenBalance < sellAmount) {
       revert ErrorLibrary.InsufficientFunds(tokenBalance, sellAmount);
     }
-    uint256 ethBalance = address(this).balance;
-    if (ethBalance < protocolFee) {
-      revert ErrorLibrary.InsufficientFeeFunds(ethBalance, protocolFee);
-    }
-
     setAllowance(sellTokenAddress, swapTarget, sellAmount);
 
     uint256 tokensBefore = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
-    (bool success, ) = swapTarget.call{value: protocolFee}(callData);
+    (bool success, ) = swapTarget.call(callData);
     if (!success) {
       revert ErrorLibrary.SwapFailed();
     }
-    uint256 tokensSwapped = 0;
+    uint256 tokensSwapped;
 
     uint buyTokenBalance = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
 

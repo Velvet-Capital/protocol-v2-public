@@ -47,6 +47,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   bool internal protocolPause;
 
+  uint256 internal maxAssetLimit;
+
   uint256 public COOLDOWN_PERIOD;
 
   address internal WETH;
@@ -67,7 +69,6 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   event AddNonDerivative(uint256 time, address handler);
   event AddRewardToken(uint256 time, address token);
   event RemoveRewardToken(uint256 time, address token);
-  event ChangedIndexOperation(uint256 time, address newIndexOperation);
   event DisableToken(uint256 time, address token);
 
   /**
@@ -84,12 +85,13 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 _maxVelvetInvestmentAmount,
     address _velvetTreasury,
     address _weth,
-    uint256 coolDownPeriod
+    uint256 coolDownPeriod,
+    uint256 _maxAssetLimit
   ) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
     if (_velvetTreasury == address(0)) {
-      revert ErrorLibrary.ZeroAddresstreasury();
+      revert ErrorLibrary.ZeroAddressTreasury();
     }
     if (!(_maxAssetManagerFee > 0 && _maxPerformanceFee > 0)) {
       revert ErrorLibrary.ZeroFee();
@@ -109,10 +111,12 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     WETH = _weth;
     COOLDOWN_PERIOD = coolDownPeriod;
+    maxAssetLimit = _maxAssetLimit;
   }
 
   /**
    * @notice This function return the record of the given token
+   * @param _token Address of the token whose inforamtion is to be retrieved
    */
   function getTokenInformation(address _token) external view virtual returns (TokenRecord memory) {
     return tokenInformation[_token];
@@ -120,6 +124,11 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function updates a list of token along with it's handler and and primary bool and enables it
+   * @param _oracle Address of the price oracle being used
+   * @param _token Address of the token to be enabled in the registry
+   * @param _handler Address of the handler associated with the token (protocol)
+   * @param _rewardTokens Address of the reward token associated with the token of that protocol
+   * @param _primary Boolean paramter for is the token primary or derivative
    */
   function enableToken(
     address[] memory _oracle,
@@ -128,6 +137,9 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     address[][] memory _rewardTokens,
     bool[] memory _primary
   ) external virtual onlyOwner {
+    if(!((_oracle.length == _token.length) && (_token.length == _handler.length) && (_handler.length == _rewardTokens.length) && (_rewardTokens.length == _primary.length)))
+      revert ErrorLibrary.IncorrectArrayLength();
+
     for (uint256 i = 0; i < _token.length; i++) {
       if (_oracle[i] == address(0)) {
         revert ErrorLibrary.InvalidOracleAddress();
@@ -155,6 +167,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function is used to add a particular token as a reward token
+   * @param _token Address of the token to be added as a reward token
    */
   function addRewardToken(address _token) external onlyOwner {
     isRewardToken[_token] = true;
@@ -163,6 +176,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function is used to remove a particular token as a reward token
+   * @param _token Address of the token to be removed as a reward token
    */
   function removeRewardToken(address _token) external onlyOwner {
     delete isRewardToken[_token];
@@ -171,6 +185,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function updates a list of swapHandlers and enables it
+   * @param _handler Array of swap handler addresses to be enabled by the registry
    */
   function enableSwapHandlers(address[] memory _handler) external virtual onlyOwner {
     if (_handler.length == 0) {
@@ -187,6 +202,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function disables the given swapHandler
+   * @param _handler Array of swap handler addresses to be disabled by the registry
    */
   function disableSwapHandlers(address[] memory _handler) external virtual onlyOwner {
     if (_handler.length == 0) {
@@ -203,6 +219,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns if the swap handler is enabled in the registry or not
+   * @param swapHandler Address of the swap handler to be checked for
+   * @return Boolean parameter for is the swap handler enabled or not
    */
   function isSwapHandlerEnabled(address swapHandler) external view virtual returns (bool) {
     return _swapHandler[swapHandler];
@@ -210,6 +228,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns a bool according to given offChainHandler address
+   * @param offChainHandler Address of the offchain handler to be checked for
+   * @return Boolean parameter for is the offchain handler enabled or not
    */
   function isOffChainHandlerEnabled(address offChainHandler) external view virtual returns (bool) {
     return _offChainHandler[offChainHandler];
@@ -219,6 +239,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function adds non derivative handler address to record
+   * @param handler Address of the handler to be added as a non-derivative handler
    */
   function addNonDerivative(address handler) external virtual onlyOwner {
     nonDerivativeToken[handler] = true;
@@ -227,6 +248,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns a bool according to whether the given input is non derivative or not
+   * @param handler Address of the handler to be checked for
+   * @return Boolean parameter for is the handler non-derivative or not
    */
   function checkNonDerivative(address handler) external view virtual returns (bool) {
     return nonDerivativeToken[handler];
@@ -234,6 +257,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns a bool according to whether the given input token is enabled or not
+   * @param _token Address of the token to be checked
+   * @return Boolean parameter for is the token enabled in the registry or not
    */
   function isEnabled(address _token) external view virtual returns (bool) {
     return tokenInformation[_token].enabled;
@@ -241,6 +266,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function disables the given input token
+   * @param _token Address of the token to be disabled in the reigstry
    */
   function disableToken(address _token) external virtual onlyOwner {
     tokenInformation[_token].enabled = false;
@@ -249,6 +275,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function updates a list of externalSwapHandlers and enables it
+   * @param swapHandler Address of the external swap handler to be enabled in the registry
    */
   function enableExternalSwapHandler(address swapHandler) external virtual onlyOwner {
     externalSwapHandler[swapHandler] = true;
@@ -257,6 +284,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function disables the externalSwapHandler input
+   * @param swapHandler Address of the external swap handler to be disabled in the registry
    */
   function disableExternalSwapHandler(address swapHandler) external virtual onlyOwner {
     externalSwapHandler[swapHandler] = false;
@@ -265,6 +293,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns a bool according to given input is an externalSwapHandler or not
+   * @param swapHandler Address of the external swap handler to be checked
+   * @return Boolean parameter for is the external swap handler enabled or not
    */
   function isExternalSwapHandler(address swapHandler) external view virtual returns (bool) {
     return externalSwapHandler[swapHandler];
@@ -272,6 +302,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function updates the velvetTreasuryAddress with the given input
+   * @param _newVelvetTreasury Address of the new velvet treasury address to be updated to
    */
   function updateVelvetTreasury(address _newVelvetTreasury) external virtual onlyOwner {
     velvetTreasury = _newVelvetTreasury;
@@ -279,13 +310,16 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function allows to update the WETH value from the registry
+   * @param _newWETH Address of the new WETH to be added as the WETH address in the registry
    */
   function updateWETH(address _newWETH) external virtual onlyOwner {
     WETH = _newWETH;
   }
 
   /**
-   * @notice This function sets a list of tokens that are permitted from the registry level to be used in the index
+   * @notice This function sets a list of tokens that are permitted from the registry level to be used as investment/withdrawal tokens
+   * @param _newTokens Array of token addresses to be permitted from the registry 
+   * @param _oracle Array of the corresponding price oracle addresses for the tokens
    */
   function enablePermittedTokens(address[] calldata _newTokens, address[] calldata _oracle) external virtual onlyOwner {
     if (_newTokens.length == 0) {
@@ -320,7 +354,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   }
 
   /**
-   * @notice This function allows to disable tokens that have been permitted initially
+   * @notice This function allows to disable tokens that have been permitted initially as investment/withdrawal tokens
+   * @param _tokens Array of token addresses to be disabled (permission revoke) from the registry
    */
   function disablePermittedTokens(address[] calldata _tokens) external virtual onlyOwner {
     if (_tokens.length == 0) {
@@ -339,7 +374,9 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   }
 
   /**
-   * @notice This function checks if the token is permitted in the registry or not
+   * @notice This function checks if the token is permitted in the registry and that, the user can use it for investment or not
+   * @param _token Address of the token to be checked for
+   * @return Boolean paramter for is the token permitted in the registry or not
    */
   function isPermitted(address _token) external view virtual returns (bool) {
     if (_token == address(0)) {
@@ -350,6 +387,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function allows us to pause the protocol before certain operations
+   * @param _state Boolean parameter to set the pasuse/unpause state of the protocol
    */
   function setProtocolPause(bool _state) external virtual onlyOwner {
     protocolPause = _state;
@@ -357,6 +395,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns the protocol state, paused or not
+   * @return Boolean parameter for the current state of the protocol (paused or unpaused)
    */
   function getProtocolState() external view virtual returns (bool) {
     return protocolPause;
@@ -364,6 +403,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function returns the WETH value from the registry
+   * @return Address of the WETH value of the registry
    */
   function getETH() external view virtual returns (address) {
     return WETH;
@@ -371,9 +411,26 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function is used to set the cooldown period
+   * @param newCoolDownPeriod New cooldown period value to be updated to
    */
   function setCoolDownPeriod(uint256 newCoolDownPeriod) external onlyOwner {
     COOLDOWN_PERIOD = newCoolDownPeriod;
+  }
+
+  /**
+   * @notice This function sets the limit for the number of assets that a fund can have
+   * @param _maxAssetLimit Maximum number of allowed assets in the fund
+   */
+  function setMaxAssetLimit(uint256 _maxAssetLimit) external onlyOwner {
+    maxAssetLimit = _maxAssetLimit;
+  }
+
+  /**
+   * @notice This function returns the limit for the number of assets that a fund can have
+   * @return Current max limit of assets for the fund
+   */
+  function getMaxAssetLimit() external view virtual returns (uint256) {
+    return maxAssetLimit;
   }
 
   /**

@@ -14,14 +14,10 @@ import "../core/IndexSwapLibrary.sol";
 
 import {IAssetManagerConfig} from "../registry/IAssetManagerConfig.sol";
 
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 
 contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
-  using SafeMathUpgradeable for uint256;
-
-  uint256 internal constant MIN_FEE_MINT = 100000000000000;
+  uint256 internal constant MIN_FEE_MINT = 10000000000000000;
 
   event FeesToBeMinted(
     uint256 time,
@@ -94,12 +90,11 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
   }
 
   /**
-   * @notice This function charges the management fee as per the vault balance in BNB
+   * @notice This function charges the management fee as per the vault balance in USD
    */
   function chargeFees() external virtual nonReentrant notPaused {
     (, uint256 vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, index.getTokens());
-    uint256 vaultBalanceInBNB = IPriceOracle(index.oracle()).getUsdEthPrice(vaultBalance);
-    _chargeManagementFees(vaultBalanceInBNB);
+    _chargeManagementFees(vaultBalance);
   }
 
   /**
@@ -132,9 +127,9 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
     }
 
     (uint256 _protocolFeeCut, uint256 _managementFee) = _calculateProtocolAndManagementFee(_vaultBalance, _totalSupply);
-    uint256 _performanceFee = _calculatePerformanceFee(_vaultBalance, _totalSupply.add(_managementFee));
+    uint256 _performanceFee = _calculatePerformanceFee(_vaultBalance, _totalSupply + _managementFee);
 
-    uint256 assetManagerFeeTotal = _managementFee.add(_performanceFee);
+    uint256 assetManagerFeeTotal = _managementFee + _performanceFee;
 
     (uint256 _protocolFeeToMint, uint256 assetManagerFeeToMint) = protocolMinFeeCheck(
       assetManagerFeeTotal,
@@ -188,7 +183,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
     (uint256 _protocolFeeCut, uint256 _assetManagerFee) = FeeLibrary.feeSplitter(_fee, tokenRegistry.protocolFee());
 
     if (_protocolFeeCut < _protocolStreamingFeeMin) {
-      _assetManagerFee = _fee > _protocolStreamingFeeMin ? _fee.sub(_protocolStreamingFeeMin) : 0;
+      _assetManagerFee = _fee > _protocolStreamingFeeMin ? _fee - _protocolStreamingFeeMin : 0;
 
       return (_protocolStreamingFeeMin, _assetManagerFee);
     } else {
@@ -266,7 +261,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
     protocolFee = _mintSharesSingle(tokenRegistry.velvetTreasury(), protocolFee);
     assetManagerFee = _mintSharesSingle(assetManagerConfig.assetManagerTreasury(), assetManagerFee);
 
-    uint256 _userMintAmount = _mintAmount.sub(protocolFee).sub(assetManagerFee);
+    uint256 _userMintAmount = _mintAmount - protocolFee - assetManagerFee;
 
     emit EntryFeeCharged(block.timestamp, address(index), protocolFee, assetManagerFee);
 
@@ -288,7 +283,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
 
     emit ExitFeeCharged(block.timestamp, address(index), protocolFee, assetManagerFee);
 
-    return (protocolFee, assetManagerFee, protocolFee.add(assetManagerFee));
+    return (protocolFee, assetManagerFee, protocolFee + assetManagerFee);
   }
 
   /**
@@ -300,16 +295,15 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
     returns (uint256 _protocolFee, uint256 _managementFee, uint256 _performanceFee)
   {
     (, uint256 vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, index.getTokens());
-    uint256 vaultBalanceInBNB = IPriceOracle(index.oracle()).getUsdEthPrice(vaultBalance);
-    (_protocolFee, _managementFee, _performanceFee) = _calculateManagementFees(vaultBalanceInBNB);
+    (_protocolFee, _managementFee, _performanceFee) = _calculateManagementFees(vaultBalance);
   }
 
   /**
-   * @notice This function is used to the update the higherWatermark value as per the current index token rate in BNB
+   * @notice This function is used to the update the higherWatermark value as per the current index token rate in USD
    */
   function _updateHighWaterMark() internal {
-    uint256 currentPriceBNB = IndexSwapLibrary.getIndexTokenRateBNB(index);
-    highWatermark = currentPriceBNB > highWatermark ? currentPriceBNB : highWatermark;
+    uint256 currentPrice = IndexSwapLibrary.getIndexTokenRate(index);
+    highWatermark = currentPrice > highWatermark ? currentPrice : highWatermark;
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

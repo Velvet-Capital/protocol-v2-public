@@ -8,7 +8,7 @@ interface IVelvetSafeModule {
   /// @param initializeParams Parameters of initialization encoded
   function setUp(bytes memory initializeParams) external;
 
-  function executeWallet(address handlerAddresses, bytes calldata encodedCalls) external returns (bool isSuccess);
+  function executeWallet(address handlerAddresses, bytes calldata encodedCalls) external returns (bool, bytes memory);
 
   function executeWalletDelegate(bytes calldata encodedCalls) external returns (bool isSuccess);
 }

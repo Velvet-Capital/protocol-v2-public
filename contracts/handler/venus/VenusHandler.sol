@@ -28,9 +28,12 @@ import {VBep20Interface} from "./interfaces/VBep20Interface.sol";
 import {IHandler} from "../IHandler.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "contracts/FunctionParameters.sol";
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
 contract VenusHandler is IHandler {
   address internal constant COMPTROLLER = 0xfD36E2c2a6789Db23113685031d7F16329158384;
+
+  IPriceOracle internal _oracle;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
@@ -41,6 +44,11 @@ contract VenusHandler is IHandler {
     address indexed to,
     bool isWETH
   );
+
+  constructor(address _priceOracle) {
+    require(_priceOracle != address(0), "Oracle having zero address");
+    _oracle = IPriceOracle(_priceOracle);
+  }
 
   /**
    * @notice This function deposits assets to the Venus protocol
@@ -55,7 +63,7 @@ contract VenusHandler is IHandler {
     uint256 _lpSlippage,
     address _to,
     address user
-  ) public payable override {
+  ) public payable override returns (uint256 _mintedAmount) {
     if (_vAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -67,7 +75,7 @@ contract VenusHandler is IHandler {
       TransferHelper.safeApprove(address(underlyingToken), address(vToken), _amount[0]);
       vToken.mint(_amount[0]);
     } else {
-      require(msg.value >= _amount[0], "zero address passed");
+      if (msg.value < _amount[0]) revert ErrorLibrary.WrongNativeValuePassed();
       vToken.mint{value: _amount[0]}();
     }
 
@@ -76,6 +84,7 @@ contract VenusHandler is IHandler {
       TransferHelper.safeTransfer(_vAsset, _to, vBalance);
     }
     emit Deposit(block.timestamp, msg.sender, _vAsset, _amount, _to);
+    _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);
   }
 
   /**
@@ -97,7 +106,7 @@ contract VenusHandler is IHandler {
       IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
       if (inputData.isWETH) {
         (bool success, ) = payable(inputData._to).call{value: address(this).balance}("");
-        require(success, "Transfer failed.");
+        if (!success) revert ErrorLibrary.TransferFailed();
       } else {
         IERC20Upgradeable token = IERC20Upgradeable(underlyingToken);
         uint256 tokenAmount = token.balanceOf(address(this));
@@ -167,7 +176,21 @@ contract VenusHandler is IHandler {
     return tokenBalance;
   }
 
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+  /**
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   */
+  function getTokenBalanceUSD(address _tokenHolder, address t) public override returns (uint256) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
+    address[] memory underlyingToken = getUnderlying(t);
+
+    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
+    return balanceUSD;
+  }
 
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 

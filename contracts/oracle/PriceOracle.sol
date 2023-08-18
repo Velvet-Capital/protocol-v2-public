@@ -3,14 +3,11 @@ pragma solidity 0.8.16;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-
 import {AggregatorV2V3Interface, AggregatorInterface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 contract PriceOracle is Ownable {
-  using SafeMathUpgradeable for uint256;
-
   /// @notice Thrown when aggregator already exists in price oracle
   error AggregatorAlreadyExists();
   /// @notice Thrown when zero address is passed in aggregator
@@ -22,9 +19,15 @@ contract PriceOracle is Ownable {
 
   mapping(address => AggregatorInfo) internal aggregatorAddresses;
 
+  uint256 public oracleExpirationThreshold;
+
   // Events
   event addFeed(uint256 time, address[] base, address[] quote, AggregatorV2V3Interface[] aggregator);
   event updateFeed(uint256 time, address base, address quote, address aggregator);
+
+  constructor() {
+    oracleExpirationThreshold = 90000; // 25 hours
+  }
 
   /**
    * @notice Retrieve the aggregator of an base / quote pair in the current phase
@@ -47,6 +50,9 @@ contract PriceOracle is Ownable {
     address[] memory quote,
     AggregatorV2V3Interface[] memory aggregator
   ) public onlyOwner {
+    if (!((base.length == quote.length) && (quote.length == aggregator.length)))
+      revert ErrorLibrary.IncorrectArrayLength();
+
     for (uint256 i = 0; i < base.length; i++) {
       if (aggregatorAddresses[base[i]].aggregatorInterfaces[quote[i]] != AggregatorInterface(address(0))) {
         revert AggregatorAlreadyExists();
@@ -93,9 +99,18 @@ contract PriceOracle is Ownable {
       /*uint80 roundID*/
       int256 price /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,
       ,
-      ,
+      uint256 updatedAt,
 
     ) = aggregatorAddresses[base].aggregatorInterfaces[quote].latestRoundData();
+
+    if (updatedAt + oracleExpirationThreshold < block.timestamp) {
+      revert ErrorLibrary.PriceOracleExpired();
+    }
+
+    if (price == 0) {
+      revert ErrorLibrary.PriceOracleInvalid();
+    }
+
     return price;
   }
 
@@ -107,7 +122,7 @@ contract PriceOracle is Ownable {
   function getUsdEthPrice(uint256 amountIn) public view returns (uint256 amountOut) {
     uint256 price = uint256(latestRoundData(Denominations.ETH, Denominations.USD));
     uint256 decimal = decimals(Denominations.ETH, Denominations.USD);
-    amountOut = amountIn.mul(10 ** decimal).div(price);
+    amountOut = (amountIn * (10 ** decimal)) / (price);
   }
 
   /**
@@ -118,7 +133,7 @@ contract PriceOracle is Ownable {
   function getEthUsdPrice(uint256 amountIn) public view returns (uint256 amountOut) {
     uint256 price = uint256(latestRoundData(Denominations.ETH, Denominations.USD));
     uint256 decimal = decimals(Denominations.ETH, Denominations.USD);
-    amountOut = amountIn.mul(price).div(10 ** decimal);
+    amountOut = (amountIn * price) / (10 ** decimal);
   }
 
   /**
@@ -135,6 +150,8 @@ contract PriceOracle is Ownable {
   /**
    * @notice Returns the latest price for a specific amount
    * @param token token asset address
+   * @param amount token amount
+   * @param ethPath boolean parameter for is the path for ETH (native token)
    * @return amountOut The latest token price of the pair
    */
   function getPriceForAmount(address token, uint256 amount, bool ethPath) public view returns (uint256 amountOut) {
@@ -148,7 +165,7 @@ contract PriceOracle is Ownable {
       uint256 price = uint256(latestRoundData(Denominations.ETH, Denominations.USD));
       uint256 decimal2 = decimals(Denominations.ETH, Denominations.USD);
       // getPriceUSDToken returns the amount in decimals of token (out)
-      amountOut = getPriceUSDToken(token, price.mul(amount).div(10 ** decimal2));
+      amountOut = getPriceUSDToken(token, (price * amount) / (10 ** decimal2));
     }
   }
 
@@ -156,6 +173,7 @@ contract PriceOracle is Ownable {
    * @notice Returns the latest price for a specific amount
    * @param tokenIn token asset address
    * @param tokenOut token asset address
+   * @param amount token amount
    * @return amountOut The latest token price of the pair
    */
 
@@ -182,9 +200,9 @@ contract PriceOracle is Ownable {
     IERC20MetadataUpgradeable token = IERC20MetadataUpgradeable(_base);
     uint8 decimal = token.decimals();
 
-    uint256 diff = uint256(18).sub(decimal);
+    uint256 diff = uint256(18) - (decimal);
 
-    amountOut = output.mul(amountIn).div(10 ** decimalChainlink).mul(10 ** diff);
+    amountOut = (output * amountIn * (10 ** diff)) / (10 ** decimalChainlink);
   }
 
   /**
@@ -198,8 +216,26 @@ contract PriceOracle is Ownable {
     uint256 decimal = decimals(_base, Denominations.USD);
 
     uint8 tokenOutDecimal = IERC20MetadataUpgradeable(_base).decimals();
-    uint256 diff = uint256(18).sub(tokenOutDecimal);
+    uint256 diff = uint256(18) - (tokenOutDecimal);
 
-    amountOut = (amountIn.mul(10 ** decimal).div(output)).div(10 ** diff);
+    amountOut = ((amountIn * (10 ** decimal)) / output) / (10 ** diff);
+  }
+
+  /**
+   * @notice Returns the latest token price for a specific token for 1 unit
+   * @param _base base asset address
+   * @return amountOut The latest USD token price of the base token in 18 decimals
+   */
+  function getPriceForOneTokenInUSD(address _base) public view returns (uint256 amountOut) {
+    uint256 amountIn = 10 ** IERC20MetadataUpgradeable(_base).decimals();
+    amountOut = getPriceTokenUSD18Decimals(_base, amountIn);
+  }
+
+  /**
+   * @notice Updates the oracle timeout threshold
+   * @param _newTimeout New timeout threshold set by owner
+   */
+  function updateOracleExpirationThreshold(uint256 _newTimeout) public onlyOwner {
+    oracleExpirationThreshold = _newTimeout;
   }
 }

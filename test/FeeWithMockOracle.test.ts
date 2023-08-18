@@ -5,7 +5,7 @@ import { ethers, upgrades } from "hardhat";
 import {
   tokenAddresses,
   indexSwapLibrary,
-  baseHandler,
+  // baseHandler,
   accessController,
   venusHandler,
   wombatHandler,
@@ -78,6 +78,7 @@ describe.only("Tests for Mock Fee", () => {
   let addrs: SignerWithAddress[];
   let merkleTree: MerkleTree;
   let indexInfo: any;
+  let baseHandler: any;
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
   let velvetTreasuryBalance = 0;
@@ -123,6 +124,10 @@ describe.only("Tests for Mock Fee", () => {
         whitelistManagerAdmin,
         ...addrs
       ] = accounts;
+
+      const BaseHandler = await ethers.getContractFactory("BaseHandler");
+      baseHandler = await BaseHandler.deploy(mockPriceOracle.address);
+      await baseHandler.deployed();
 
       const tx = await mockPriceOracle._addFeed(
         [
@@ -206,6 +211,7 @@ describe.only("Tests for Mock Fee", () => {
           treasury.address,
           addresses.WETH_Address,
           "1",
+          15,
         ],
         { kind: "uups" },
       );
@@ -349,8 +355,8 @@ describe.only("Tests for Mock Fee", () => {
             _priceOracle: mockPriceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "500000000000000000000",
-            _minInvestmentAmount: "10000000000000000",
+            _maxInvestmentAmount: "120000000000000000000000",
+            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },
@@ -365,8 +371,8 @@ describe.only("Tests for Mock Fee", () => {
         _performanceFee: "2500",
         _entryFee: "100",
         _exitFee: "100",
-        _minInvestmentAmount: "10000000000000000",
-        _maxInvestmentAmount: "500000000000000000000",
+        _maxInvestmentAmount: "120000000000000000000000",
+        _minInvestmentAmount: "3000000000000000000",
         _tokenRegistry: tokenRegistry.address,
         _accessController: accessController.address,
         _assetManagerTreasury: treasury.address,
@@ -381,8 +387,8 @@ describe.only("Tests for Mock Fee", () => {
       const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -415,8 +421,8 @@ describe.only("Tests for Mock Fee", () => {
             {
               name: "INDEXLY",
               symbol: "IDX",
-              maxIndexInvestmentAmount: "500000000000000000000",
-              minIndexInvestmentAmount: "10000000000000000",
+              maxIndexInvestmentAmount: "120000000000000000000000",
+              minIndexInvestmentAmount: "3000000000000000000",
               _managementFee: "100",
               _performanceFee: "10",
               _entryFee: "0",
@@ -440,8 +446,8 @@ describe.only("Tests for Mock Fee", () => {
             {
               name: "INDEXLY",
               symbol: "IDX",
-              maxIndexInvestmentAmount: "500000000000000000000",
-              minIndexInvestmentAmount: "10000000000000000",
+              maxIndexInvestmentAmount: "120000000000000000000000",
+              minIndexInvestmentAmount: "3000000000000000000",
               _managementFee: "200",
               _performanceFee: "2500",
               _entryFee: "0",
@@ -480,7 +486,6 @@ describe.only("Tests for Mock Fee", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: wbnbInstance.address,
@@ -503,7 +508,6 @@ describe.only("Tests for Mock Fee", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: wbnbInstance.address,
@@ -526,7 +530,6 @@ describe.only("Tests for Mock Fee", () => {
           {
             _slippage: ["100", "100"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: wbnbInstance.address,

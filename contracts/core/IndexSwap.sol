@@ -14,7 +14,6 @@
 
 pragma solidity 0.8.16;
 
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
@@ -33,8 +32,9 @@ import {IFeeModule} from "../fee/IFeeModule.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {CommonReentrancyGuard} from "./CommonReentrancyGuard.sol";
 
-contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, CommonReentrancyGuard {
   /**
    * @dev Token record data structure
    * @param lastDenormUpdate timestamp of last denorm change
@@ -42,7 +42,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param index index of address in tokens array
    * @param handler handler address for token
    */
-
   struct Record {
     uint40 lastDenormUpdate;
     uint96 denorm;
@@ -62,7 +61,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
 
   //Keeps track of user last investment time
   mapping(address => uint256) public lastInvestmentTime;
-  using SafeMathUpgradeable for uint256;
+  mapping(address => uint256) public lastWithdrawCooldown;
 
   address internal _vault;
   address internal _module;
@@ -114,7 +113,16 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    */
   function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
     super._beforeTokenTransfer(from, to, amount);
-    IndexSwapLibrary._beforeTokenTransfer(from, to, _iAssetManagerConfig);
+    if (from == address(0) || to == address(0)) {
+      return;
+    }
+    if (
+      !(_iAssetManagerConfig.transferableToPublic() ||
+        (_iAssetManagerConfig.transferable() && _iAssetManagerConfig.whitelistedUsers(to)))
+    ) {
+      revert ErrorLibrary.Transferprohibited();
+    }
+    checkCoolDownPeriod();
   }
 
   /**
@@ -125,12 +133,12 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     __ERC20_init(initData._name, initData._symbol);
     __UUPSUpgradeable_init();
     __Ownable_init();
+    __ReentrancyGuard_init();
     _vault = initData._vault;
     _module = initData._module;
     _accessController = IAccessController(initData._accessController);
     _tokenRegistry = ITokenRegistry(initData._tokenRegistry);
     _oracle = IPriceOracle(initData._oracle);
-    _paused = false;
     _exchange = IExchange(initData._exchange);
     _iAssetManagerConfig = IAssetManagerConfig(initData._iAssetManagerConfig);
     _feeModule = IFeeModule(initData._feeModule);
@@ -143,21 +151,24 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param denorms Initial denormalized weights for the tokens
    */
   function initToken(address[] calldata tokens, uint96[] calldata denorms) external virtual onlySuperAdmin {
+    if (tokens.length > _tokenRegistry.getMaxAssetLimit())
+      revert ErrorLibrary.TokenCountOutOfLimit(_tokenRegistry.getMaxAssetLimit());
+
     if (tokens.length != denorms.length) {
       revert ErrorLibrary.InvalidInitInput();
     }
     if (_tokens.length != 0) {
       revert ErrorLibrary.AlreadyInitialized();
     }
-    uint256 totalWeight = 0;
+    uint256 totalWeight;
     for (uint256 i = 0; i < tokens.length; i++) {
       address token = tokens[i];
       uint96 _denorm = denorms[i];
       IndexSwapLibrary._beforeInitCheck(IIndexSwap(address(this)), token, _denorm);
-      _records[token] = Record({lastDenormUpdate: uint40(block.timestamp), denorm: _denorm, index: uint256(i)});
+      _records[token] = Record({lastDenormUpdate: uint40(getTimeStamp()), denorm: _denorm, index: uint256(i)});
       _tokens.push(token);
 
-      totalWeight = totalWeight.add(_denorm);
+      totalWeight = totalWeight + _denorm;
     }
     _weightCheck(totalWeight);
     emit LOG_PUBLIC_SWAP_ENABLED();
@@ -186,45 +197,46 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
 
   /**
      * @notice The function swaps BNB into the portfolio tokens after a user makes an investment
-     * @dev The output of the swap is converted into BNB to get the actual amount after slippage to calculate 
+     * @dev The output of the swap is converted into USD to get the actual amount after slippage to calculate 
             the index token amount to mint
-     * @dev (tokenBalanceInBNB, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
+     * @dev (tokenBalance, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
             because during the swap the amount will change but the index token balance is still the same 
             (before minting)
      */
   function investInFund(
     FunctionParameters.InvestFund memory investData
   ) external payable virtual nonReentrant notPaused {
-    address _to = investData._to;
     IndexSwapLibrary.beforeInvestment(
       IIndexSwap(address(this)),
       investData._slippage.length,
       investData._lpSlippage.length,
-      _to
+      msg.sender
     );
     address _token = investData._token;
+    uint256 balanceBefore = IndexSwapLibrary.checkBalance(_token, address(_exchange), WETH);
     uint256 _amount = investData._tokenAmount;
+    uint256 _investmentAmountInUSD;
+
     if (msg.value > 0) {
-      if (!(WETH == _token)) {
+      if (WETH != _token) {
         revert ErrorLibrary.InvalidToken();
       }
       _amount = msg.value;
-      IndexSwapLibrary._checkInvestmentValue(_amount, _iAssetManagerConfig);
     } else {
       IndexSwapLibrary._checkPermissionAndBalance(_token, _amount, _iAssetManagerConfig, msg.sender);
-      uint256 tokenBalanceInBNB = IndexSwapLibrary.getTokenBalanceInBNB(_token, _amount, _oracle);
-      IndexSwapLibrary._checkInvestmentValue(tokenBalanceInBNB, _iAssetManagerConfig);
-      TransferHelper.safeApprove(_token, address(this), _amount);
+      TransferHelper.safeTransferFrom(_token, msg.sender, address(_exchange), _amount);
     }
+
+    _investmentAmountInUSD = _oracle.getPriceTokenUSD18Decimals(_token, _amount);
+    _checkInvestmentValue(_investmentAmountInUSD);
 
     uint256 investedAmountAfterSlippage;
     uint256 vaultBalance;
-    uint256 vaultBalanceInBNB;
     uint256[] memory amount = new uint256[](_tokens.length);
     uint256[] memory tokenBalance = new uint256[](_tokens.length);
 
-    (tokenBalance, vaultBalance, vaultBalanceInBNB) = _getTokenAndVaultBalance();
-    _feeModule.chargeFeesFromIndex(vaultBalanceInBNB);
+    (tokenBalance, vaultBalance) = getTokenAndVaultBalance();
+    chargeFees(vaultBalance);
 
     amount = IndexSwapLibrary.calculateSwapAmounts(
       IIndexSwap(address(this)),
@@ -235,9 +247,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     );
     uint256[] memory slippage = investData._slippage;
 
-    if (_token != WETH) {
-      TransferHelper.safeTransferFrom(_token, msg.sender, address(_exchange), _amount);
-    }
     investedAmountAfterSlippage = _exchange._swapTokenToTokens{value: msg.value}(
       FunctionParameters.SwapTokenToTokensData(
         address(this),
@@ -249,37 +258,37 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
         amount,
         slippage,
         investData._lpSlippage
-      )
+      ),
+      balanceBefore
     );
 
-    uint256 investedAmountAfterSlippageBNB = _oracle.getUsdEthPrice(investedAmountAfterSlippage);
-
-    if (investedAmountAfterSlippageBNB <= 0) {
+    if (investedAmountAfterSlippage <= 0) {
       revert ErrorLibrary.ZeroFinalInvestmentValue();
     }
     uint256 tokenAmount;
     uint256 _totalSupply = totalSupply();
-    tokenAmount = getTokenAmount(_totalSupply, investedAmountAfterSlippageBNB, vaultBalanceInBNB);
+    tokenAmount = getTokenAmount(_totalSupply, investedAmountAfterSlippage, vaultBalance);
     if (tokenAmount <= 0) {
       revert ErrorLibrary.ZeroTokenAmount();
     }
-    _mintInvest(_to, tokenAmount);
-    lastInvestmentTime[_to] = block.timestamp;
+    _mintInvest(msg.sender, tokenAmount);
+    lastWithdrawCooldown[msg.sender] = IndexSwapLibrary.calculateCooldown(
+      balanceOf(msg.sender),
+      tokenAmount,
+      _tokenRegistry.COOLDOWN_PERIOD(),
+      lastWithdrawCooldown[msg.sender],
+      lastInvestmentTime[msg.sender]
+    );
+    lastInvestmentTime[msg.sender] = getTimeStamp();
 
     emit InvestInFund(
-      _to,
+      msg.sender,
       _amount,
       tokenAmount,
       IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
       address(this),
-      block.timestamp
+      getTimeStamp()
     );
-    // refund leftover ETH to user
-    (bool success, ) = payable(_to).call{value: address(this).balance}("");
-    // require(success, "Transfer ETH failed");
-    if (!success) {
-      revert ErrorLibrary.ETHTransferFailed();
-    }
   }
 
   /*
@@ -298,7 +307,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    *
    */
   function withdrawFund(FunctionParameters.WithdrawFund calldata initData) external nonReentrant notPaused {
-    IndexSwapLibrary.checkCoolDownPeriod(lastInvestmentTime[msg.sender], _tokenRegistry);
+    checkCoolDownPeriod();
     IndexSwapLibrary.beforeWithdrawCheck(
       initData._slippage.length,
       initData._lpSlippage.length,
@@ -308,10 +317,9 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
       initData.tokenAmount
     );
     uint256 vaultBalance;
-    uint256 vaultBalanceInBNB;
-    (, vaultBalance, vaultBalanceInBNB) = _getTokenAndVaultBalance();
+    (, vaultBalance) = getTokenAndVaultBalance();
     if (!(msg.sender == _iAssetManagerConfig.assetManagerTreasury() || msg.sender == _tokenRegistry.velvetTreasury())) {
-      _feeModule.chargeFeesFromIndex(vaultBalanceInBNB);
+      chargeFees(vaultBalance);
     }
     uint256 totalSupplyIndex = totalSupply();
     emit WithdrawFund(
@@ -319,14 +327,15 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
       initData.tokenAmount,
       IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
       address(this),
-      block.timestamp
+      getTimeStamp()
     );
     uint256 _exitFee = _burnWithdraw(msg.sender, initData.tokenAmount);
-    uint256 _tokenAmount = initData.tokenAmount.sub(_exitFee);
+    uint256 _tokenAmount = initData.tokenAmount - _exitFee;
     for (uint256 i = 0; i < _tokens.length; i++) {
       address token = _tokens[i];
-      uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(IIndexSwap(address(this)), token);
-      tokenBalance = tokenBalance.mul(_tokenAmount).div(totalSupplyIndex);
+      IHandler handler = IHandler(_tokenRegistry.getTokenInformation(token).handler);
+      uint256 tokenBalance = handler.getTokenBalance(_vault, token);
+      tokenBalance = (tokenBalance * _tokenAmount) / totalSupplyIndex;
       if (initData.isMultiAsset || token == initData._token) {
         IndexSwapLibrary.withdrawMultiAssetORWithdrawToken(
           address(_tokenRegistry),
@@ -351,7 +360,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
         );
       }
     }
-    validateWithdraw();
   }
 
   /**
@@ -359,9 +367,9 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    *  Basic us that when use withdraw he not keep dust after withdraw index token
    * @dev This function is called after the withdrawal process is completed.
    */
-  function validateWithdraw() internal {
+  function validateWithdraw(address _user) internal {
     uint256 _minInvestValue = _tokenRegistry.MIN_VELVET_INVESTMENTAMOUNT();
-    if (!(balanceOf(msg.sender) == 0 || getVelvetTokenBalanceInBNB(balanceOf(msg.sender)) >= _minInvestValue)) {
+    if (!(balanceOf(_user) == 0 || balanceOf(_user) >= _minInvestValue)) {
       revert ErrorLibrary.BalanceCantBeBelowVelvetMinInvestAmount({minVelvetInvestment: _minInvestValue});
     }
   }
@@ -382,10 +390,18 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     uint256 vaultBalance
   ) internal pure returns (uint256 tokenAmount) {
     if (_totalSupply > 0) {
-      tokenAmount = investedAmount.mul(_totalSupply).div(vaultBalance);
+      tokenAmount = (investedAmount * _totalSupply) / vaultBalance;
     } else {
       tokenAmount = investedAmount;
     }
+  }
+
+  function nonReentrantBefore() external onlyMinter {
+    _nonReentrantBefore();
+  }
+
+  function nonReentrantAfter() external onlyMinter {
+    _nonReentrantAfter();
   }
 
   /**
@@ -415,7 +431,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    */
   function _burnWithdraw(address _to, uint256 _mintAmount) internal returns (uint256) {
     uint256 exitFee = _iAssetManagerConfig.exitFee();
-    uint256 returnValue = 0;
+    uint256 returnValue;
 
     // Check if the exit fee should be charged and deducted from the burned tokens
     if (IndexSwapLibrary.mintAndBurnCheck(exitFee, _to, address(_tokenRegistry), address(_iAssetManagerConfig))) {
@@ -426,6 +442,8 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     // Burn the specified amount of index tokens from the specified address
     _burn(_to, _mintAmount);
 
+    validateWithdraw(_to);
+
     return returnValue;
   }
 
@@ -435,8 +453,16 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param _to The address to which the index tokens are minted.
    * @param _mintAmount The amount of index tokens to mint.
    */
-  function mintInvest(address _to, uint256 _mintAmount) external onlyMinter {
+  function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external onlyMinter {
     _mintInvest(_to, _mintAmount);
+    lastWithdrawCooldown[_to] = IndexSwapLibrary.calculateCooldown(
+      balanceOf(_to),
+      _mintAmount,
+      _tokenRegistry.COOLDOWN_PERIOD(),
+      lastWithdrawCooldown[_to],
+      lastInvestmentTime[_to]
+    );
+    lastInvestmentTime[_to] = getTimeStamp();
   }
 
   /**
@@ -481,7 +507,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
 
   function _setPaused(bool _state) internal virtual {
     _paused = _state;
-    _lastPaused = block.timestamp;
+    _lastPaused = getTimeStamp();
   }
 
   /**
@@ -515,7 +541,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param denorms The new weights for for the portfolio
    */
   function updateRecords(address[] calldata tokens, uint96[] calldata denorms) external virtual onlyRebalancerContract {
-    uint256 totalWeight = 0;
+    uint256 totalWeight;
     for (uint256 i = 0; i < tokens.length; i++) {
       uint96 _denorm = denorms[i];
       address token = tokens[i];
@@ -525,9 +551,9 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
       if (_previousToken[token] == true) {
         revert ErrorLibrary.TokenAlreadyExist();
       }
-      _records[token] = Record({lastDenormUpdate: uint40(block.timestamp), denorm: _denorm, index: uint8(i)});
+      _records[token] = Record({lastDenormUpdate: uint40(getTimeStamp()), denorm: _denorm, index: uint8(i)});
 
-      totalWeight = totalWeight.add(_denorm);
+      totalWeight = totalWeight + _denorm;
       _previousToken[token] = true;
     }
     setFalse(tokens);
@@ -573,19 +599,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   }
 
   /**
-    @notice This function calculates the IndexToken balance of user in terms of BNB
-    @param tokenAmount Index Token amount passed
-    @return tokenAmountBNB Final token balance of the user in BNB
-  */
-  function getVelvetTokenBalanceInBNB(uint256 tokenAmount) internal virtual returns (uint256 tokenAmountBNB) {
-    (, uint256 vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(address(this)), getTokens());
-
-    if (tokenAmount > 0 && vaultBalance > 0) {
-      tokenAmountBNB = _oracle.getUsdEthPrice(vaultBalance.mul(tokenAmount).div(totalSupply()));
-    }
-  }
-
-  /**
    * @notice This function returns the record of a specific token
    */
   function getRecord(address _token) external view virtual returns (Record memory) {
@@ -597,6 +610,8 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param tokens List of updated tokens
    */
   function updateTokenList(address[] calldata tokens) external virtual onlyRebalancerContract {
+    uint256 _maxAssetLimit = _tokenRegistry.getMaxAssetLimit();
+    if (tokens.length > _maxAssetLimit) revert ErrorLibrary.TokenCountOutOfLimit(_maxAssetLimit);
     _tokens = tokens;
   }
 
@@ -680,21 +695,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   }
 
   /**
-   * @notice Returns the index token price in BNB
-   */
-  function getIndexPrice() external returns (uint256) {
-    return IndexSwapLibrary.getIndexTokenRateBNB(IIndexSwap(address(this)));
-  }
-
-  /**
-   * @notice Keeps a record of the last investment made
-   * @param _to Address of the last investor
-   */
-  function setLastInvestmentPeriod(address _to) external onlyMinter {
-    lastInvestmentTime[_to] = block.timestamp;
-  }
-
-  /**
    * @notice Check for totalweight == _TOTAL_WEIGHT
    * @param weight weight of portfolio
    */
@@ -705,14 +705,10 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   }
 
   /**
-   * @notice This internal function returns tokenBalance in array, vaultBalance and vaultBalance in bnb
+   * @notice This internal function returns tokenBalance in array, vaultBalance and vaultBalance in usd
    */
-  function _getTokenAndVaultBalance()
-    internal
-    returns (uint256[] memory tokenBalance, uint256 vaultBalance, uint256 vaultBalanceInBNB)
-  {
+  function getTokenAndVaultBalance() internal returns (uint256[] memory tokenBalance, uint256 vaultBalance) {
     (tokenBalance, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(address(this)), getTokens());
-    vaultBalanceInBNB = _oracle.getUsdEthPrice(vaultBalance);
   }
 
   /**
@@ -722,10 +718,58 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     return _accessController.hasRole(keccak256(_role), user);
   }
 
+  /**
+   * @notice This internal set multiple flags such as setLastRebalance,setPause and setRedeemed
+   */
   function setFlags(bool _pauseState, bool _redeemState) external onlyRebalancerContract {
-    _setLastRebalance(block.timestamp);
+    _setLastRebalance(getTimeStamp());
     _setPaused(_pauseState);
     _setRedeemed(_redeemState);
+  }
+
+  /**
+   * @notice The function is used to check investment value
+   */
+  function _checkInvestmentValue(uint256 _tokenAmount) internal view {
+    IndexSwapLibrary._checkInvestmentValue(_tokenAmount, _iAssetManagerConfig);
+  }
+
+  /**
+   * @notice This function is used to charge fees
+   */
+  function chargeFees(uint256 vaultBalance) internal {
+    _feeModule.chargeFeesFromIndex(vaultBalance);
+  }
+
+  /**
+   * @notice This function returns usd price in eth
+   */
+  function getUsdEthPrice(uint256 _amount) internal view returns (uint256) {
+    return _oracle.getUsdEthPrice(_amount);
+  }
+
+  /**
+   * @notice This function returns remaining cooldown for user
+   */
+  function getRemainingCoolDown() public view returns (uint256) {
+    uint256 userCoolDownPeriod = lastInvestmentTime[msg.sender] + lastWithdrawCooldown[msg.sender];
+    return userCoolDownPeriod < getTimeStamp() ? 0 : userCoolDownPeriod - getTimeStamp();
+  }
+
+  /**
+   * @notice This function check whether the cooldown period is passed or not
+   */
+  function checkCoolDownPeriod() public view {
+    if (getRemainingCoolDown() > 0) {
+      revert ErrorLibrary.CoolDownPeriodNotPassed();
+    }
+  }
+
+  /**
+   * @notice This function returns timeStamp
+   */
+  function getTimeStamp() internal view returns (uint256) {
+    return block.timestamp;
   }
 
   // important to receive ETH

@@ -66,4 +66,8 @@ interface ITokenRegistry {
   function getETH() external view returns (address);
 
   function COOLDOWN_PERIOD() external view returns (uint256);
+
+  function setMaxAssetLimit(uint256) external;
+
+  function getMaxAssetLimit() external view returns (uint256);
 }

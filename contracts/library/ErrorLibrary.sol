@@ -166,8 +166,6 @@ library ErrorLibrary {
   error InvalidFee();
   /// @notice Thrown when zero address is passed for treasury
   error ZeroAddressTreasury();
-  /// @notice Thrown when velvetTreasury address passed is zero
-  error ZeroAddresstreasury();
   /// @notice Thrown when assetManagerFee or performaceFee is set zero
   error ZeroFee();
   /// @notice Thrown when trying to enable an already enabled handler
@@ -244,7 +242,7 @@ library ErrorLibrary {
   error InvalidExecution();
   /// @notice Throws when Final value after investment is zero
   error ZeroFinalInvestmentValue();
-  /// @notice Throws when tokenamount after swap is zero
+  /// @notice Throws when token amount after swap / token amount to be minted comes out as zero
   error ZeroTokenAmount();
   /// @notice Throws eth transfer failed
   error ETHTransferFailed();
@@ -260,4 +258,34 @@ library ErrorLibrary {
   error BalanceTooSmall();
   /// @notice Throws when a public fund is tried to made transferable only to whitelisted addresses
   error PublicFundToWhitelistedNotAllowed();
+  /// @notice Throws when list input by user is invalid (meta aggregator)
+  error InvalidInputTokenList();
+  /// @notice Generic call failed error
+  error CallFailed();
+  /// @notice Generic transfer failed error
+  error TransferFailed();
+  /// @notice Throws when incorrect token amount is encountered during offchain/onchain investment
+  error IncorrectInvestmentTokenAmount();
+  /// @notice Throws when final invested amount after slippage is 0
+  error ZeroInvestedAmountAfterSlippage();
+  /// @notice Throws when the slippage trying to be set is in incorrect range
+  error IncorrectSlippageRange();
+  /// @notice Throws when invalid LP slippage is passed
+  error InvalidLPSlippage();
+  /// @notice Throws when invalid slippage for swapping is passed
+  error InvalidSlippage();
+  /// @notice Throws when msg.value is less than the amount passed into the handler
+  error WrongNativeValuePassed();
+  /// @notice Throws when there is an overflow during muldiv full math operation
+  error FULLDIV_OVERFLOW();
+  /// @notice Throws when the oracle price is not updated under set timeout
+  error PriceOracleExpired();
+  /// @notice Throws when the oracle price is returned 0
+  error PriceOracleInvalid();
+  /// @notice Throws when the initToken or updateTokenList function of IndexSwap is having more tokens than set by the Registry
+  error TokenCountOutOfLimit(uint256 limit);
+  /// @notice Throws when the array lenghts don't match for adding price feed or enabling tokens
+  error IncorrectArrayLength();
+  // Common Reentrancy error for IndexSwap and IndexSwapOffChain
+  error ReentrancyGuardReentrantCall();
 }

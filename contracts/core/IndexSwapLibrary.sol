@@ -14,7 +14,6 @@ pragma solidity 0.8.16;
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/interfaces/IERC20Upgradeable.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 import {IIndexSwap} from "./IIndexSwap.sol";
@@ -33,8 +32,6 @@ import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 library IndexSwapLibrary {
-  using SafeMathUpgradeable for uint256;
-
   /**
      * @notice The function calculates the balance of each token in the vault and converts them to USD and 
                the sum of those values which represents the total vault value in USD
@@ -46,24 +43,15 @@ library IndexSwapLibrary {
     address[] memory _tokens
   ) internal returns (uint256[] memory, uint256) {
     uint256[] memory tokenBalanceInUSD = new uint256[](_tokens.length);
-    uint256 vaultBalance = 0;
+    uint256 vaultBalance;
     ITokenRegistry registry = ITokenRegistry(_index.tokenRegistry());
     address vault = _index.vault();
     if (_index.totalSupply() > 0) {
       for (uint256 i = 0; i < _tokens.length; i++) {
-        uint256[] memory tokenBalance;
-        uint256 tokenBalanceUSD;
         address _token = _tokens[i];
         IHandler handler = IHandler(registry.getTokenInformation(_token).handler);
-        address[] memory underlying = handler.getUnderlying(_token);
-        if (underlying.length > 1) {
-          tokenBalanceUSD = handler.getFairLpPrice(vault, _token);
-        } else {
-          tokenBalance = handler.getUnderlyingBalance(vault, _token);
-          tokenBalanceUSD += IPriceOracle(_index.oracle()).getPriceTokenUSD18Decimals(underlying[0], tokenBalance[0]);
-        }
-        tokenBalanceInUSD[i] = tokenBalanceUSD;
-        vaultBalance = vaultBalance.add(tokenBalanceUSD);
+        tokenBalanceInUSD[i] = handler.getTokenBalanceUSD(vault, _token);
+        vaultBalance = vaultBalance + tokenBalanceInUSD[i];
       }
       return (tokenBalanceInUSD, vaultBalance);
     } else {
@@ -90,8 +78,8 @@ library IndexSwapLibrary {
     if (_index.totalSupply() > 0) {
       for (uint256 i = 0; i < _tokens.length; i++) {
         uint256 balance = tokenBalanceInUSD[i];
-        require(balance.mul(tokenAmount) >= vaultBalance, "incorrect token amount");
-        amount[i] = balance.mul(tokenAmount).div(vaultBalance);
+        if (balance * tokenAmount < vaultBalance) revert ErrorLibrary.IncorrectInvestmentTokenAmount();
+        amount[i] = (balance * tokenAmount) / vaultBalance;
       }
     }
     return amount;
@@ -136,10 +124,26 @@ library IndexSwapLibrary {
   }
 
   /**
+   * @notice This function returns the token balance of the particular contract address
+   * @param _token Token whose balance has to be found
+   * @param _contract Address of the contract whose token balance is to be retrieved
+   * @param _WETH Weth (native) token address
+   * @return currentBalance Returns the current token balance of the passed contract address
+   */
+  function checkBalance(address _token, address _contract, address _WETH) external view returns(uint256 currentBalance){
+    if (_token != _WETH) {
+      currentBalance = IERC20Upgradeable(_token).balanceOf(_contract);
+      // TransferHelper.safeApprove(_token, address(this), currentBalance);
+    } else {
+      currentBalance = _contract.balance;
+    }
+  }
+
+  /**
      * @notice The function calculates the amount of index tokens the user can buy/mint with the invested amount.
-     * @param _amount The invested amount after swapping ETH into portfolio tokens converted to BNB to avoid 
+     * @param _amount The invested amount after swapping ETH into portfolio tokens converted to USD to avoid 
                       slippage errors
-     * @param sumPrice The total value in the vault converted to BNB
+     * @param sumPrice The total value in the vault converted to USD
      * @return Returns the amount of index tokens to be minted.
      */
   function _mintShareAmount(
@@ -147,7 +151,7 @@ library IndexSwapLibrary {
     uint256 sumPrice,
     uint256 _indexTokenSupply
   ) external pure returns (uint256) {
-    return _amount.mul(_indexTokenSupply).div(sumPrice);
+    return (_amount * _indexTokenSupply) / sumPrice;
   }
 
   /**
@@ -163,7 +167,7 @@ library IndexSwapLibrary {
       IExchange(_exchange)._pullFromVault(_token, _tokenBalance, address(this));
       IWETH(ITokenRegistry(_tokenRegistry).getETH()).withdraw(_tokenBalance);
       (bool success, ) = payable(msg.sender).call{value: _tokenBalance}("");
-      require(success, "Transfer ETH failed");
+      if (!success) revert ErrorLibrary.ETHTransferFailed();
     } else {
       IExchange(_exchange)._pullFromVault(_token, _tokenBalance, msg.sender);
     }
@@ -195,22 +199,6 @@ library IndexSwapLibrary {
   }
 
   /**
-   * @notice This function transfers the tokens to the offChain handler and makes the external swap possible
-   */
-  function _transferAndSwapUsingOffChainHandler(
-    address _sellToken,
-    address _buyToken,
-    uint256 transferAmount,
-    address _to,
-    bytes memory _swapData,
-    address _offChainHandler,
-    uint256 _protocolFee
-  ) internal {
-    TransferHelper.safeTransfer(_sellToken, _offChainHandler, transferAmount);
-    IExternalSwapHandler(_offChainHandler).swap(_sellToken, _buyToken, transferAmount, _protocolFee, _swapData, _to);
-  }
-
-  /**
    * @notice This function pulls from the vault, sends the tokens to the handler and then redeems it via the handler
    */
   function _pullAndRedeem(
@@ -235,24 +223,11 @@ library IndexSwapLibrary {
   /**
    * @notice This function returns the rate of the Index token based on the Vault  and token balance
    */
-  function getIndexTokenRateBNB(IIndexSwap _index) external returns (uint256) {
-    (, uint256 totalVaultBalance) = getTokenAndVaultBalance(_index, _index.getTokens());
-    uint256 vaultBalanceInBNB = IPriceOracle(_index.oracle()).getUsdEthPrice(totalVaultBalance);
-    uint256 _totalSupply = _index.totalSupply();
-    if (_totalSupply > 0 && totalVaultBalance > 0) {
-      return (vaultBalanceInBNB.mul(10 ** 18)).div(_totalSupply);
-    }
-    return 10 ** 18;
-  }
-
-  /**
-   * @notice This function returns the rate of the Index token based on the Vault  and token balance
-   */
   function getIndexTokenRate(IIndexSwap _index) external returns (uint256) {
     (, uint256 totalVaultBalance) = getTokenAndVaultBalance(_index, _index.getTokens());
     uint256 _totalSupply = _index.totalSupply();
     if (_totalSupply > 0 && totalVaultBalance > 0) {
-      return (totalVaultBalance.mul(10 ** 18)).div(_totalSupply);
+      return (totalVaultBalance * (10 ** 18)) / _totalSupply;
     }
     return 0;
   }
@@ -261,7 +236,7 @@ library IndexSwapLibrary {
    * @notice This function calculates the swap amount for off-chain operations
    */
   function calculateSwapAmountsOffChain(IIndexSwap _index, uint256 tokenAmount) external returns (uint256[] memory) {
-    uint256 vaultBalance = 0;
+    uint256 vaultBalance;
     address[] memory _tokens = _index.getTokens();
     uint256 len = _tokens.length;
     uint256[] memory amount = new uint256[](len);
@@ -270,13 +245,13 @@ library IndexSwapLibrary {
     if (_index.totalSupply() == 0) {
       for (uint256 i = 0; i < len; i++) {
         uint256 _denorm = _index.getRecord(_tokens[i]).denorm;
-        amount[i] = tokenAmount.mul(_denorm).div(10_000);
+        amount[i] = (tokenAmount * _denorm) / 10_000;
       }
     } else {
       for (uint256 i = 0; i < len; i++) {
         uint256 balance = tokenBalanceInUSD[i];
-        require(balance.mul(tokenAmount) >= vaultBalance, "incorrect token amount");
-        amount[i] = balance.mul(tokenAmount).div(vaultBalance);
+        if (balance * tokenAmount < vaultBalance) revert ErrorLibrary.IncorrectInvestmentTokenAmount();
+        amount[i] = (balance * tokenAmount) / vaultBalance;
       }
     }
     return (amount);
@@ -285,8 +260,8 @@ library IndexSwapLibrary {
   /**
    * @notice This function makes the inital checks before executing an off-chain investment
    */
-  function beforeCheck(IIndexSwap _index, uint256[] calldata _lpSlippage, address _to) external {
-    if (ITokenRegistry(_index.tokenRegistry()).getProtocolState()) {
+  function beforeCheck(IIndexSwap _index, uint256[] calldata _lpSlippage, address _to,address _offchainHandler,ITokenRegistry tokenRegistry) external {
+    if (tokenRegistry.getProtocolState()) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
     IAssetManagerConfig _assetManagerConfig = IAssetManagerConfig(_index.iAssetManagerConfig());
@@ -298,6 +273,9 @@ library IndexSwapLibrary {
     }
     if (_index.getTokens().length == 0) {
       revert ErrorLibrary.NotInitialized();
+    }
+    if (!tokenRegistry.isExternalSwapHandler(_offchainHandler)) {
+      revert ErrorLibrary.OffHandlerNotEnabled();
     }
   }
 
@@ -414,23 +392,6 @@ library IndexSwapLibrary {
   }
 
   /**
-   * @notice This function checks if the whitelisted tokens and handler information is correct for the inti index or not
-   */
-  function _whitelistAndHandlerCheck(address _token, address _offChainHandler, IIndexSwap index) external {
-    IAssetManagerConfig config = IAssetManagerConfig(index.iAssetManagerConfig());
-    if ((config.whitelistTokens() && !config.whitelistedToken(_token))) {
-      revert ErrorLibrary.TokenNotWhitelisted();
-    }
-    ITokenRegistry registry = ITokenRegistry(index.tokenRegistry());
-    if (!(registry.isExternalSwapHandler(_offChainHandler))) {
-      revert ErrorLibrary.OffHandlerNotValid();
-    }
-    if (!(registry.isEnabled(_token))) {
-      revert ErrorLibrary.TokenNotEnabled();
-    }
-  }
-
-  /**
    * @notice The function converts the given token amount into USD
    * @param t The base token being converted to USD
    * @param amount The amount to convert to USD
@@ -488,46 +449,7 @@ library IndexSwapLibrary {
    */
   function chargeFees(IIndexSwap index, IFeeModule feeModule) external returns (uint256 vaultBalance) {
     (, vaultBalance) = getTokenAndVaultBalance(index, index.getTokens());
-    uint256 vaultBalanceInBNB = IPriceOracle(index.oracle()).getUsdEthPrice(vaultBalance);
-    feeModule.chargeFeesFromIndex(vaultBalanceInBNB);
-  }
-
-  /**
-   * @notice Checks for the cooldown period to be correct as per the block timestamp
-   */
-  function checkCoolDownPeriod(uint256 time, ITokenRegistry registry) external view {
-    if (block.timestamp.sub(time) < registry.COOLDOWN_PERIOD()) {
-      revert ErrorLibrary.CoolDownPeriodNotPassed();
-    }
-  }
-
-  /**
-   * @notice Checks for transfer restrictions
-   */
-  function _beforeTokenTransfer(address from, address to, IAssetManagerConfig config) external {
-    if (from == address(0) || to == address(0)) {
-      return;
-    }
-    if (!(config.transferableToPublic() || (config.transferable() && config.whitelistedUsers(to)))) {
-      revert ErrorLibrary.Transferprohibited();
-    }
-  }
-
-  /**
-   * @notice Returns the token balance in BNB
-   * @param _token Address of the token whose balance is required
-   * @param _tokenAmount Amount of the token
-   * @param _oracle Oracle Address
-   * @return tokenBalanceInBNB Final token balance in BNB
-   */
-  function getTokenBalanceInBNB(
-    address _token,
-    uint256 _tokenAmount,
-    IPriceOracle _oracle
-  ) external view returns (uint256 tokenBalanceInBNB) {
-    // _oracle.getPriceTokenUSD18Decimals(_token, _tokenAmount);
-    uint256 tokenBalanceInUSD = _oracle.getPriceTokenUSD18Decimals(_token, _tokenAmount);
-    tokenBalanceInBNB = _oracle.getUsdEthPrice(tokenBalanceInUSD);
+    feeModule.chargeFeesFromIndex(vaultBalance);
   }
 
   /**
@@ -544,5 +466,44 @@ library IndexSwapLibrary {
       balances[i] = IERC20Upgradeable(underlying[i]).balanceOf(_contract);
     }
     return balances;
+  }
+
+  /// @notice Calculate lockup cooldown applied to the investor after pool deposit
+  /// @param currentBalance Investor's current pool tokens balance
+  /// @param liquidityMinted Liquidity to be minted to investor after pool deposit
+  /// @param newCooldown New cooldown lockup time
+  /// @param lastCooldown Last cooldown lockup time applied to investor
+  /// @param lastDepositTime Timestamp when last pool deposit happened
+  /// @return cooldown New lockup cooldown to be applied to investor address
+  function calculateCooldown(
+    uint256 currentBalance,
+    uint256 liquidityMinted,
+    uint256 newCooldown,
+    uint256 lastCooldown,
+    uint256 lastDepositTime
+  ) external view returns (uint256 cooldown) {
+    // Get timestamp when current cooldown ends
+    uint256 cooldownEndsAt = lastDepositTime + lastCooldown;
+    // Current exit remaining cooldown
+    uint256 remainingCooldown = cooldownEndsAt < block.timestamp ? 0 : cooldownEndsAt - block.timestamp;
+    // If it's first deposit with zero liquidity, no cooldown should be applied
+    if (currentBalance == 0 && liquidityMinted == 0) {
+      cooldown = 0;
+      // If it's first deposit, new cooldown should be applied
+    } else if (currentBalance == 0) {
+      cooldown = newCooldown;
+      // If zero liquidity or new cooldown reduces remaining cooldown, apply remaining
+    } else if (liquidityMinted == 0 || newCooldown < remainingCooldown) {
+      cooldown = remainingCooldown;
+      // For the rest cases calculate cooldown based on current balance and liquidity minted
+    } else {
+      // If the user already owns liquidity, the additional lockup should be in proportion to their existing liquidity.
+      // Calculated as newCooldown * liquidityMinted / currentBalance
+      uint256 additionalCooldown = (newCooldown * liquidityMinted) / currentBalance;
+      // Aggregate additional and remaining cooldowns
+      uint256 aggregatedCooldown = additionalCooldown + remainingCooldown;
+      // Resulting value is capped at new cooldown time (shouldn't be bigger) and falls back to one second in case of zero
+      cooldown = aggregatedCooldown > newCooldown ? newCooldown : aggregatedCooldown != 0 ? aggregatedCooldown : 1;
+    }
   }
 }

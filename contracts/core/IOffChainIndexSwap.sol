@@ -22,8 +22,6 @@ import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.s
 interface IOffChainIndexSwap {
   function init(address indexSwap) external;
 
-  function offChainInvestment(ExchangeData.ZeroExData memory inputData) external payable returns (uint256 balanceInUSD);
-
   function redeemTokens(uint256 tokenAmount, address _token, address _swapHandler) external;
 
   function withdrawOffChain(ExchangeData.ZeroExWithdraw memory inputData) external;

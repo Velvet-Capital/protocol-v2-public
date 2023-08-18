@@ -3,13 +3,12 @@ pragma solidity 0.8.16;
 
 import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
+/*
+  This contract is for DEX slippage to protect the users of high slippage due to market conditions
+ */
 abstract contract ExternalSlippageControl is Ownable {
-  using SafeMath for uint256;
-
   uint256 public constant HUNDRED_PERCENT = 10_000;
   uint256 public constant MAX_SLIPPAGE = 1_000;
 
@@ -21,7 +20,7 @@ abstract contract ExternalSlippageControl is Ownable {
    * @notice This function updates/adds max slippage allowed
    */
   function addOrUpdateProtocolSlippage(uint256 _slippage) public onlyOwner {
-    require(_slippage < HUNDRED_PERCENT && _slippage <= MAX_SLIPPAGE, "incorrect slippage range");
+    if (!(_slippage < HUNDRED_PERCENT && _slippage <= MAX_SLIPPAGE)) revert ErrorLibrary.IncorrectSlippageRange();
     maxSlippage = _slippage;
     emit AddOrUpdateProtocolSlippage(block.timestamp, _slippage);
   }
@@ -30,7 +29,7 @@ abstract contract ExternalSlippageControl is Ownable {
    * @notice This function calculates slippage from the called protocol
    */
   function getSlippage(uint256 _amount) internal view returns (uint256 minAmount) {
-    minAmount = _amount.mul(HUNDRED_PERCENT.sub(maxSlippage)).div(HUNDRED_PERCENT);
+    minAmount = (_amount * (HUNDRED_PERCENT - maxSlippage)) / (HUNDRED_PERCENT);
   }
 
   /**

@@ -17,20 +17,20 @@ pragma solidity 0.8.16;
 import {IUniswapV2Router02} from "../interfaces/IUniswapV2Router02.sol";
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/Initializable.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
-contract PancakeSwapHandler is Initializable {
+import {ExternalSlippageControl} from "./ExternalSlippageControl.sol";
+
+contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
   IUniswapV2Router02 internal pancakeSwapRouter;
   IPriceOracle internal oracle;
 
   uint256 public constant DIVISOR_INT = 10_000;
-
-  using SafeMathUpgradeable for uint256;
 
   constructor() {}
 
@@ -159,6 +159,9 @@ contract PancakeSwapHandler is Initializable {
     if (!(_slippage < DIVISOR_INT)) {
       revert ErrorLibrary.SlippageCannotBeGreaterThan100();
     }
+    if (_slippage > maxSlippage) {
+      revert ErrorLibrary.InvalidSlippage();
+    }
     uint256 currentAmount;
     if (path[0] == getETH()) {
       currentAmount = oracle.getPriceForAmount(path[1], _amount, false);
@@ -167,6 +170,6 @@ contract PancakeSwapHandler is Initializable {
     } else {
       currentAmount = oracle.getPriceForAmount(path[0], _amount, true);
     }
-    minAmount = currentAmount.mul(DIVISOR_INT.sub(_slippage)).div(DIVISOR_INT);
+    minAmount = (currentAmount * (DIVISOR_INT - _slippage)) / (DIVISOR_INT);
   }
 }
