@@ -281,8 +281,7 @@ describe.only("Tests for MetaAggregator", () => {
 
       await paraswapHandler.addOrUpdateProtocolSlippage("100");
 
-      await tokenRegistry.addRewardToken(addresses.venus_RewardToken);
-      await tokenRegistry.addRewardToken(addresses.wombat_RewardToken);
+      await tokenRegistry.addRewardToken([addresses.venus_RewardToken,addresses.wombat_RewardToken],baseHandler.address);
       let registry = await tokenRegistry.enableToken(
         [
           priceOracle.address,

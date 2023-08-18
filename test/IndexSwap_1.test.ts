@@ -39,6 +39,7 @@ import {
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
+import { BigNumber } from "ethers";
 
 var chai = require("chai");
 //use default BigNumber
@@ -86,17 +87,9 @@ describe.only("Tests for MixedIndex", () => {
   let assetManager: SignerWithAddress;
   let whitelistManagerAdmin: SignerWithAddress;
   let whitelistManager: SignerWithAddress;
-  let velvetManager: SignerWithAddress;
   let addrs: SignerWithAddress[];
   let indexInfo: any;
-  let indexInfo1: any;
-  let indexInfo2: any;
-  let indexInfo3: any;
-  let indexInfo4: any;
 
-  //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
-  let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
-  let token;
   const forkChainId: any = process.env.FORK_CHAINID;
   const provider = ethers.provider;
   const chainId: any = forkChainId ? forkChainId : 56;
@@ -519,26 +512,31 @@ describe.only("Tests for MixedIndex", () => {
         );
       });
 
-      it("Invest 0.1 BNB should not revert , if investing token is not initialized", async () => {
+      it("Invest 0.16 BNB should not revert , if investing token is not initialized", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         console.log("indexSupplyBefore", indexSupplyBefore);
-        console.log("owner address",owner.address);
         await indexSwap.investInFund(
           {
             _slippage: ["200", "200", "200"],
             _lpSlippage: ["800", "800", "800"],
-            _tokenAmount: "100000000000000000",
+            _tokenAmount: "167352683749194728",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           },
           {
-            value: "100000000000000000",
+            value: "167352683749194728",
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
-        console.log(indexSupplyAfter);
+        // console.log(indexSupplyAfter);
+        await exchange.on("returnedUninvestedFunds", (_to: any, _token: any, _balance: any, _time: any) => {
+          expect(owner.address).to.be.equal(_to);
+          expect(Number(_balance)).to.be.greaterThan(0);
+        });
         const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
+        const exchangeBalance = await provider.getBalance(exchange.address);
+        expect(Number(exchangeBalance)).to.be.equal(0);
         expect(Number(CoolDownAfter)).to.be.greaterThan(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -585,11 +583,10 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Invest 0.1BNB into Top10 fund", async () => {
-
         const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("0.1bnb before", indexSupplyBefore);
-        console.log("owner address",owner.address);
+        console.log("owner address", owner.address);
         await indexSwap.investInFund(
           {
             _slippage: ["100", "100", "100"],
@@ -609,8 +606,6 @@ describe.only("Tests for MixedIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-
-
       it("Invest 10BUSD into Top10 fund", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
@@ -627,15 +622,14 @@ describe.only("Tests for MixedIndex", () => {
           });
 
         // console.log("swap done");
-        await busdtoken.approve(indexSwap.address, "10000000000000000000");
+        await busdtoken.approve(indexSwap.address, "19826472847483927477");
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("10busd before", indexSupplyBefore);
-        // console.log("vault eth balance before", await ethtoken.balanceOf(indexSwap.vault()));
-        // console.log("vault bnb balance before", await wbnbtoken.balanceOf(indexSwap.vault()));
+
         await indexSwap.investInFund({
           _slippage: ["200", "200", "200"],
           _lpSlippage: ["800", "800", "800"],
-          _tokenAmount: "10000000000000000000",
+          _tokenAmount: "19826472847483927477",
           _swapHandler: swapHandler.address,
           _token: iaddress.busdAddress,
         });
@@ -643,9 +637,10 @@ describe.only("Tests for MixedIndex", () => {
         const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
         expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         // console.log("10BUSD After", indexSupplyAfter);
-        // console.log("vault eth balance after", await ethtoken.balanceOf(indexSwap.vault()));
-        // console.log("vault bnb balance after", await wbnbtoken.balanceOf(indexSwap.vault()));
-
+        await exchange.on("returnedUninvestedFunds", (_to: any, _token: any, _balance: any, _time: any) => {
+          expect(owner.address).to.be.equal(_to);
+          expect(Number(_balance)).to.be.greaterThan(0);
+        });
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 

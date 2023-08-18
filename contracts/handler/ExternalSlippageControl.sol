@@ -28,7 +28,7 @@ abstract contract ExternalSlippageControl is Ownable {
   /**
    * @notice This function calculates slippage from the called protocol
    */
-  function getSlippage(uint256 _amount) internal view returns (uint256 minAmount) {
+  function getSlippage(uint256 _amount) private view returns (uint256 minAmount) {
     minAmount = (_amount * (HUNDRED_PERCENT - maxSlippage)) / (HUNDRED_PERCENT);
   }
 

@@ -313,7 +313,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (Steps.SecondSell != step) {
       revert ErrorLibrary.InvalidExecution();
     }
-    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry);
+    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry,inputData._offChainHandler);
     _externalRebalance(inputData, _lpSlippage);
     emit EXTERNAL_REBALANCE_COMPLETED(msg.sender);
   }

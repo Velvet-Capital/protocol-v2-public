@@ -67,7 +67,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   event EnableSwapHandlers(uint256 time, address[] handler);
   event DisableSwapHandlers(uint256 time, address[] handler);
   event AddNonDerivative(uint256 time, address handler);
-  event AddRewardToken(uint256 time, address token);
+  event AddRewardToken(uint256 time, address[] token, address _baseHandler);
   event RemoveRewardToken(uint256 time, address token);
   event DisableToken(uint256 time, address token);
 
@@ -157,21 +157,34 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
           revert ErrorLibrary.TokenNotInPriceOracle();
         }
       }
-      tokenInformation[_token[i]].primary = _primary[i];
-      tokenInformation[_token[i]].handler = _handler[i];
-      tokenInformation[_token[i]].enabled = true;
-      tokenInformation[_token[i]].rewardTokens = _rewardTokens[i];
+      setTokenInfo(_token[i],_primary[i],_handler[i],true,_rewardTokens[i]);
     }
     emit EnableToken(block.timestamp, _oracle, _token, _handler, _rewardTokens, _primary);
   }
 
   /**
    * @notice This function is used to add a particular token as a reward token
-   * @param _token Address of the token to be added as a reward token
+   * @param _token Array of address of the token to be added as a reward token
+   * @param _baseHandler Address of base handler of the token
    */
-  function addRewardToken(address _token) external onlyOwner {
-    isRewardToken[_token] = true;
-    emit AddRewardToken(block.timestamp, _token);
+  function addRewardToken(address[] memory _token,address _baseHandler) 
+     external onlyOwner {
+     for(uint i = 0; i<_token.length;i++){
+       if (_token[i] == address(0)) {
+         revert ErrorLibrary.InvalidTokenAddress();
+       }
+       if (_baseHandler == address(0)) {
+         revert ErrorLibrary.InvalidHandlerAddress();
+       }
+       address[] memory zeroAddress = new address[](1);
+       zeroAddress[0] = address(0);
+       if (!tokenInformation[_token[i]].enabled) {
+        setTokenInfo(_token[i],true,_baseHandler,false,zeroAddress);
+       }
+       isRewardToken[_token[i]] = true;
+     }
+
+     emit AddRewardToken(block.timestamp, _token, _baseHandler);
   }
 
   /**
@@ -431,6 +444,21 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    */
   function getMaxAssetLimit() external view virtual returns (uint256) {
     return maxAssetLimit;
+  }
+
+  /**
+   * @notice This internal function updates a list of token along with it's handler and and primary bool and enables it
+   * @param _token Address of the token to be enabled in the registry
+   * @param _primary Boolean parameter for is the token primary or derivative
+   * @param _handler Address of the handler associated with the token (protocol)
+   * @param _enabled Boolean parameter to enable the token
+   * @param _rewardToken Address of the reward token associated with the token of that protocol
+   */
+  function setTokenInfo(address _token,bool _primary, address _handler,bool _enabled ,address[] memory _rewardToken) internal {
+    tokenInformation[_token].primary = _primary;
+    tokenInformation[_token].handler = _handler;
+    tokenInformation[_token].enabled = _enabled;
+    tokenInformation[_token].rewardTokens = _rewardToken;
   }
 
   /**

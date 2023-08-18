@@ -118,8 +118,6 @@ library ErrorLibrary {
   error MintAmountNotEqualToPassedValue();
   /// @notice Thrown when slippage value passed is greater than 100
   error SlippageCannotBeGreaterThan100();
-  /// @notice Thrown when no time has passed since last fee charged
-  error NoTimePassedSinceLastCharge();
   /// @notice Thrown when tokens are already staked
   error TokensStaked();
   /// @notice Thrown when contract is not paused

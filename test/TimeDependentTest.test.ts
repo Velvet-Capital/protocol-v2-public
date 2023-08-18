@@ -74,6 +74,8 @@ describe.only("Tests for IndexFactory", () => {
   let exchange: Exchange;
   let rebalancing: any;
   let rebalancing1: any;
+  let rebalancing2: any;
+  let rebalancing3: any;
   let accessController0: AccessController;
   let accessController1: AccessController;
   let feeModule0: FeeModule;
@@ -417,8 +419,7 @@ describe.only("Tests for IndexFactory", () => {
       );
       registry1.wait();
       tokenRegistry.enableSwapHandlers([swapHandler.address, swapHandler1.address]);
-      await tokenRegistry.addRewardToken(addresses.venus_RewardToken);
-      await tokenRegistry.addRewardToken(addresses.wombat_RewardToken);
+      await tokenRegistry.addRewardToken([addresses.venus_RewardToken,addresses.wombat_RewardToken],baseHandler.address);
 
       await tokenRegistry.enablePermittedTokens(
         [iaddress.busdAddress, iaddress.btcAddress, iaddress.ethAddress, iaddress.wbnbAddress],
@@ -638,6 +639,10 @@ describe.only("Tests for IndexFactory", () => {
 
       rebalancing1 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo1.rebalancing);
 
+      rebalancing2 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo2.rebalancing);
+
+      rebalancing3 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo3.rebalancing);
+
       feeModule0 = FeeModule.attach(indexInfo.feeModule);
       feeModule1 = FeeModule.attach(indexInfo1.feeModule);
       feeModule2 = FeeModule.attach(indexInfo2.feeModule);
@@ -662,7 +667,7 @@ describe.only("Tests for IndexFactory", () => {
           await index.initToken( 
           [addresses.MAIN_LP_BUSD, addresses.BSwap_BTC_WBNBLP_Address, addresses.mooBTCBUSDLP],
           [5000, 2500, 2500]
-          );
+          ); 
         });
   
         it("Initialize 3rd IndexFund Tokens", async () => {
@@ -674,7 +679,8 @@ describe.only("Tests for IndexFactory", () => {
         it("Initialize 4th IndexFund Tokens", async () => {
           const indexAddress = await indexFactory.getIndexList(3);
           const index = indexSwap.attach(indexAddress);
-          await index.initToken([iaddress.btcAddress, addresses.vBTC_Address], [5000, 5000]);
+          await index.initToken([addresses.MAIN_LP_BUSD, addresses.WBNB, addresses.vETH_Address,iaddress.btcAddress],
+            [2500, 2500, 2500, 2500]);
         });
         it("Invest 1BNB into Top10 fund", async () => {
           const VBep20Interface = await ethers.getContractAt(
@@ -771,8 +777,8 @@ describe.only("Tests for IndexFactory", () => {
           // console.log("2bnb before", indexSupplyBefore);
           await indexSwap3.investInFund(
             {
-              _slippage: ["500", "500"],
-              _lpSlippage: ["200", "200"],
+              _slippage: ["200", "200", "200", "200"],
+              _lpSlippage: ["1000", "1000", "1000", "200"],
               _to: owner.address,
               _tokenAmount: "2000000000000000000",
               _swapHandler: swapHandler.address,
@@ -855,7 +861,7 @@ describe.only("Tests for IndexFactory", () => {
           console.log("claim", balance);
         });
   
-        it("should swap reward token using pancakeSwap Handler",async() => {
+        it("should swap reward token using pancakeSwap Handler into derivative token",async() => {
           var tokens = await indexSwap1.getTokens();
           const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
   
@@ -886,7 +892,7 @@ describe.only("Tests for IndexFactory", () => {
           console.log("claim", balance);
         });
   
-        it("should swap reward token using pancakeSwap Handler",async() => {
+        it("should swap reward token using pancakeSwap Handler into LP token",async() => {
           var tokens = await indexSwap.getTokens();
           const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
   
@@ -1030,6 +1036,68 @@ describe.only("Tests for IndexFactory", () => {
           expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
           expect(Number(amountAfterSwap)).to.be.equal(0);
         });
+        it("should claim tokens", async () => {
+          await ethers.provider.send("evm_increaseTime", [3153600]);
+  
+          let tokens = [addresses.MAIN_LP_BUSD];
+          await indexSwap3.claimTokens(tokens);
+  
+          const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+          let balance = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(await indexSwap3.vault());
+          console.log("claim", balance);
+        });
+  
+        it("should swap reward token using pancakeSwap Handler into WETH base token",async() => {
+          var tokens = await indexSwap3.getTokens();
+          const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+  
+          var sToken = addresses.wombat_RewardToken;
+          var bToken = tokens[1];
+          const vault = await indexSwap3.vault()
+          var sAmount = await ERC20.attach(sToken).balanceOf(vault);
+  
+          const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+          const handlerAddress0 = tokenInfo0[2];
+          const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+          var tokenBalanceBefore = await handler0.getTokenBalance(vault,bToken);
+          await rebalancing3.swapRewardToken(sToken,swapHandler.address,bToken,sAmount,"300","400");
+  
+          var tokenBalanceAfter = await handler0.getTokenBalance(vault,bToken);
+          var amountAfterSwap = await ERC20.attach(sToken).balanceOf(vault);
+          expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+        });
+
+        it("should claim tokens", async () => {
+          await ethers.provider.send("evm_increaseTime", [3153600]);
+  
+          let tokens = [addresses.vETH_Address];
+          await indexSwap3.claimTokens(tokens);
+  
+          const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+          let balance = await ERC20.attach(addresses.venus_RewardToken).balanceOf(await indexSwap3.vault());
+          console.log("claim", balance);
+        });
+  
+        it("should swap reward token using pancakeSwap Handler into base token",async() => {
+          var tokens = await indexSwap3.getTokens();
+          const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+  
+          var sToken = addresses.venus_RewardToken;
+          var bToken = tokens[3];
+          const vault = await indexSwap3.vault()
+          var sAmount = await ERC20.attach(sToken).balanceOf(vault);
+  
+          const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+          const handlerAddress0 = tokenInfo0[2];
+          const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+          var tokenBalanceBefore = await handler0.getTokenBalance(vault,bToken);
+          await rebalancing3.swapRewardToken(sToken,swapHandler.address,bToken,sAmount,"300","400");
+  
+          var tokenBalanceAfter = await handler0.getTokenBalance(vault,bToken);
+          var amountAfterSwap = await ERC20.attach(sToken).balanceOf(vault);
+          expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
+        });
+
     });
   });
 });

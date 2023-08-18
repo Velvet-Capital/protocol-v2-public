@@ -474,10 +474,12 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
         // Transfer the underlying tokens to the user and delete the recorded amounts
         for (uint256 j = 0; j < underlyingLength; j++) {
-          uint256 amount = tokenAmounts[msg.sender][token][j];
           address _underlying = underlying[j];
-          TransferHelper.safeTransfer(_underlying, msg.sender, amount);
-          delete userUnderlyingAmounts[msg.sender][_underlying];
+          if (userUnderlyingAmounts[msg.sender][_underlying] > 0) {
+            uint256 amount = userUnderlyingAmounts[msg.sender][_underlying];
+            TransferHelper.safeTransfer(_underlying, msg.sender, amount);
+            delete userUnderlyingAmounts[msg.sender][_underlying];
+          }
         }
       }
     }

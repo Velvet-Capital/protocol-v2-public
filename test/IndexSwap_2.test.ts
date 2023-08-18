@@ -1,9 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import "@nomicfoundation/hardhat-chai-matchers";
-import hre from "hardhat";
 import { ethers, upgrades } from "hardhat";
-import { BigNumber } from "ethers";
 import {
   tokenAddresses,
   IAddresses,
@@ -44,12 +42,6 @@ import {
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
-
-import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@safe-global/protocol-kit";
-import { EthersAdapter } from "@safe-global/protocol-kit";
-import { SafeTransactionDataPartial } from "@safe-global/safe-core-sdk-types";
-
-const keccak256 = require("keccak256");
 
 var chai = require("chai");
 //use default BigNumber
@@ -160,6 +152,8 @@ describe.only("Tests for MixedIndex", () => {
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
       await swapHandler.deployed();
+
+      swapHandler.addOrUpdateProtocolSlippage("1600");
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
 
@@ -388,8 +382,6 @@ describe.only("Tests for MixedIndex", () => {
       );
 
       tokenRegistry.addNonDerivative(wombatHandler.address);
-      await tokenRegistry.addRewardToken(addresses.venus_RewardToken);
-      await tokenRegistry.addRewardToken(addresses.wombat_RewardToken);
 
       let whitelistedTokens = [
         iaddress.wbnbAddress,
@@ -816,7 +808,7 @@ describe.only("Tests for MixedIndex", () => {
         const LpHandler2 = await ethers.getContractFactory("PancakeSwapLPHandler");
         const lpHandler2 = await LpHandler2.connect(owner).deploy(priceOracle.address);
         await lpHandler2.deployed();
-        lpHandler2.addOrUpdateProtocolSlippage("700");
+        lpHandler2.addOrUpdateProtocolSlippage("1000");
 
         tokenRegistry.enableToken(
           [priceOracle.address],
@@ -1099,6 +1091,30 @@ describe.only("Tests for MixedIndex", () => {
           venusHandler,
           "InvalidAddress",
         );
+      });
+      it("should add reward token to registry and verify it", async () => {
+        await tokenRegistry.addRewardToken([addresses.venus_RewardToken,addresses.wombat_RewardToken],baseHandler.address);
+
+        expect(await tokenRegistry.isRewardToken(addresses.venus_RewardToken)).to.be.equal(true);
+        expect(await tokenRegistry.isRewardToken(addresses.wombat_RewardToken)).to.be.equal(true);
+      });
+
+      it("should remove reward token from registry and verify it", async () => {
+        await tokenRegistry.removeRewardToken(addresses.venus_RewardToken);
+        expect(await tokenRegistry.isRewardToken(addresses.venus_RewardToken)).to.be.equal(false);
+      });
+
+      it("should add reward token to registry and verify it", async () => {
+        await tokenRegistry.addRewardToken([addresses.venus_RewardToken],baseHandler.address);
+        expect(await tokenRegistry.isRewardToken(addresses.venus_RewardToken)).to.be.equal(true);
+      });
+
+      it("should revert when add reward token to registry sending 0 address token address", async () => {
+        await expect(tokenRegistry.addRewardToken(["0x0000000000000000000000000000000000000000"],baseHandler.address)).to.be.revertedWithCustomError(tokenRegistry,"InvalidTokenAddress");
+      });
+
+      it("should revert when add reward token to registry sending 0 address handler address", async () => {
+        await expect(tokenRegistry.addRewardToken([addresses.venus_RewardToken],"0x0000000000000000000000000000000000000000")).to.be.revertedWithCustomError(tokenRegistry,"InvalidHandlerAddress");
       });
 
       it("Invest 10BUSD into Top10 fund", async () => {
@@ -1626,8 +1642,8 @@ describe.only("Tests for MixedIndex", () => {
 
         txObject = await indexSwap.withdrawFund({
           tokenAmount: AMOUNT,
-          _slippage: ["1000", "1000", "1000"],
-          _lpSlippage: ["1000", "1000", "1000"],
+          _slippage: ["1500", "1500", "1500"],
+          _lpSlippage: ["1500", "1500", "1500"],
           isMultiAsset: false,
           _swapHandler: swapHandler.address,
           _token: addresses.USDT,

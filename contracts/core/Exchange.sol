@@ -52,6 +52,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
   }
 
   event TokensClaimed(uint256 indexed time, address indexed _index, address[] _tokens);
+  event returnedUninvestedFunds(address indexed _to, address _token, uint256 indexed _balance, uint256 indexed _time);
 
   /**
    * @notice This function is used to init the Exchange while deployment
@@ -800,6 +801,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         revert ErrorLibrary.ETHTransferFailed();
       }
     }
+    emit returnedUninvestedFunds(_to, _token, _balance, block.timestamp);
   }
 
   /**

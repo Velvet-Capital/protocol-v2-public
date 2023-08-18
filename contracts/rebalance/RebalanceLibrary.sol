@@ -272,7 +272,7 @@ library RebalanceLibrary {
     }
   }
 
-  function beforeExternalRebalance(IIndexSwap index, ITokenRegistry tokenRegistry) external {
+  function beforeExternalRebalance(IIndexSwap index, ITokenRegistry tokenRegistry,address offchainHandler) external {
     if (!(index.paused())) {
       revert ErrorLibrary.ContractNotPaused();
     }
@@ -281,6 +281,9 @@ library RebalanceLibrary {
     }
     if (tokenRegistry.getProtocolState()) {
       revert ErrorLibrary.ProtocolIsPaused();
+    }
+    if (!tokenRegistry.isExternalSwapHandler(offchainHandler)) {
+      revert ErrorLibrary.OffHandlerNotEnabled();
     }
   }
 
