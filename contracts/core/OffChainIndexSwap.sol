@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
-
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import {IIndexSwap} from "../core/IIndexSwap.sol";
 import {IndexSwapLibrary} from "../core/IndexSwapLibrary.sol";
@@ -27,8 +24,7 @@ import "./IndexSwapLibrary.sol";
 import {ExchangeData} from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
 import {IIndexSwap} from "./IIndexSwap.sol";
 
-contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
-  using SafeMathUpgradeable for uint256;
+contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   address internal WETH;
 
   // Total denormalized weight of the pool.
@@ -55,6 +51,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     uint256 investedAmount,
     uint256 tokenAmount,
     uint256 indexed rate,
+    uint currentUserBalance,
     address indexed index,
     uint256 time,
     address indexed user
@@ -65,6 +62,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     address indexed user,
     uint256 tokenAmount,
     uint256 indexed rate,
+    uint currentUserBalance,
     address indexed index,
     uint256 timestamp
   );
@@ -98,6 +96,12 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     WETH = tokenRegistry.getETH();
   }
 
+  modifier nonReentrant() {
+    index.nonReentrantBefore();
+    _;
+    index.nonReentrantAfter();
+  }
+
   modifier notPaused() {
     if (index.paused()) {
       revert ErrorLibrary.ContractPaused();
@@ -119,91 +123,86 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    *                 - _tokens: An array of tokens involved in the investment.
    *                 - _offChainHandler: The address of the off-chain handler for the investment.
    *                 - _buyAmount: An array of buy amounts for each token during the investment.
-   *                 - _protocolFee: An array of protocol fees for each token during the investment.
    *                 - _buySwapData: An array of buy swap data for each token during the investment.
    * @param _tokenAmount The amount of tokens to invest.
    * @param _lpSlippage An array of slippage values for each liquidity provider.
-   * @param _to The address to which the investment tokens will be minted.
-   * @return balanceInUSD The balance in USD of the investment after slippage.
+   * @return investedAmountAfterSlippage The balance in USD of the investment after slippage.
    */
   function investInFundOffChain(
     ExchangeData.ZeroExData memory _initData,
     uint256 _tokenAmount,
-    uint256[] calldata _lpSlippage,
-    address _to
-  ) external payable virtual nonReentrant notPaused returns (uint256 balanceInUSD) {
+    uint256[] calldata _lpSlippage
+  ) external payable virtual nonReentrant notPaused returns (uint256 investedAmountAfterSlippage) {
     // Perform necessary checks before investment
-    IndexSwapLibrary.beforeCheck(index, _lpSlippage, _to);
-    uint256 balanceBefore = address(this).balance;
-    // Get the index operations contract
-
+    address user = msg.sender;
+    uint256 _amount;
+    address _token = _initData.sellTokenAddress;
+    _validateInvestment(_lpSlippage, user, _initData._offChainHandler);
+    uint256 balanceBefore = IndexSwapLibrary.checkBalance(_token, address(exchange), WETH);
     // Check if the investment is made with ETH
     if (msg.value > 0) {
-      if (!(WETH == _initData.sellTokenAddress)) {
+      if (WETH != _token) {
         revert ErrorLibrary.InvalidToken();
       }
-      _tokenAmount = msg.value;
-      IndexSwapLibrary._checkInvestmentValue(_tokenAmount, iAssetManagerConfig);
+      _amount = msg.value;
 
       // Deposit ETH into WETH
-      IWETH(WETH).deposit{value: msg.value}();
+      IWETH(WETH).deposit{value: _amount}();
 
       // Transfer the WETH to index operations contract
-      IWETH(WETH).transfer(address(exchange), _tokenAmount);
+      IWETH(WETH).transfer(address(exchange), _amount);
     } else {
+      _amount = _tokenAmount;
       // Check permission and balance for the sell token
-      IndexSwapLibrary._checkPermissionAndBalance(
-        _initData.sellTokenAddress,
-        _tokenAmount,
-        iAssetManagerConfig,
-        msg.sender
-      );
-
-      // Get the token balance in BNB
-      uint256 tokenBalanceInBNB = _getTokenBalanceInBNB(_initData.sellTokenAddress, _tokenAmount);
-      IndexSwapLibrary._checkInvestmentValue(tokenBalanceInBNB, iAssetManagerConfig);
+      IndexSwapLibrary._checkPermissionAndBalance(_token, _amount, iAssetManagerConfig, user);
 
       // Transfer the sell token from the sender to index operations contract
-      TransferHelper.safeTransferFrom(_initData.sellTokenAddress, msg.sender, address(exchange), _tokenAmount);
+      TransferHelper.safeTransferFrom(_token, user, address(exchange), _amount);
     }
+    uint256 _investmentAmountInUSD = oracle.getPriceTokenUSD18Decimals(_token, _amount);
+    _checkInvestmentValue(_investmentAmountInUSD);
 
     // Charge fees and update vault balance
-    uint256 vaultBalance = IndexSwapLibrary.chargeFees(index, feeModule);
+    uint256 vaultBalance = chargeFees();
 
     // Perform off-chain investment
-    balanceInUSD = _offChainInvestment(_initData, _tokenAmount, _lpSlippage);
-
-    // Calculate the invested amount in BNB after slippage
-    uint256 investedAmountAfterSlippageBNB = oracle.getUsdEthPrice(balanceInUSD);
+    investedAmountAfterSlippage = exchange._swapTokenToTokensOffChain(
+      ExchangeData.InputData(
+        _initData.buyAmount,
+        _token,
+        _initData._offChainHandler,
+        _initData._buySwapData
+      ),
+      index,
+      _lpSlippage,
+      getTokens(),
+      calculateSwapAmountsOffChain(index, _amount),
+      balanceBefore,
+      user
+    );
 
     // Ensure the final invested amount is not zero
-    require(investedAmountAfterSlippageBNB > 0, "final invested amount is zero");
-
-    // Calculate the vault balance in BNB
-    uint256 vaultBalanceBNB = oracle.getUsdEthPrice(vaultBalance);
+    if (investedAmountAfterSlippage == 0) revert ErrorLibrary.ZeroInvestedAmountAfterSlippage();
 
     // Calculate the token amount to be minted
     uint256 tokenAmount;
-    uint256 _totalSupply = index.totalSupply();
+    uint256 _totalSupply = totalSupply();
     if (_totalSupply > 0) {
-      tokenAmount = IndexSwapLibrary._mintShareAmount(investedAmountAfterSlippageBNB, vaultBalanceBNB, _totalSupply);
+      tokenAmount = (investedAmountAfterSlippage * _totalSupply) / vaultBalance;
     } else {
-      tokenAmount = investedAmountAfterSlippageBNB;
+      tokenAmount = investedAmountAfterSlippage;
     }
 
     // Ensure the token amount is not zero
-    require(tokenAmount > 0, "token amount is 0");
+    if (tokenAmount == 0) revert ErrorLibrary.ZeroTokenAmount();
 
-    // Mint investment tokens to the specified address
-    index.mintInvest(_to, tokenAmount);
-
-    // Set the last investment period for the address
-    index.setLastInvestmentPeriod(_to);
+    // Mint investment tokens to the specified address And Set CoolDown Period
+    index.mintTokenAndSetCooldown(user, tokenAmount);
 
     // Refund any leftover ETH to the user
     uint256 balanceAfter = address(this).balance;
     if (balanceAfter > 0) {
-      (bool success, ) = payable(_to).call{value: balanceAfter.sub(balanceBefore)}("");
+      (bool success, ) = payable(user).call{value: balanceAfter - balanceBefore}("");
       if (!success) {
         revert ErrorLibrary.ETHTransferFailed();
       }
@@ -211,58 +210,14 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     // Emit an event for the off-chain investment
     emit InvestInFundOffChain(
-      _tokenAmount,
+      _amount,
       tokenAmount,
-      IndexSwapLibrary.getIndexTokenRate(index),
+      getIndexTokenRate(),
+      IIndexSwap(index).balanceOf(msg.sender),
       address(index),
       block.timestamp,
-      _to
+      msg.sender
     );
-  }
-
-  /**
-   * @notice Performs off-chain investment using the ZeroEx protocol
-   * @param inputData The ZeroExData struct containing the off-chain investment details:
-   *   - _buyToken: The array of tokens to be bought during the off-chain investment
-   *   - _tokens: The array of tokens involved in the off-chain investment
-   *   - _offChainHandler: The address of the off-chain handler contract
-   *   - _buyAmount: The array of buy amounts for each token during the off-chain investment
-   *   - _protocolFee: The array of protocol fees for each token during the off-chain investment
-   *   - _buySwapData: The array of buy swap data for each token during the off-chain investment
-   * @param _lpSlippage The array of slippage percentages for each token during the off-chain investment
-   * @return balanceInUSD The resulting balance in USD after the off-chain investment
-   */
-  function _offChainInvestment(
-    ExchangeData.ZeroExData memory inputData,
-    uint256 _tokenAmount,
-    uint256[] calldata _lpSlippage
-  ) internal virtual returns (uint256 balanceInUSD) {
-    uint256 underlyingIndex = 0;
-    balanceInUSD = 0;
-    address[] memory _tokens = index.getTokens();
-    uint256[] memory _buyAmount = calculateSwapAmountsOffChain(index, _tokenAmount);
-    for (uint256 i = 0; i < _tokens.length; i++) {
-      // Get the handler contract for the current token
-      // Perform off-chain token swap using the exchange contract
-      (balanceInUSD, underlyingIndex) = exchange.swapOffChainTokens(
-        ExchangeData.IndexOperationData(
-          ExchangeData.InputData(
-            inputData.buyAmount,
-            inputData.sellTokenAddress,
-            inputData._offChainHandler,
-            inputData._buySwapData
-          ),
-          index,
-          underlyingIndex,
-          inputData.protocolFee[i],
-          balanceInUSD,
-          _lpSlippage[i],
-          _buyAmount[i],
-          _tokens[i],
-          msg.sender
-        )
-      );
-    }
   }
 
   /**
@@ -276,8 +231,8 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
       msg.sender,
       userWithdrawData[msg.sender].userRedeemedStatus
     );
-    address[] memory _tokens = index.getTokens();
-    uint256 _tokenAmount = inputdata.tokenAmount.sub(_fee);
+    address[] memory _tokens = getTokens();
+    uint256 _tokenAmount = inputdata.tokenAmount - _fee;
     uint256 sellTokenLength;
     for (uint256 i = 0; i < _tokens.length; i++) {
       delete tokenAmounts[msg.sender][_tokens[i]];
@@ -287,8 +242,8 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
       } else if (_tokens[i] == inputdata.token) {
         IndexSwapLibrary.pullFromVault(exchange, inputdata.token, amount, msg.sender);
       } else {
-        IHandler handler = IHandler(tokenRegistry.getTokenInformation(_tokens[i]).handler);
-        address[] memory underlying = handler.getUnderlying(_tokens[i]);
+        IHandler handler = IHandler(getTokenInfo(_tokens[i]).handler);
+        address[] memory underlying = getUnderlying(handler, _tokens[i]);
         uint256[] memory balanceBefore = IndexSwapLibrary.getUnderlyingBalances(_tokens[i], handler, address(this));
         IndexSwapLibrary._pullAndRedeem(
           exchange,
@@ -296,7 +251,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
           address(this),
           amount,
           inputdata._lpSlippage[i],
-          tokenRegistry.getTokenInformation(_tokens[i]).primary,
+          getTokenInfo(_tokens[i]).primary,
           handler
         );
         for (uint256 j = 0; j < underlying.length; j++) {
@@ -304,15 +259,15 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
           if (_underlying == WETH) {
             IWETH(_underlying).deposit{value: address(this).balance}();
           }
-          uint256 _balanceAfter = IERC20Upgradeable(_underlying).balanceOf(address(this));
-          uint256 _underlyingDifference = _balanceAfter.sub(balanceBefore[j]);
-          if(_underlyingDifference <= 0){
+          uint256 _balanceAfter = getBalance(_underlying, address(this));
+          uint256 _underlyingDifference = _balanceAfter - balanceBefore[j];
+          if (_underlyingDifference <= 0) {
             revert ErrorLibrary.ZeroTokenAmount();
           }
           tokenAmounts[msg.sender][_tokens[i]].push(_underlyingDifference);
           uint256 userAmount = userUnderlyingAmounts[msg.sender][_underlying];
-          sellTokenLength = userAmount > 0 ? sellTokenLength : sellTokenLength.add(1);
-          userUnderlyingAmounts[msg.sender][_underlying] = userAmount.add(_underlyingDifference);
+          sellTokenLength = userAmount > 0 ? sellTokenLength : sellTokenLength + 1;
+          userUnderlyingAmounts[msg.sender][_underlying] = userAmount + _underlyingDifference;
         }
       }
     }
@@ -322,13 +277,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     userWithdrawData[msg.sender].userRedeemedTokens = abi.encode(_tokens);
     userWithdrawData[msg.sender].sellTokenLength = sellTokenLength;
 
-    emit UserTokenRedeemed(
-      msg.sender,
-      inputdata.tokenAmount,
-      IndexSwapLibrary.getIndexTokenRate(index),
-      address(index),
-      block.timestamp
-    );
+    emit UserTokenRedeemed(msg.sender, inputdata.tokenAmount, getIndexTokenRate(), index.balanceOf(msg.sender), address(index), block.timestamp);
   }
 
   /**
@@ -337,7 +286,6 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @dev The tokens are transferred to the user's address.
    * @param inputData The data required for the off-chain withdrawal.
    *   - sellAmount: The amounts of tokens to sell.
-   *   - protocolFee: The protocol fees for each token.
    *   - sellTokenAddress: The addresses of the tokens to sell.
    *   - offChainHandler: The address of the off-chain handler.
    *   - buySwapData: The swap data for buying tokens.
@@ -348,7 +296,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @dev The tokens are transferred to the user's address.
    * @param inputData The data required for the off-chain withdrawal.
    */
-  function withdrawOffChain(ExchangeData.ZeroExWithdraw memory inputData) external virtual nonReentrant notPaused {
+  function withdrawOffChain(ExchangeData.ZeroExWithdraw memory inputData) external virtual nonReentrant {
     address user = msg.sender;
     address withdrawToken = userWithdrawData[user].withdrawToken;
 
@@ -359,14 +307,13 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
       inputData.offChainHandler
     );
 
-    uint256 balanceBefore = IERC20Upgradeable(withdrawToken).balanceOf(address(this));
-    uint256 balanceAfter = 0;
+    uint256 balanceBefore = getBalance(withdrawToken, address(this));
+    uint256 balanceAfter;
     uint256 tokenLength = inputData.sellTokenAddress.length;
     if (
       userWithdrawData[user].sellTokenLength != tokenLength ||
       tokenLength != inputData.sellAmount.length ||
-      tokenLength != inputData.buySwapData.length ||
-      tokenLength != inputData.protocolFee.length
+      tokenLength != inputData.buySwapData.length
     ) {
       revert ErrorLibrary.InvalidLength();
     }
@@ -378,7 +325,6 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
         _withdraw(
           ExchangeData.withdrawData(
             inputData.sellAmount[i],
-            inputData.protocolFee[i],
             userUnderlyingAmounts[user][inputData.sellTokenAddress[i]],
             inputData.sellTokenAddress[i],
             inputData.offChainHandler,
@@ -396,33 +342,32 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     }
 
     // Calculate the updated balance of the withdrawal token
-    balanceAfter = balanceAfter.add(IERC20Upgradeable(withdrawToken).balanceOf(address(this)));
+    balanceAfter = balanceAfter + getBalance(withdrawToken, address(this));
 
     // Transfer the withdrawal token to the user
-    _transferTokenToUser(withdrawToken, balanceAfter.sub(balanceBefore));
+    _transferTokenToUser(withdrawToken, balanceAfter - balanceBefore);
 
     // Emit an event to indicate the successful withdrawal
     emit WithdrawFund(user, userWithdrawData[user].tokenAmount, address(index), block.timestamp);
     // Delete the user's data to complete the withdrawal process
-    delete userWithdrawData[msg.sender];
+    delete userWithdrawData[user];
   }
 
   /**
-   * @notice This Function is internal fucntion of withdraw,used to swap tokens
-   * @param inputData sellTokenAddress, address of offchainHandler, address of buyToken, calldata, sellAmount,protocolFee, and users tokenamount
+   * @notice This Function is internal fucntion of withdraw, used to swap tokens
+   * @param inputData sellTokenAddress, address of offchainHandler, address of buyToken, calldata, sellAmount, and users tokenamount
    */
   function _withdraw(ExchangeData.withdrawData memory inputData) internal {
     if (inputData.sellAmount != inputData.userAmount) {
       revert ErrorLibrary.InvalidSellAmount();
     }
-    IndexSwapLibrary._transferAndSwapUsingOffChainHandler(
+    TransferHelper.safeTransfer(inputData.sellTokenAddress, inputData.offChainHandler, inputData.sellAmount);
+    IExternalSwapHandler(inputData.offChainHandler).swap(
       inputData.sellTokenAddress,
       inputData.buyToken,
       inputData.sellAmount,
-      address(this),
       inputData.swapData,
-      inputData.offChainHandler,
-      inputData.protocolFee
+      address(this)
     );
   }
 
@@ -430,10 +375,10 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @notice This function pulls assets from the vault and calls _withdrawAndTransfer to unwrap WETH and send ETH to the user
    */
   function _pullAndWithdraw(address _token, uint256 _amount) internal {
-    uint256 balanceBefore = IERC20Upgradeable(_token).balanceOf(address(this));
+    uint256 balanceBefore = getBalance(_token, address(this));
     IndexSwapLibrary.pullFromVault(exchange, _token, _amount, address(this));
-    uint256 balanceAfter = IERC20Upgradeable(_token).balanceOf(address(this));
-    _withdrawAndTransfer(balanceAfter.sub(balanceBefore));
+    uint256 balanceAfter = getBalance(_token, address(this));
+    _withdrawAndTransfer(balanceAfter - balanceBefore);
   }
 
   /**
@@ -473,23 +418,12 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
   }
 
   /**
-   * @notice This function converts the token balance in BNB if investment token is not BNB
-   */
-  function _getTokenBalanceInBNB(
-    address _token,
-    uint256 _tokenAmount
-  ) internal view returns (uint256 tokenBalanceInBNB) {
-    oracle.getPriceTokenUSD18Decimals(_token, _tokenAmount);
-    uint256 tokenBalanceInUSD = oracle.getPriceTokenUSD18Decimals(_token, _tokenAmount);
-    tokenBalanceInBNB = oracle.getUsdEthPrice(tokenBalanceInUSD);
-  }
-
-  /**
    * @notice This function calculates the token amount during redeem of token
    */
   function _getTokenAmount(uint256 userAmount, uint256 supply, address token) internal view returns (uint256 amount) {
-    uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, token);
-    amount = tokenBalance.mul(userAmount).div(supply);
+    IHandler handler = IHandler(getTokenInfo(token).handler);
+    uint256 tokenBalance = handler.getTokenBalance(index.vault(), token);
+    amount = (tokenBalance * userAmount) / supply;
   }
 
   /**
@@ -502,13 +436,13 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     bool _status
   ) internal returns (uint256, uint256) {
     IndexSwapLibrary.beforeRedeemCheck(index, _tokenAmount, _token, _status);
-    IndexSwapLibrary.checkCoolDownPeriod(index.lastInvestmentTime(user), tokenRegistry);
+    index.checkCoolDownPeriod();
     address assetManagerTreasury = iAssetManagerConfig.assetManagerTreasury();
     address velvetTreasury = tokenRegistry.velvetTreasury();
-    if (!(msg.sender == assetManagerTreasury || msg.sender == velvetTreasury)) {
-      IndexSwapLibrary.chargeFees(index, feeModule);
+    if (!(user == assetManagerTreasury || user == velvetTreasury)) {
+      chargeFees();
     }
-    return (index.totalSupply(), index.burnWithdraw(msg.sender, _tokenAmount));
+    return (totalSupply(), index.burnWithdraw(user, _tokenAmount));
   }
 
   /**
@@ -520,6 +454,9 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    */
   function triggerMultipleTokenWithdrawal() external nonReentrant {
     // Check if the user has redeemed their tokens
+    if (tokenRegistry.getProtocolState()) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
     if (!userWithdrawData[msg.sender].userRedeemedStatus) {
       revert ErrorLibrary.TokensNotRedeemed();
     }
@@ -533,16 +470,18 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
       address token = _tokens[i];
       if (token != userWithdrawData[msg.sender].withdrawToken) {
         // Get the handler and underlying tokens for the current token
-        IHandler handler = IHandler(tokenRegistry.getTokenInformation(token).handler);
-        address[] memory underlying = handler.getUnderlying(token);
+        IHandler handler = IHandler(getTokenInfo(token).handler);
+        address[] memory underlying = getUnderlying(handler, token);
         uint256 underlyingLength = underlying.length;
 
         // Transfer the underlying tokens to the user and delete the recorded amounts
         for (uint256 j = 0; j < underlyingLength; j++) {
-          uint256 amount = tokenAmounts[msg.sender][token][j];
           address _underlying = underlying[j];
-          TransferHelper.safeTransfer(_underlying, msg.sender, amount);
-          delete userUnderlyingAmounts[msg.sender][_underlying];
+          if (userUnderlyingAmounts[msg.sender][_underlying] > 0) {
+            uint256 amount = userUnderlyingAmounts[msg.sender][_underlying];
+            TransferHelper.safeTransfer(_underlying, msg.sender, amount);
+            delete userUnderlyingAmounts[msg.sender][_underlying];
+          }
         }
       }
     }
@@ -552,6 +491,87 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     // Delete the user's data to complete the withdrawal process
     delete userWithdrawData[msg.sender];
+  }
+
+  /**
+   * @notice This function is used to validate investment
+   * @param _lpSlippage Array Of LP Slippage passed by the user
+   * @param _to Address of user
+   * @param _offchainHandler Address of offchain handler used for swapping tokens
+   */
+  function _validateInvestment(uint256[] calldata _lpSlippage, address _to,address _offchainHandler) internal {
+    if (tokenRegistry.getProtocolState()) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
+    if (!(iAssetManagerConfig.publicPortfolio() || iAssetManagerConfig.whitelistedUsers(_to))) {
+      revert ErrorLibrary.UserNotAllowedToInvest();
+    }
+    if (_lpSlippage.length == 0) {
+      revert ErrorLibrary.InvalidSlippageLength();
+    }
+    if (getTokens().length == 0) {
+      revert ErrorLibrary.NotInitialized();
+    }
+    if (!tokenRegistry.isExternalSwapHandler(_offchainHandler)) {
+      revert ErrorLibrary.OffHandlerNotEnabled();
+    }
+  }
+
+  /**
+   * @notice This function returns usd price in eth
+   */
+  function getUsdEthPrice(uint256 _amount) internal view returns (uint256) {
+    return oracle.getUsdEthPrice(_amount);
+  }
+
+  /**
+   * @notice This internal function returns token information
+   */
+  function getTokenInfo(address _token) internal view returns (ITokenRegistry.TokenRecord memory) {
+    return tokenRegistry.getTokenInformation(_token);
+  }
+
+  /**
+   * @notice This function returns underlying tokens for given _token
+   */
+  function getUnderlying(IHandler handler, address _token) internal view returns (address[] memory) {
+    return handler.getUnderlying(_token);
+  }
+
+  /**
+   * @notice This internal function returns balance of token
+   */
+  function getBalance(address _token, address _of) internal view returns (uint256) {
+    return IERC20Upgradeable(_token).balanceOf(_of);
+  }
+
+  /**
+   * @notice The function is used to get tokens from index
+   */
+  function getTokens() internal view returns (address[] memory) {
+    return index.getTokens();
+  }
+
+  /**
+   * @notice The function is used to check investment value
+   */
+  function _checkInvestmentValue(uint256 _tokenAmount) internal view {
+    IndexSwapLibrary._checkInvestmentValue(_tokenAmount, iAssetManagerConfig);
+  }
+
+  /**
+   * @notice The function is used to get index token rate
+   */
+  function getIndexTokenRate() internal returns (uint256) {
+    return IndexSwapLibrary.getIndexTokenRate(index);
+  }
+
+  function chargeFees() internal returns (uint256) {
+    return IndexSwapLibrary.chargeFees(index, feeModule);
+  }
+
+  function totalSupply() internal view returns (uint256) {
+    return index.totalSupply();
   }
 
   // important to receive ETH

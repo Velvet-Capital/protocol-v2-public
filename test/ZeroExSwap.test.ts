@@ -11,7 +11,9 @@ import {
   accessController,
   baseHandler,
   venusHandler,
-  wombatHandler
+  wombatHandler,
+  priceOracle,
+  pancakeLpHandler,
 } from "./Deployments.test";
 
 import {
@@ -47,7 +49,6 @@ chai.use(require("chai-bignumber")());
 describe.only("Tests for ZeroExSwap", () => {
   let accounts;
   let iaddress: IAddresses;
-  let priceOracle: PriceOracle;
   let vaultAddress: string;
   let velvetSafeModule: VelvetSafeModule;
   let indexSwap: any;
@@ -57,8 +58,6 @@ describe.only("Tests for ZeroExSwap", () => {
   let indexFactory: IndexFactory;
   let swapHandler: PancakeSwapHandler;
   let swapHandler1: PancakeSwapHandler;
-  //let lendingHandler: LendingHandler;
-  let lpHandler: PancakeSwapLPHandler;
   let offChainIndexSwap: OffChainIndexSwap;
   let exchange: Exchange;
   let zeroExHandler: ZeroExHandler;
@@ -93,11 +92,7 @@ describe.only("Tests for ZeroExSwap", () => {
 
       const provider = ethers.getDefaultProvider();
 
-      const PriceOracle = await ethers.getContractFactory("PriceOracle");
-      priceOracle = await PriceOracle.deploy();
-      await priceOracle.deployed();
-
-      iaddress = await tokenAddresses(priceOracle, true);
+      iaddress = await tokenAddresses();
 
       const ZeroExHandler = await ethers.getContractFactory("ZeroExHandler");
       zeroExHandler = await ZeroExHandler.deploy();
@@ -113,11 +108,12 @@ describe.only("Tests for ZeroExSwap", () => {
         "3000", // max performance fee
         "500",
         "500",
-        "10000000000000000",
-        "500000000000000000000",
+        "3000000000000000000",
+        "120000000000000000000000",
         treasury.address,
         addresses.WETH_Address,
         "1",
+        15,
       );
 
       const Exchange = await ethers.getContractFactory("Exchange", {
@@ -127,12 +123,6 @@ describe.only("Tests for ZeroExSwap", () => {
       });
       exchange = await Exchange.deploy();
       await exchange.deployed();
-
-      const LpHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-      lpHandler = await LpHandler.deploy(priceOracle.address);
-      await lpHandler.deployed();
-
-      lpHandler.addOrUpdateProtocolSlippage("700");
 
       const RebalanceLibrary = await ethers.getContractFactory("RebalanceLibrary", {
         libraries: {
@@ -184,8 +174,8 @@ describe.only("Tests for ZeroExSwap", () => {
         _performanceFee: "2500",
         _entryFee: "0",
         _exitFee: "0",
-        _minInvestmentAmount: "10000000000000000",
-        _maxInvestmentAmount: "500000000000000000000",
+        _maxInvestmentAmount: "120000000000000000000000",
+        _minInvestmentAmount: "3000000000000000000",
         _tokenRegistry: tokenRegistry.address,
         _accessController: accessController.address,
         _assetManagerTreasury: treasury.address,
@@ -260,8 +250,8 @@ describe.only("Tests for ZeroExSwap", () => {
           venusHandler.address,
           venusHandler.address,
           venusHandler.address,
-          lpHandler.address,
-          lpHandler.address,
+          pancakeLpHandler.address,
+          pancakeLpHandler.address,
           wombatHandler.address,
         ],
         [
@@ -371,8 +361,8 @@ describe.only("Tests for ZeroExSwap", () => {
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "500000000000000000000",
-            _minInvestmentAmount: "10000000000000000",
+            _maxInvestmentAmount: "120000000000000000000000",
+            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },
@@ -384,8 +374,8 @@ describe.only("Tests for ZeroExSwap", () => {
       const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -401,8 +391,8 @@ describe.only("Tests for ZeroExSwap", () => {
       const indexFactoryCreate2 = await indexFactory.connect(nonOwner).createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -441,7 +431,7 @@ describe.only("Tests for ZeroExSwap", () => {
       console.log("rebalancing:", rebalancing1.address);
     });
 
-    describe("IndexFactory Contract", function () {
+    describe("ZeroEx Tests", function () {
       const wbnb = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
       it("Initialize IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
@@ -450,7 +440,9 @@ describe.only("Tests for ZeroExSwap", () => {
       });
 
       it("should add pid", async () => {
-        await lpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address, addresses.Cake_WBNBLP_Address], [39, 2]);
+        await pancakeLpHandler
+          .connect(owner)
+          .pidMap([addresses.Cake_BUSDLP_Address, addresses.Cake_WBNBLP_Address], [39, 2]);
       });
 
       it("should check if off chain handler is enabled or not", async () => {
@@ -636,10 +628,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     gasPrice: "2000457106",
                     gas: "200000",
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   sellTokensContract.push(getUnderlyingTokens[j]);
@@ -653,9 +645,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         //Selling Token After Enabling(Pulled tokens)
-        const tx2 = await offChainRebalance1
-          .connect(nonOwner)
-          ._externalSell(sellTokensContract, sellTokenSwapData, zeroExHandler.address);
+        const tx2 = await offChainRebalance1.connect(nonOwner)._externalSell(sellTokenSwapData, zeroExHandler.address);
 
         const buyAmount = await ERC20.attach(wbnb).balanceOf(offChainRebalance1.address);
         //Creating Data To Buy Tokens
@@ -684,10 +674,10 @@ describe.only("Tests for ZeroExSwap", () => {
                   gas: "200000",
                 };
 
-                const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                   headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  },
                 });
                 await delay(500);
                 buyTokenSwapData.push(response.data.data.toString());
@@ -719,11 +709,8 @@ describe.only("Tests for ZeroExSwap", () => {
         // Rebalancing - Buying the tokens and staking it again to vault
         await offChainRebalance1.connect(nonOwner).externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: slicedBuyTokens,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
           ["200"],
@@ -745,33 +732,64 @@ describe.only("Tests for ZeroExSwap", () => {
         }
       });
 
+      it("print values after updating weights to [1000, 2000, 7000]", async () => {
+        const vault = await indexSwap1.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap1.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
+        }
+      });
+
       it("should _revert after enable Rebalance(1st Transaction)", async () => {
         await tokenRegistry.enableExternalSwapHandler(zeroExHandler.address);
 
-        var tokens = await indexSwap1.getTokens();
-        const newWeights = [5000, 4500, 500];
+        const _tokens = [addresses.vETH_Address,iaddress.wbnbAddress];
+        const newWeights = [5500, 4500];
 
         const v = await indexSwap1.vault();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         var balanceBefore = [];
+        var tokens = await indexSwap1.getTokens();
+        const tokenLengthBefore = tokens.length;
         for (let i = 0; i < tokens.length; i++) {
           balanceBefore[i] = await ERC20.attach(tokens[i]).balanceOf(v);
         }
 
         // 1. Enabling Token - Pulling from vault and redeeming the tokens
-        const tx = await offChainRebalance1.connect(nonOwner).enableRebalance({
-          _newWeights: newWeights,
-          _lpSlippage: ["200", "200", "200", "200", "200"],
-        });
+        const tx = await offChainRebalance1.connect(nonOwner).enableRebalanceAndUpdateRecord(_tokens,newWeights,["200", "200", "200", "200", "200"]);
 
         await offChainRebalance1.connect(nonOwner).revertEnableRebalancing(["200", "200", "200", "200", "200"]);
         var balanceAfter = [];
+        var tokens = await indexSwap1.getTokens();
+        const tokenLengthAfter = tokens.length;
         for (let i = 0; i < tokens.length; i++) {
           balanceAfter[i] = await ERC20.attach(tokens[i]).balanceOf(v);
           console.log("balanceBefore", balanceBefore[i]);
           console.log("balanceAfter", balanceAfter[i]);
           expect(Number(balanceBefore[i])).to.be.greaterThanOrEqual(Number(balanceAfter[i]));
         }
+        expect(Number(tokenLengthBefore)).to.be.equal(Number(tokenLengthAfter));
       });
 
       it("should _revert after externalSell (2nd Transaction)", async () => {
@@ -845,10 +863,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.05,
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   tokenSellContract.push(getUnderlyingTokens[j]);
@@ -862,9 +880,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         //Selling Token After Enabling(Pulled tokens)
-        const tx2 = await offChainRebalance1
-          .connect(nonOwner)
-          ._externalSell(tokenSellContract, tokenSellSwapData, zeroExHandler.address);
+        const tx2 = await offChainRebalance1.connect(nonOwner)._externalSell(tokenSellSwapData, zeroExHandler.address);
 
         await offChainRebalance1.connect(nonOwner).revertSellTokens();
         const balanceAfter = await ERC20.attach(iaddress.wbnbAddress).balanceOf(v);
@@ -910,9 +926,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gasPrice: "2000457106",
                 gas: "200000",
               };
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -943,9 +959,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -968,11 +984,8 @@ describe.only("Tests for ZeroExSwap", () => {
         }
         await offChainRebalance.externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: buyUnderlyingTokensContract,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
           ["200"],
@@ -1096,6 +1109,35 @@ describe.only("Tests for ZeroExSwap", () => {
         ).to.be.reverted;
       });
 
+      it("print values before", async () => {
+        const vault = await indexSwap1.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap1.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
+        }
+      });
+
       it("Should Update Tokens", async () => {
         var tokens = await indexSwap1.getTokens();
         const newTokens = [
@@ -1104,7 +1146,6 @@ describe.only("Tests for ZeroExSwap", () => {
           "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
         ];
         const newWeights = [3000, 1000, 6000];
-        //const newWeights = await offChainRebalance1.getCurrentWeights();
 
         var tokenSell = [];
         var tokenAmount = [];
@@ -1177,10 +1218,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellAmount: bal.toString(),
                     slippagePercentage: 0.05,
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   tokenSellContract.push(getUnderlyingTokens[j]);
@@ -1194,9 +1235,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         //Selling Token After Enabling(Pulled tokens)
-        const tx2 = await offChainRebalance1
-          .connect(nonOwner)
-          ._externalSell(tokenSellContract, tokenSellSwapData, zeroExHandler.address);
+        const tx2 = await offChainRebalance1.connect(nonOwner)._externalSell(tokenSellSwapData, zeroExHandler.address);
         const buyAmount = await ERC20.attach(wbnb).balanceOf(offChainRebalance1.address);
         buyTokens = stateData[1];
         buyweight = stateData[2];
@@ -1223,10 +1262,10 @@ describe.only("Tests for ZeroExSwap", () => {
                   sellAmount: BigNumber.from(buyVal).toString(),
                   slippagePercentage: 0.05,
                 };
-                const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                   headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  },
                 });
 
                 buyTokenSwapData.push(response.data.data.toString());
@@ -1258,11 +1297,8 @@ describe.only("Tests for ZeroExSwap", () => {
         // Rebalancing - Buying the tokens and staking it again to vault
         await offChainRebalance1.connect(nonOwner).externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: slicedBuyTokens,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
           ["200", "200"],
@@ -1282,6 +1318,35 @@ describe.only("Tests for ZeroExSwap", () => {
             balanceAfterToken.push(await token2.balanceOf(v));
           }
           expect(Number(balanceAfterToken[i])).to.be.greaterThanOrEqual(Number(balanceBeforeToken[i]));
+        }
+      });
+
+      it("print values after", async () => {
+        const vault = await indexSwap1.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap1.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
         }
       });
 
@@ -1326,9 +1391,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1349,9 +1414,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1389,11 +1454,8 @@ describe.only("Tests for ZeroExSwap", () => {
         await expect(
           offChainRebalance.connect(nonOwner).externalRebalance(
             {
-              _buyToken: [wbnb],
-              _tokens: [wbnb],
               _offChainHandler: zeroExHandler.address,
               _buyAmount: [BigNumber.from(buyAmount)],
-              _protocolFee: [0, 0, 0, 0, 0, 0],
               _buySwapData: ["0x"],
             },
             ["200", "200", "200"],
@@ -1438,9 +1500,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1461,9 +1523,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1500,11 +1562,8 @@ describe.only("Tests for ZeroExSwap", () => {
 
         await offChainRebalance.externalRebalance(
           {
-            _buyToken: [wbnb],
-            _tokens: [wbnb],
             _offChainHandler: zeroExHandler.address,
             _buyAmount: [BigNumber.from(buyAmount)],
-            _protocolFee: [0, 0, 0, 0, 0, 0],
             _buySwapData: ["0x"],
           },
           ["200", "200", "200"],
@@ -1557,9 +1616,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1580,9 +1639,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1622,9 +1681,9 @@ describe.only("Tests for ZeroExSwap", () => {
                 gasPrice: "2000457106",
                 gas: "200000",
               };
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -1647,11 +1706,8 @@ describe.only("Tests for ZeroExSwap", () => {
 
         await offChainRebalance.externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: buyUnderlyingTokensContract,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: [0, 0, 0, 0, 0, 0],
             _buySwapData: buyTokenSwapData,
           },
           ["200", "200", "200"],
@@ -1810,10 +1866,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     gasPrice: "2000457106",
                     gas: "200000",
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   sellTokensContract.push(getUnderlyingTokens[j]);
@@ -1827,9 +1883,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         //Selling Token After Enabling(Pulled tokens)
-        const tx2 = await offChainRebalance1
-          .connect(nonOwner)
-          ._externalSell(sellTokensContract, sellTokenSwapData, zeroExHandler.address);
+        const tx2 = await offChainRebalance1.connect(nonOwner)._externalSell(sellTokenSwapData, zeroExHandler.address);
 
         const buyAmount = (await ERC20.attach(wbnb).balanceOf(offChainRebalance1.address)).toBigInt();
 
@@ -1861,10 +1915,10 @@ describe.only("Tests for ZeroExSwap", () => {
                   gasPrice: "2000457106",
                   gas: "200000",
                 };
-                const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                   headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  },
                 });
                 await delay(500);
                 buyTokenSwapData.push(response.data.data.toString());
@@ -1897,11 +1951,8 @@ describe.only("Tests for ZeroExSwap", () => {
         // Rebalancing - Buying the tokens and staking it again to vault
         await offChainRebalance1.connect(nonOwner).externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: slicedBuyTokens,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
           ["200", "200", "200", "200"],
@@ -1924,6 +1975,35 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         const blockNumBefore = await ethers.provider.getBlockNumber();
+      });
+
+      it("print values after adding one more token ([3000, 1000, 2000, 4000])", async () => {
+        const vault = await indexSwap1.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap1.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
+        }
       });
 
       it("Invest 1 BNB into Top10 fund", async () => {
@@ -1961,6 +2041,13 @@ describe.only("Tests for ZeroExSwap", () => {
           "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
           "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
         ];
+
+        /*var oldTokens = [
+          "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+          "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0", -- NEW (lp token)
+          "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
+          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
+        ];*/
         var newWeights = [3000, 3000, 4000];
 
         var tokenSell = [];
@@ -1976,8 +2063,6 @@ describe.only("Tests for ZeroExSwap", () => {
         var slicedBuyTokens = [];
 
         var sellTokensContract = [];
-        var sellTokenAmountContract = [];
-        var sellTokenSwapData = [];
 
         var buyUnderlyingTokensContract = [];
         var buyTokenAmountContract = [];
@@ -1992,23 +2077,37 @@ describe.only("Tests for ZeroExSwap", () => {
         //Enabling Rabalance and updating record - pull from vault,redeeming and updating token list and weight
         const tx1 = await offChainRebalance1
           .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]);
+          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200", "200"]);
 
         const abiCoder = ethers.utils.defaultAbiCoder;
-        var pullStateData = abiCoder.decode(["address[]"], await offChainRebalance1.updateTokenStateData());
-        tokenSell = pullStateData[0];
+        var updateStateData = abiCoder.decode(["address[]"], await offChainRebalance1.updateTokenStateData());
+
+        tokenSell = updateStateData[0];
+
+        var stateData = abiCoder.decode(
+          ["address[]", "address[]", "uint[]", "uint"],
+          await offChainRebalance1.updateWeightStateData(),
+        );
+        sellTokens = stateData[0];
+
+        for (let i = 0; i < tokenSell.length; i++) {
+          sellTokensContract.push(tokenSell[i]);
+        }
+        for (let i = 0; i < sellTokens.length; i++) {
+          sellTokensContract.push(sellTokens[i]);
+        }
 
         //Calculating SwapData
-        for (let i = 0; i < tokenSell.length; i++) {
-          if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
+        var allUnderlying: string[] = [];
+        for (let i = 0; i < sellTokensContract.length; i++) {
+          if (sellTokensContract[i] != "0x0000000000000000000000000000000000000000") {
             const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(
-              tokenSell[i],
+              sellTokensContract[i],
             );
             const handlerAddress = tokenInfo[2];
             const handler = await ethers.getContractAt("IHandler", handlerAddress);
-            const getUnderlyingTokens: string[] = await handler.getUnderlying(tokenSell[i]);
+            const getUnderlyingTokens: string[] = await handler.getUnderlying(sellTokensContract[i]);
 
-            var allUnderlying: string[] = [];
             for (let j = 0; j < getUnderlyingTokens.length; j++) {
               if (!allUnderlying.includes(getUnderlyingTokens[j])) {
                 if (getUnderlyingTokens[j] != wbnb) {
@@ -2017,14 +2116,12 @@ describe.only("Tests for ZeroExSwap", () => {
                     sellToken: getUnderlyingTokens[j].toString(),
                     buyToken: wbnb,
                     sellAmount: bal.toString(),
-                    slippagePercentage: 0.1,
-                    gasPrice: "2000457106",
-                    gas: "200000",
+                    slippagePercentage: 0.05,
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   tokenSellContract.push(getUnderlyingTokens[j]);
@@ -2037,61 +2134,8 @@ describe.only("Tests for ZeroExSwap", () => {
           }
         }
 
-        var allUnderlying: string[] = [];
-
-        var stateData = abiCoder.decode(
-          ["address[]", "address[]", "uint[]", "uint"],
-          await offChainRebalance1.updateWeightStateData(),
-        );
-        sellTokens = stateData[0];
-
-        //Calculating SwapData
-        for (let i = 0; i < sellTokens.length; i++) {
-          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
-            const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(
-              sellTokens[i],
-            );
-            const handlerAddress = tokenInfo[2];
-            const handler = await ethers.getContractAt("IHandler", handlerAddress);
-            const getUnderlyingTokens: string[] = await handler.getUnderlying(sellTokens[i]);
-
-            for (let j = 0; j < getUnderlyingTokens.length; j++) {
-              if (!allUnderlying.includes(getUnderlyingTokens[j])) {
-                if (getUnderlyingTokens[j] != wbnb) {
-                  const bal = await ERC20.attach(getUnderlyingTokens[j]).balanceOf(offChainRebalance1.address);
-                  const params = {
-                    sellToken: getUnderlyingTokens[j].toString(),
-                    buyToken: wbnb,
-                    sellAmount: bal.toString(),
-                    slippagePercentage: 0.1,
-                    gasPrice: "2000457106",
-                    gas: "200000",
-                  };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
-                    headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
-                  });
-                  await delay(500);
-                  sellTokensContract.push(getUnderlyingTokens[j]);
-                  sellTokenSwapData.push(response.data.data.toString());
-                  sellTokenAmountContract.push(bal.toString());
-                }
-                allUnderlying.push(getUnderlyingTokens[j]);
-              }
-            }
-          }
-        }
-
-        for (let i = 0; i < tokenSellContract.length; i++) {
-          sellTokensContract.push(tokenSellContract);
-          sellTokenSwapData.push(tokenSellSwapData);
-        }
-
         //Selling Token After Enabling(Pulled tokens)
-        const tx2 = await offChainRebalance1
-          .connect(nonOwner)
-          ._externalSell(tokenSellContract, tokenSellSwapData, zeroExHandler.address);
+        const tx2 = await offChainRebalance1.connect(nonOwner)._externalSell(tokenSellSwapData, zeroExHandler.address);
 
         const buyAmount = (await ERC20.attach(wbnb).balanceOf(offChainRebalance1.address)).toBigInt();
 
@@ -2121,10 +2165,10 @@ describe.only("Tests for ZeroExSwap", () => {
                   gasPrice: "2000457106",
                   gas: "200000",
                 };
-                const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                   headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  },
                 });
                 await delay(500);
                 buyTokenSwapData.push(response.data.data.toString());
@@ -2157,11 +2201,8 @@ describe.only("Tests for ZeroExSwap", () => {
         // Rebalancing - Buying the tokens and staking it again to vault
         await offChainRebalance1.connect(nonOwner).externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: slicedBuyTokens,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
           ["200", "200"],
@@ -2291,10 +2332,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     gasPrice: "2000457106",
                     gas: "200000",
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   tokenSellContract.push(getUnderlyingTokens[j]);
@@ -2336,10 +2377,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     gasPrice: "2000457106",
                     gas: "200000",
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   sellTokensContract.push(getUnderlyingTokens[j]);
@@ -2358,9 +2399,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         //Selling Token After Enabling(Pulled tokens)
-        const tx2 = await offChainRebalance1
-          .connect(nonOwner)
-          ._externalSell(sellTokensContract, sellTokenSwapData, zeroExHandler.address);
+        const tx2 = await offChainRebalance1.connect(nonOwner)._externalSell(sellTokenSwapData, zeroExHandler.address);
         const buyAmount = (await ERC20.attach(wbnb).balanceOf(offChainRebalance1.address)).toBigInt();
         buyTokens = stateData[1];
         buyweight = stateData[2];
@@ -2387,10 +2426,10 @@ describe.only("Tests for ZeroExSwap", () => {
                   gasPrice: "2000457106",
                   gas: "200000",
                 };
-                const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                   headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  },
                 });
                 await delay(500);
                 buyTokenSwapData.push(response.data.data.toString());
@@ -2423,11 +2462,8 @@ describe.only("Tests for ZeroExSwap", () => {
         // Rebalancing - Buying the tokens and staking it again to vault
         await offChainRebalance1.connect(nonOwner).externalRebalance(
           {
-            _buyToken: buyUnderlyingTokensContract,
-            _tokens: slicedBuyTokens,
             _offChainHandler: zeroExHandler.address,
             _buyAmount: buyTokenAmountContract,
-            _protocolFee: protocolFee,
             _buySwapData: buyTokenSwapData,
           },
           ["200", "200", "200"],
@@ -2497,6 +2533,7 @@ describe.only("Tests for ZeroExSwap", () => {
           balanceAfter[i] = await ERC20.attach(tokens[i]).balanceOf(v);
           expect(Number(balanceBefore[i])).to.be.greaterThanOrEqual(Number(balanceAfter[i]));
         }
+        await offChainRebalance1.connect(nonOwner).revertEnableRebalancing(["200", "200", "200"]);
       });
 
       it("non-assetManager should revert if 15minutes of Pause is passed", async () => {
@@ -2520,29 +2557,6 @@ describe.only("Tests for ZeroExSwap", () => {
         swapAmount = data[3];
         const v = await indexSwap.vault();
         const balanceBefore = await ERC20.attach(iaddress.wbnbAddress).balanceOf(v);
-        for (let i = 0; i < sellTokens.length; i++) {
-          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
-            if (sellTokens[i] != wbnb) {
-              await delay(1000);
-              const params = {
-                sellToken: sellTokens[i].toString(),
-                buyToken: wbnb,
-                sellAmount: swapAmount[i].toString(),
-                slippagePercentage: 0.1,
-                gasPrice: "2000457106",
-                gas: "200000",
-              };
-
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
-                headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
-              });
-              await delay(500);
-              tokenSellSwapData.push(response.data.data.toString());
-            }
-          }
-        }
         for (let i = 0; i < tokenSell.length; i++) {
           if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
             if (tokenSell[i] != wbnb) {
@@ -2556,9 +2570,32 @@ describe.only("Tests for ZeroExSwap", () => {
                 gas: "200000",
               };
 
-              const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                 headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != wbnb) {
+              await delay(1000);
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: wbnb,
+                sellAmount: swapAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
                 },
               });
               await delay(500);
@@ -2661,12 +2698,14 @@ describe.only("Tests for ZeroExSwap", () => {
           console.log("balance of contract", await ERC20.attach(tokens[i]).balanceOf(offChainRebalance.address));
           console.log("balance of vault", await ERC20.attach(tokens[i]).balanceOf(v));
         }
-        await expect( offChainRebalance.connect(addr2).revertSellByUser()).to.be.revertedWithCustomError(offChainRebalance,"FifteenMinutesNotExcedeed");
+        await expect(offChainRebalance.connect(addr2).revertSellByUser()).to.be.revertedWithCustomError(
+          offChainRebalance,
+          "FifteenMinutesNotExcedeed",
+        );
+        await offChainRebalance.revertSellTokens();
       });
 
       it("it should fail if assetmanager tries to execute 3rd transacton after 1st", async () => {
-        var tokens = await indexSwap1.getTokens();
-        var oldWeights = await offChainRebalance1.getCurrentWeights();
         const newTokens = ["0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", addresses.vBNB_Address, iaddress.ethAddress];
         const newWeights = [6000, 1000, 3000];
 
@@ -2735,10 +2774,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     gasPrice: "2000457106",
                     gas: "200000",
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   tokenSellContract.push(getUnderlyingTokens[j]);
@@ -2780,10 +2819,10 @@ describe.only("Tests for ZeroExSwap", () => {
                     gasPrice: "2000457106",
                     gas: "200000",
                   };
-                  const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                  const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                     headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                      "0x-api-key": process.env.ZEROX_KEY,
+                    },
                   });
                   await delay(500);
                   sellTokensContract.push(getUnderlyingTokens[j]);
@@ -2826,10 +2865,10 @@ describe.only("Tests for ZeroExSwap", () => {
                   gasPrice: "2000457106",
                   gas: "200000",
                 };
-                const response = await axios.get(addresses.zeroExUrl+`${qs.stringify(params)}`, {
+                const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
                   headers: {
-                    "0x-api-key": process.env.ZEROX_KEY
-                },
+                    "0x-api-key": process.env.ZEROX_KEY,
+                  },
                 });
                 await delay(500);
                 buyTokenSwapData.push(response.data.data.toString());
@@ -2847,11 +2886,8 @@ describe.only("Tests for ZeroExSwap", () => {
         await expect(
           offChainRebalance1.connect(nonOwner).externalRebalance(
             {
-              _buyToken: buyUnderlyingTokensContract,
-              _tokens: slicedBuyTokens,
               _offChainHandler: zeroExHandler.address,
               _buyAmount: buyTokenAmountContract,
-              _protocolFee: protocolFee,
               _buySwapData: buyTokenSwapData,
             },
             ["200", "200", "200"],

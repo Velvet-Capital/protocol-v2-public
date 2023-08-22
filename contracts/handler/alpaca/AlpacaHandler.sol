@@ -21,14 +21,14 @@ pragma solidity 0.8.16;
 import {IHandler} from "../IHandler.sol";
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {IVaultAlpaca} from "./interfaces/IVaultAlpaca.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
 contract AlpacaHandler is IHandler {
-  using SafeMathUpgradeable for uint256;
+  IPriceOracle internal _oracle;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256 amount, address indexed to);
   event Redeem(
@@ -39,6 +39,11 @@ contract AlpacaHandler is IHandler {
     address indexed to,
     bool isWETH
   );
+
+  constructor(address _priceOracle) {
+    require(_priceOracle != address(0), "Oracle having zero address");
+    _oracle = IPriceOracle(_priceOracle);
+  }
 
   /**
    * @notice This function deposits assets to the Alpaca protocol
@@ -53,7 +58,7 @@ contract AlpacaHandler is IHandler {
     uint256 _lpSlippage,
     address _to,
     address user
-  ) public payable override {
+  ) public payable override returns (uint256 _mintedAmount) {
     if (_yieldAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -76,6 +81,7 @@ contract AlpacaHandler is IHandler {
       TransferHelper.safeTransfer(_yieldAsset, _to, yBalance);
     }
     emit Deposit(block.timestamp, msg.sender, _yieldAsset, _amount[0], _to);
+    _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);
   }
 
   /**
@@ -97,7 +103,7 @@ contract AlpacaHandler is IHandler {
       IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
       if (inputData.isWETH) {
         (bool success, ) = payable(inputData._to).call{value: address(this).balance}("");
-        require(success, "Transfer failed.");
+        if (!success) revert ErrorLibrary.TransferFailed();
       } else {
         IERC20Upgradeable token = IERC20Upgradeable(underlyingToken);
         uint256 tokenAmount = token.balanceOf(address(this));
@@ -148,11 +154,25 @@ contract AlpacaHandler is IHandler {
     }
     uint256[] memory tokenBalance = new uint256[](1);
     uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, t);
-    tokenBalance[0] = yieldTokenBalance.mul(IVaultAlpaca(t).totalToken()).div(IVaultAlpaca(t).totalSupply());
+    tokenBalance[0] = (yieldTokenBalance * IVaultAlpaca(t).totalToken()) / IVaultAlpaca(t).totalSupply();
     return tokenBalance;
   }
 
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+  /**
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   */
+  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
+    address[] memory underlyingToken = getUnderlying(t);
+
+    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
+    return balanceUSD;
+  }
 
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 

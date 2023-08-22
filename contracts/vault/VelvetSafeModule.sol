@@ -12,12 +12,14 @@ pragma solidity 0.8.16;
 
 import {Module, Enum} from "@gnosis.pm/zodiac/contracts/core/Module.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 contract VelvetSafeModule is Module {
   address public multiSendLibrary;
 
   /**
    * @notice This function transfers module ownership
+   * @param initializeParams Encoded data having the init parameters
    */
   function setUp(bytes memory initializeParams) public override initializer {
     __Ownable_init();
@@ -33,20 +35,23 @@ contract VelvetSafeModule is Module {
 
   /**
    * @notice This function executes to get non derivative tokens back to vault
+   * @param handlerAddresses Address of the handler to be used
+   * @param encodedCalls Encoded calldata for the `executeWallet` function
    */
   function executeWallet(
     address handlerAddresses,
     bytes calldata encodedCalls
-  ) public onlyOwner returns (bool isSuccess) {
-    isSuccess = exec(handlerAddresses, 0, encodedCalls, Enum.Operation.Call);
-    require(isSuccess, "Call failed");
+  ) public onlyOwner returns (bool isSuccess, bytes memory data) {
+    (isSuccess, data) = execAndReturnData(handlerAddresses, 0, encodedCalls, Enum.Operation.Call);
+    if (!isSuccess) revert ErrorLibrary.CallFailed();
   }
 
   /**
    * @notice This function executes encoded calls using the module to the vault
+   * @param encodedCalls Encoded calldata for the `executeWalletDelegate` function
    */
   function executeWalletDelegate(bytes calldata encodedCalls) public onlyOwner returns (bool isSuccess) {
     isSuccess = exec(multiSendLibrary, 0, encodedCalls, Enum.Operation.DelegateCall);
-    require(isSuccess, "Call Failed");
+    if (!isSuccess) revert ErrorLibrary.CallFailed();
   }
 }

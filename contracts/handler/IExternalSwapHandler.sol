@@ -8,7 +8,6 @@ interface IExternalSwapHandler {
     address sellTokenAddress,
     address buyTokenAddress,
     uint sellAmount,
-    uint protocolFee,
     bytes memory callData,
     address _to
   ) external payable;

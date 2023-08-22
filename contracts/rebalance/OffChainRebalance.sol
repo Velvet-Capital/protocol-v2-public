@@ -2,7 +2,6 @@
 pragma solidity 0.8.16;
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
@@ -10,7 +9,7 @@ import {IndexSwapLibrary} from "../core/IndexSwapLibrary.sol";
 import {IExchange} from "../core/IExchange.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
-
+import {IExternalSwapHandler} from "../handler/IExternalSwapHandler.sol";
 import {IIndexSwap} from "../core/IIndexSwap.sol";
 import {AccessController} from "../access/AccessController.sol";
 
@@ -27,8 +26,6 @@ import {FunctionParameters} from "../FunctionParameters.sol";
 import {IRebalanceAggregator} from "./IRebalanceAggregator.sol";
 
 contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
-  using SafeMathUpgradeable for uint256;
-  using SafeMathUpgradeable for uint96;
   IIndexSwap internal index;
 
   AccessController internal accessController;
@@ -42,12 +39,20 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   address internal vault;
   address internal _contract;
   address internal zeroAddress;
+
+  //Used to store sellToken address
+  address[] internal sellTokensToSwap;
+
   struct RebalanceData {
     uint96[] oldWeight;
     address[] oldTokens;
+    address[] sellTokens;
   }
+
   RebalanceData internal rebalanceData;
   mapping(address => uint256[]) public redeemedAmounts;
+  mapping(address => bool) public sellTokensData;
+
   enum Steps {
     FirstEnable,
     SecondSell,
@@ -76,6 +81,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     _disableInitializers();
   }
 
+  /**
+   * @notice This function is used to initialise the OffChainRebalance module while deployment
+   */
   function init(
     address _index,
     address _accessController,
@@ -87,7 +95,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   ) external initializer {
     __Ownable_init();
     __UUPSUpgradeable_init();
-    zeroAddress = address(0);
     if (
       _index == zeroAddress ||
       _accessController == zeroAddress ||
@@ -117,23 +124,29 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     _;
   }
 
+  function getCurrentWeights(uint256 _vaultValue) internal returns (uint96[] memory) {
+    return RebalanceLibrary.getCurrentWeights(index, getTokens(), _vaultValue);
+  }
+
   function getCurrentWeights() public returns (uint96[] memory) {
-    return RebalanceLibrary.getCurrentWeights(index, getTokens());
+    uint256 _vaultValue = getVaultBalance();
+    return getCurrentWeights(_vaultValue);
   }
 
   /**
-   * @notice The function is 1st transaction of ZeroEx Update Weight,called to pull and redeem tokens
+   * @notice The function is 1st transaction of ZeroEx Update Weight, called to pull and redeem tokens
    * @param inputData NewWeights and LpSlippage in struct
    */
   function enableRebalance(
     FunctionParameters.EnableRebalanceData memory inputData
   ) external virtual nonReentrant onlyAssetManager {
-    RebalanceLibrary.validateEnableRebalance(index, tokenRegistry);
+    RebalanceLibrary.validateEnableRebalance(index, tokenRegistry, getRedeemed());
     //Keeping track of oldWeights and OldTokens for further use
     address[] memory _tokens = setRebalanceDataAndPause();
     uint96[] memory _newWeight = inputData._newWeights;
     updateRecord(_tokens, _newWeight);
-    pullAndRedeemForUpdateWeights(inputData._lpSlippage);
+    uint256 _vaultValue = getVaultBalance();
+    pullAndRedeemForUpdateWeights(inputData._lpSlippage, _vaultValue);
     step = Steps.FirstEnable;
     emit EnableRebalance(_newWeight);
   }
@@ -149,7 +162,30 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     uint96[] memory _newWeights,
     uint256[] calldata _lpSlippage
   ) public virtual nonReentrant onlyAssetManager {
+    uint256 newTokenLength = _newTokens.length;
+    uint256 oldTokensLength = getTokens().length;
+    if (_newWeights.length != newTokenLength) {
+      revert ErrorLibrary.LengthsDontMatch();
+    }
+    uint256 length = oldTokensLength > newTokenLength ? oldTokensLength : newTokenLength;
+    if(_lpSlippage.length != length){
+      revert ErrorLibrary.InvalidSlippageLength();
+    }
+    if (getRedeemed()) {
+      revert ErrorLibrary.AlreadyOngoingOperation();
+    }
     _enableRebalanceAndUpdateRecord(_newTokens, _newWeights, _lpSlippage);
+  }
+
+  /**
+   * @notice The function is helper function, used to delete sellTokensData and sellTokensToSwap after externalSell is completed
+   */
+  function deleteSellTokenData() internal {
+    uint256 len = sellTokensToSwap.length;
+    for (uint256 i = 0; i < len; i++) {
+      delete sellTokensData[sellTokensToSwap[i]];
+    }
+    delete sellTokensToSwap;
   }
 
   /**
@@ -171,9 +207,11 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       for (uint256 i = 0; i < len; i++) {
         address _token = tokens[i];
         if (newDenorms[i] == 0) {
-          uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, _token);
+          IHandler handler = IHandler(getTokenInfo(_token).handler);
+          uint256 tokenBalance = handler.getTokenBalance(vault, _token);
           _pullAndRedeem(tokenBalance, _lpSlippage[i], _token);
           tokenSell[i] = _token;
+          setSellTokenData(_token);
         }
         index.deleteRecord(_token);
       }
@@ -183,12 +221,29 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   }
 
   /**
+   * @notice The function is helper function, used to set tokens to sell in array, and used in externalSell function
+   * It considers underlying tokens, it checks whether the token is weth or not ,also checks whether the underlying is already considered in array or not and adds the token in array named sellTokensToSwap
+   * @param _token Address of the token in picture
+   */
+  function setSellTokenData(address _token) internal {
+    IHandler handler = IHandler(getTokenInfo(_token).handler);
+    address[] memory underlying = getUnderlying(handler, _token);
+    for (uint256 j = 0; j < underlying.length; j++) {
+      address underlyingToken = underlying[j];
+      if (underlyingToken != WETH && !sellTokensData[underlyingToken]) {
+        sellTokensData[underlyingToken] = true;
+        sellTokensToSwap.push(underlyingToken);
+      }
+    }
+  }
+
+  /**
    * @notice The function is internal function of update Weights,called to pull and redeem  tokens
    * @param _lpSlippage array of lpSlippage
    */
-  function pullAndRedeemForUpdateWeights(uint256[] memory _lpSlippage) internal virtual {
+  function pullAndRedeemForUpdateWeights(uint256[] memory _lpSlippage, uint256 _vaultValue) internal virtual {
     address[] memory tokens = getTokens();
-    uint96[] memory oldWeights = getCurrentWeights();
+    uint96[] memory oldWeights = getCurrentWeights(_vaultValue);
     uint256 len = tokens.length;
     uint256[] memory buyWeights = new uint256[](len);
     address[] memory sellTokens = new address[](len);
@@ -202,9 +257,10 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         uint256 swapAmount = RebalanceLibrary.getAmountToSwap(index, _token, newWeights, oldWeight);
         _pullAndRedeem(swapAmount, _lpSlippage[i], _token);
         sellTokens[i] = _token;
+        setSellTokenData(_token);
       } else if (newWeights > oldWeight) {
-        uint256 diff = newWeights.sub(oldWeight);
-        sumWeightsToSwap = sumWeightsToSwap.add(diff);
+        uint256 diff = newWeights - oldWeight;
+        sumWeightsToSwap = sumWeightsToSwap + diff;
         buyTokens[i] = _token;
         buyWeights[i] = diff;
       }
@@ -225,7 +281,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     ITokenRegistry.TokenRecord memory tokenInfo = getTokenInfo(token);
     IHandler handler = IHandler(tokenInfo.handler);
     uint256[] memory balanceBefore = RebalanceLibrary.getUnderlyingBalances(token, handler, _contract);
-    address[] memory underlying = handler.getUnderlying(token);
+    address[] memory underlying = getUnderlying(handler, token);
     exchange._pullFromVault(token, swapAmount, _contract);
     modifiedTokens.push(token);
     if (!tokenInfo.primary) {
@@ -247,13 +303,13 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     }
     for (uint256 i = 0; i < underlying.length; i++) {
       uint balanceAfter = getBalance(underlying[i], _contract);
-      redeemedAmounts[token].push(balanceAfter.sub(balanceBefore[i]));
+      redeemedAmounts[token].push(balanceAfter - balanceBefore[i]);
     }
   }
 
   /**
    * @notice The function is 3rd transaction of update tokens and update weights, used to stake and deposit tokens
-   * @param inputData array of buyToken,swapData,buyAmount,tokens,protocolFee and address of offChainHandler
+   * @param inputData array of buyToken,swapData,buyAmount,tokens and address of offChainHandler
    * @param _lpSlippage array of lpSlippage
    */
   function externalRebalance(
@@ -263,14 +319,14 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (Steps.SecondSell != step) {
       revert ErrorLibrary.InvalidExecution();
     }
-    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry);
+    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry,inputData._offChainHandler);
     _externalRebalance(inputData, _lpSlippage);
     emit EXTERNAL_REBALANCE_COMPLETED(msg.sender);
   }
 
   /**
    * @notice The function is internal fucntion of external rebalance, used to stake and deposit tokens
-   * @param inputData array of buyToken,swapData,buyAmount,tokens,protocolFee and address of offChainHandler
+   * @param inputData array of buyToken,swapData,buyAmount,tokens and address of offChainHandler
    * @param _lpSlippage array of lpSlippage
    */
   function _externalRebalance(
@@ -293,7 +349,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     for (uint i = 0; i < _buyTokens.length; i++) {
       address _token = _buyTokens[i];
       if (_token != zeroAddress) {
-        uint256 buyVal = balance.mul(_buyWeight[i]).div(_sumWeight);
+        uint256 buyVal = (balance * _buyWeight[i]) / _sumWeight;
         underlyingIndex = _stake(inputData, _lpSlippage, buyVal, underlyingIndex, inputIndex, _token);
         inputIndex++;
       }
@@ -303,12 +359,10 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
   /**
    * @notice The function is 2nd Transaction of update token and update weights,used to sell redeemed tokens using api
-   * @param _sellToken array of tokens to sell
    * @param _sellSwapData array of callData for sellTokens
    * @param _offChainHandler address of offChainHandler, use to swap tokens
    */
   function _externalSell(
-    address[] calldata _sellToken,
     bytes[] calldata _sellSwapData,
     address _offChainHandler
   ) external virtual nonReentrant onlyAssetManager {
@@ -316,25 +370,16 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       revert ErrorLibrary.InvalidExecution();
     }
     RebalanceLibrary.beforeExternalSell(index, tokenRegistry, _offChainHandler);
-    for (uint256 i = 0; i < _sellToken.length; i++) {
-      address _token = _sellToken[i];
-      RebalanceLibrary._transferAndSwapUsingOffChainHandler(
-        _token,
-        WETH,
-        getBalance(_token, _contract),
-        _contract,
-        _sellSwapData[i],
-        _offChainHandler,
-        0
-      );
-    }
+    //Using stored array data(in setSellTokenData)
+    _swap(sellTokensToSwap, _offChainHandler, _sellSwapData, 0);
+    //Deleting the sellTokensToSwap data after use
     step = Steps.SecondSell;
     emit EXTERNAL_SELL(msg.sender);
   }
 
   /**
    * @notice The function is internal fucntion of external rebalance, used to stake and deposit tokens to vault
-   * @param inputData array of buyToken,swapData,buyAmount,tokens,protocolFee and address of offChainHandler
+   * @param inputData array of buyToken,swapData,buyAmount,tokens and address of offChainHandler
    * @param _lpSlippage address of lpSlippage
    */
   function _stake(
@@ -350,8 +395,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
         ExchangeData.InputData(inputData._buyAmount, WETH, inputData._offChainHandler, inputData._buySwapData),
         index,
         underlyingindex,
-        inputData._protocolFee[inputIndex],
-        0,
         _lpSlippage[inputIndex],
         buyVal,
         _token,
@@ -386,7 +429,8 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     validatePrimaryAndHandler(tokens, offChainHandler);
     address[] memory sellTokens;
     updateRecord(tokens, newWeights);
-    pullAndRedeemForUpdateWeights(lpSlippage);
+    uint256 _vaultValue = getVaultBalance();
+    pullAndRedeemForUpdateWeights(lpSlippage, _vaultValue);
     (sellTokens, , , ) = abi.decode(updateWeightStateData, (address[], address[], uint256[], uint256));
     _swap(sellTokens, offChainHandler, swapData, 0);
 
@@ -430,10 +474,10 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   ) internal {
     RebalanceLibrary.validateUpdateRecord(_newTokens, assetManagerConfig, tokenRegistry);
     setRebalanceDataAndPause();
+    uint256 _vaultValue = getVaultBalance();
     _pullAndRedeemForUpdateTokens(_newWeights, _newTokens, _lpSlippage);
-    index.updateTokenList(_newTokens);
-    updateRecord(_newTokens, _newWeights);
-    pullAndRedeemForUpdateWeights(_lpSlippage);
+    _updateTokenListAndRecords(_newTokens, _newWeights);
+    pullAndRedeemForUpdateWeights(_lpSlippage, _vaultValue);
     step = Steps.FirstEnable;
     emit EnableRebalanceAndUpdateRecord(_newTokens, _newWeights);
   }
@@ -454,15 +498,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     for (uint256 i = 0; i < sellTokens.length; i++) {
       address _token = sellTokens[i];
       if (_token != zeroAddress && _token != WETH) {
-        RebalanceLibrary._transferAndSwapUsingOffChainHandler(
-          _token,
-          WETH,
-          getBalance(_token, _contract),
-          _contract,
-          swapData[_index],
-          offChainHandler,
-          0
-        );
+        uint256 sellAmount = getBalance(_token, _contract);
+        TransferHelper.safeTransfer(_token, offChainHandler, sellAmount);
+        IExternalSwapHandler(offChainHandler).swap(_token, WETH, sellAmount, swapData[_index], _contract);
         _index++;
       }
     }
@@ -483,7 +521,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (Steps.SecondSell != step) {
       revert ErrorLibrary.InvalidExecution();
     }
-    RebalanceLibrary.beforeRevertCheck(index);
+    beforeRevertCheck();
     TransferHelper.safeTransfer(WETH, vault, getBalance(WETH, _contract));
 
     address[] memory newTokens = RebalanceLibrary.getNewTokens(rebalanceData.oldTokens, WETH);
@@ -502,13 +540,14 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
   /**
    * @notice The function is helper function for revertEnableRebalancing
+   * @param _lpSlippage Array of Lp slippage values for the function
    */
   function _revertEnableRebalancing(uint256[] calldata _lpSlippage) internal {
     //checks
     if (Steps.FirstEnable != step) {
       revert ErrorLibrary.InvalidExecution();
     }
-    RebalanceLibrary.beforeRevertCheck(index);
+    beforeRevertCheck();
     //Check if enable transaction has done
     //Looping over tokens to deposit
     for (uint i = 0; i < modifiedTokens.length; i++) {
@@ -517,7 +556,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       // Have used this mapping in PullAndRedeem,to store amounts
       uint256[] memory amounts = redeemedAmounts[token];
       IHandler handler = IHandler(getTokenInfo(token).handler);
-      address[] memory underlying = handler.getUnderlying(token);
+      address[] memory underlying = getUnderlying(handler, token);
       //Here it loops throught the length of amount and sends to Aggregator Contract
       for (uint j = 0; j < amounts.length; j++) {
         TransferHelper.safeTransfer(underlying[j], address(aggregator), amounts[j]);
@@ -525,7 +564,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
       aggregator._revertRebalance(amounts, _lpSlippage[i], token);
     }
     //Updating the record back, I have used this struct mapping to keep track of oldWeoght and OldTokens
-    updateRecord(rebalanceData.oldTokens, rebalanceData.oldWeight);
+    _updateTokenListAndRecords(rebalanceData.oldTokens, rebalanceData.oldWeight);
     //Setting everthing to normal
     deleteState();
     emit REVERT_ENABLE_REBALANCING(msg.sender);
@@ -557,12 +596,13 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   }
 
   /**
-   * @notice The function is used to delete and update variable state,after completion of task/last step
+   * @notice The function is used to delete and update variable state, after completion of task/last step
    */
   function deleteState() internal {
     for (uint i = 0; i < modifiedTokens.length; i++) {
       delete redeemedAmounts[modifiedTokens[i]];
     }
+    deleteSellTokenData();
     step = Steps.None;
     updateTokenStateData = abi.encode();
     updateWeightStateData = abi.encode();
@@ -583,14 +623,26 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   }
 
   /**
-   * @notice The function is used to update Record
+   * @notice The function is used to update Record And Token List
+   * @param tokens Array of token addresses
+   * @param weights Array of token weights
    */
-  function updateRecord(address[] memory tokens, uint96[] memory weights) internal {
+  function _updateTokenListAndRecords(address[] memory tokens, uint96[] memory weights) internal {
+    index.updateTokenListAndRecords(tokens,weights);
+  }
+
+  /**
+   * @notice The function is used to update Record
+   * @param tokens Array of token addresses
+   * @param weights Array of token weights
+   */
+  function updateRecord(address[] memory tokens, uint96[] memory weights) internal{
     index.updateRecords(tokens, weights);
   }
 
   /**
    * @notice The function is used to setPaused
+   * @param _state Boolean parameter passed to set the protocol state
    */
   function setPaused(bool _state) internal {
     index.setPaused(_state);
@@ -598,6 +650,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
   /**
    * @notice The function is used to setRedeemed
+   * @param _state Boolean parameter passed to set the redeemed state
    */
   function setRedeemed(bool _state) internal {
     index.setRedeemed(_state);
@@ -612,6 +665,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
   /**
    * @notice This internal function returns token information
+   * @param _token Address of the token whose info is to be retreived
    */
   function getTokenInfo(address _token) internal view returns (ITokenRegistry.TokenRecord memory) {
     return tokenRegistry.getTokenInformation(_token);
@@ -619,6 +673,8 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
   /**
    * @notice This internal function returns balance of token
+   * @param _token Address of the token whole balance is to be retreived
+   * @param _of Address whose balance is to be retreived
    */
   function getBalance(address _token, address _of) internal view returns (uint256) {
     return IERC20Upgradeable(_token).balanceOf(_of);
@@ -626,6 +682,8 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
 
   /**
    * @notice This internal function checks for primary tokens and handler
+   * @param tokens Address of the token to be validated
+   * @param handler Address of the handler in picture
    */
   function validatePrimaryAndHandler(address[] memory tokens, address handler) internal view {
     IndexSwapLibrary.checkPrimaryAndHandler(tokenRegistry, tokens, handler);
@@ -638,6 +696,36 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (!isUserRevertEnabled()) {
       revert ErrorLibrary.FifteenMinutesNotExcedeed();
     }
+  }
+
+  /**
+   * @notice This function returns if the tokens have been redeemed or not
+   */
+  function getRedeemed() internal view returns (bool) {
+    return index.getRedeemed();
+  }
+
+  /**
+   * @notice This function returns underlying tokens for given _token
+   * @param handler Address of the handler to be used to get the underlying tokens
+   * @param _token Address of the token whose underlying is required
+   */
+  function getUnderlying(IHandler handler, address _token) internal view returns (address[] memory) {
+    return handler.getUnderlying(_token);
+  }
+
+  /**
+   * @notice This function is used for validating before revert
+   */
+  function beforeRevertCheck() internal view {
+    RebalanceLibrary.beforeRevertCheck(index);
+  }
+
+  /**
+   * @notice This function returns vaultBalance for particular index
+   */
+  function getVaultBalance() internal returns (uint256 vaultBalance) {
+    (, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, getTokens());
   }
 
   // important to receive ETH

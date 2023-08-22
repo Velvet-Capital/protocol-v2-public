@@ -131,9 +131,9 @@ interface IIndexSwap {
 
   /**
      * @notice The function swaps BNB into the portfolio tokens after a user makes an investment
-     * @dev The output of the swap is converted into BNB to get the actual amount after slippage to calculate 
+     * @dev The output of the swap is converted into USD to get the actual amount after slippage to calculate 
             the index token amount to mint
-     * @dev (tokenBalanceInBNB, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
+     * @dev (tokenBalance, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
             because during the swap the amount will change but the index token balance is still the same 
             (before minting)
      */
@@ -178,6 +178,13 @@ interface IIndexSwap {
    */
   function updateRecords(address[] memory tokens, uint96[] memory denorms) external;
 
+  /**
+   * @notice This function update records with new tokenlist and weights
+   * @param tokens Array of the tokens to be updated
+   * @param _denorms Array of the updated denorm values
+   */
+  function updateTokenListAndRecords(address[] calldata tokens, uint96[] calldata _denorms) external;
+
   function getRedeemed() external view returns (bool);
 
   function getTokens() external view returns (address[] memory);
@@ -192,13 +199,17 @@ interface IIndexSwap {
 
   function lastInvestmentTime(address owner) external view returns (uint256);
 
-  function setLastInvestmentPeriod(address _to) external;
-
   function checkCoolDownPeriod() external view;
 
-  function mintInvest(address _to, uint256 _mintAmount) external;
+  function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external;
 
   function burnWithdraw(address _to, uint256 _mintAmount) external returns (uint256 exitFee);
 
   function setFlags(bool _pauseState, bool _redeemState) external;
+
+  function reentrancyGuardEntered() external returns (bool);
+
+  function nonReentrantBefore() external;
+
+  function nonReentrantAfter() external;
 }

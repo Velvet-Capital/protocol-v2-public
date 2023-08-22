@@ -20,7 +20,6 @@ pragma solidity 0.8.16;
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
 
 import {LPInterface} from "./interfaces/LPInterface.sol";
 import {FactoryInterface} from "./interfaces/FactoryInterface.sol";
@@ -35,9 +34,9 @@ import {FullMath} from "../libraries/FullMath.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
+import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
 
 contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
-  using SafeMathUpgradeable for uint256;
   uint256 internal constant DIVISOR_INT = 10_000;
   address internal immutable lpHandlerAddress;
   IPriceOracle internal _oracle;
@@ -73,7 +72,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
     uint256 _lpSlippage,
     address _to,
     address user
-  ) public payable override {
+  ) public payable override returns (uint256 _mintedAmount) {
     if (mooLpAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -90,13 +89,19 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
       }
       TransferHelper.safeTransfer(underlying[0], lpHandlerAddress, _amount[0]);
       TransferHelper.safeTransfer(underlying[1], lpHandlerAddress, _amount[1]);
-      IHandler(lpHandlerAddress).deposit(address(underlyingLpToken), _amount, _lpSlippage, address(this), user);
+      _mintedAmount = IHandler(lpHandlerAddress).deposit(
+        address(underlyingLpToken),
+        _amount,
+        _lpSlippage,
+        address(this),
+        user
+      );
     } else {
       uint256 amountBNB = address(this).balance;
       uint256 index = underlying[0] == WETH ? 1 : 0;
       uint256 tokbal = IERC20Upgradeable(underlying[index]).balanceOf(address(this));
       TransferHelper.safeTransfer(address(underlying[index]), lpHandlerAddress, tokbal);
-      IHandler(lpHandlerAddress).deposit{value: amountBNB}(
+      _mintedAmount = IHandler(lpHandlerAddress).deposit{value: amountBNB}(
         underlyingLpToken,
         _amount,
         _lpSlippage,
@@ -149,8 +154,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
    * @return underlying Address of the underlying asset
    */
   function getUnderlying(address mooLpAsset) public view override returns (address[] memory) {
-    require(address(mooLpAsset) != address(0), "zero address passed");
-    if (mooLpAsset == address(0)) {
+    if (address(mooLpAsset) == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     address[] memory underlying = new address[](2);
@@ -176,38 +180,19 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   }
 
   /**
-   * @notice This function returns the underlying asset balance of the passed address
-   * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
-   * @return tokenBalance t token's underlying asset balance of the holder
-   */
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
-    if (t == address(0) || _tokenHolder == address(0)) {
-      revert ErrorLibrary.InvalidAddress();
-    }
-    uint256[] memory tokenBalance = new uint256[](2);
-    address underlyingLpToken = address(IStrategy(address(IVaultBeefy(t).strategy())).want());
-    uint256 balance = getTokenBalance(_tokenHolder, t).mul(IVaultBeefy(t).balance()).div(IVaultBeefy(t).totalSupply());
-    (tokenBalance[0], tokenBalance[1]) = _getLiquidityValue(underlyingLpToken, balance);
-    return tokenBalance;
-  }
-
-  /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
    * @param t Address of the protocol token
-   * @return finalLB value of the lp asset t
    */
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {
+  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     address underlyingLpToken = address(IStrategy(address(IVaultBeefy(t).strategy())).want());
-    uint lB = _calculatePrice(underlyingLpToken, address(_oracle));
-    uint256 balance = _getTokenBalance(_tokenHolder, t);
-    uint finalLB = lB.mul(balance).div(10 ** 18);
-    return finalLB;
+    return _calculatePriceForBalance(underlyingLpToken, address(_oracle), _getTokenBalance(_tokenHolder, t));
   }
+
+  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {}
 
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 

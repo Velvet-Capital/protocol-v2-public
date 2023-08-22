@@ -1,9 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import "@nomicfoundation/hardhat-chai-matchers";
-import hre from "hardhat";
 import { ethers, upgrades } from "hardhat";
-import { BigNumber } from "ethers";
 
 import {
   tokenAddresses,
@@ -13,6 +11,10 @@ import {
   baseHandler,
   venusHandler,
   wombatHandler,
+  apeSwapLPHandler,
+  biSwapLPHandler,
+  pancakeLpHandler,
+  priceOracle,
 } from "./Deployments.test";
 
 import {
@@ -33,9 +35,11 @@ import {
   VelvetSafeModule__factory,
   Exchange__factory,
   AccessController__factory,
+  RebalanceAggregator__factory,
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
+import { BigNumber } from "ethers";
 
 var chai = require("chai");
 //use default BigNumber
@@ -44,7 +48,6 @@ chai.use(require("chai-bignumber")());
 describe.only("Tests for MixedIndex", () => {
   let iaddress: IAddresses;
   let accounts;
-  let priceOracle: PriceOracle;
   let indexSwap: any;
   let indexSwap1: any;
   let indexSwap2: any;
@@ -75,6 +78,7 @@ describe.only("Tests for MixedIndex", () => {
   let owner: SignerWithAddress;
   let treasury: SignerWithAddress;
   let assetManagerTreasury: SignerWithAddress;
+  let metaAggregator: any;
   let nonOwner: SignerWithAddress;
   let addr3: SignerWithAddress;
   let addr2: SignerWithAddress;
@@ -83,19 +87,9 @@ describe.only("Tests for MixedIndex", () => {
   let assetManager: SignerWithAddress;
   let whitelistManagerAdmin: SignerWithAddress;
   let whitelistManager: SignerWithAddress;
-  let velvetManager: SignerWithAddress;
   let addrs: SignerWithAddress[];
   let indexInfo: any;
-  let indexInfo1: any;
-  let indexInfo2: any;
-  let indexInfo3: any;
-  let indexInfo4: any;
-  let pancakeLpHandler: any;
-  let apeSwapLPHandler: any;
-  let biSwapLPHandler: any;
-  //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
-  let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
-  let token;
+
   const forkChainId: any = process.env.FORK_CHAINID;
   const provider = ethers.provider;
   const chainId: any = forkChainId ? forkChainId : 56;
@@ -103,25 +97,7 @@ describe.only("Tests for MixedIndex", () => {
 
   describe("Tests for MixedIndex ", () => {
     before(async () => {
-      const PriceOracle = await ethers.getContractFactory("PriceOracle");
-      priceOracle = await PriceOracle.deploy();
-      await priceOracle.deployed();
-
-      const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-      pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
-      await pancakeLpHandler.deployed();
-      await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
-
-      const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
-      biSwapLPHandler = await BiSwapLPHandler.deploy(priceOracle.address);
-      await biSwapLPHandler.deployed();
-      await biSwapLPHandler.addOrUpdateProtocolSlippage("2500");
-
-      const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
-      apeSwapLPHandler = await ApeSwapLPHandler.deploy(priceOracle.address);
-      await apeSwapLPHandler.deployed();
-      await apeSwapLPHandler.addOrUpdateProtocolSlippage("2500");
-
+      await priceOracle.updateOracleExpirationThreshold("90000");
       accounts = await ethers.getSigners();
       [
         owner,
@@ -139,7 +115,7 @@ describe.only("Tests for MixedIndex", () => {
         ...addrs
       ] = accounts;
 
-      iaddress = await tokenAddresses(priceOracle, true);
+      iaddress = await tokenAddresses();
 
       const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
 
@@ -152,11 +128,12 @@ describe.only("Tests for MixedIndex", () => {
           "3000", // max performance fee
           "500",
           "500",
-          "10000000000000000",
-          "500000000000000000000",
+          "3000000000000000000",
+          "120000000000000000000000",
           treasury.address,
           addresses.WETH_Address,
           "1",
+          15,
         ],
         { kind: "uups" },
       );
@@ -395,8 +372,8 @@ describe.only("Tests for MixedIndex", () => {
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
             _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "500000000000000000000",
-            _minInvestmentAmount: "10000000000000000",
+            _maxInvestmentAmount: "120000000000000000000000",
+            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },
@@ -407,8 +384,8 @@ describe.only("Tests for MixedIndex", () => {
       const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -428,6 +405,7 @@ describe.only("Tests for MixedIndex", () => {
       exchange = await ethers.getContractAt(Exchange__factory.abi, indexInfo.exchangeHandler);
       accessController = await ethers.getContractAt(AccessController__factory.abi, await indexSwap.accessController());
       console.log(await indexSwap.callStatic.accessController());
+      metaAggregator = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo.metaAggregator);
     });
 
     describe("Mixed Protocols", async function () {
@@ -445,6 +423,67 @@ describe.only("Tests for MixedIndex", () => {
         )
           .to.be.revertedWithCustomError(indexSwap, "InvalidWeights")
           .withArgs("10000");
+      });
+
+      it("Initialize should fail if the number of tokens exceed the max limit set during deployment (current = 15)", async () => {
+        await expect(
+          indexSwap.initToken(
+            [
+              iaddress.wbnbAddress,
+              iaddress.busdAddress,
+              iaddress.ethAddress,
+              iaddress.daiAddress,
+              iaddress.btcAddress,
+              iaddress.dogeAddress,
+              addresses.vETH_Address,
+              addresses.vBTC_Address,
+              addresses.vBNB_Address,
+              addresses.vDAI_Address,
+              addresses.vDOGE_Address,
+              addresses.vLINK_Address,
+              addresses.Cake_BUSDLP_Address,
+              addresses.Cake_WBNBLP_Address,
+              addresses.WBNB_BUSDLP_Address,
+              addresses.ADA_WBNBLP_Address,
+              addresses.BAND_WBNBLP_Address,
+            ],
+            [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 2000, 3000, 2000, 2000],
+          ),
+        ).to.be.revertedWithCustomError(indexSwap, "TokenCountOutOfLimit");
+      });
+
+      it("should retrieve the current max asset limit from the TokenRegistry", async () => {
+        expect(await tokenRegistry.getMaxAssetLimit()).to.equal(15);
+      });
+
+      it("should update the max asset limit to 10 in the TokenRegistry", async () => {
+        await tokenRegistry.setMaxAssetLimit(10);
+      });
+
+      it("should retrieve the current max asset limit from the TokenRegistry", async () => {
+        expect(await tokenRegistry.getMaxAssetLimit()).to.equal(10);
+      });
+
+      it("Initialize should fail if the number of tokens exceed the max limit set by the Registry (current = 10)", async () => {
+        await expect(
+          indexSwap.initToken(
+            [
+              iaddress.wbnbAddress,
+              iaddress.busdAddress,
+              iaddress.ethAddress,
+              iaddress.daiAddress,
+              iaddress.btcAddress,
+              iaddress.dogeAddress,
+              addresses.vETH_Address,
+              addresses.vBTC_Address,
+              addresses.vBNB_Address,
+              addresses.vDAI_Address,
+              addresses.vDOGE_Address,
+              addresses.vLINK_Address,
+            ],
+            [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 4000, 5000],
+          ),
+        ).to.be.revertedWithCustomError(indexSwap, "TokenCountOutOfLimit");
       });
 
       it("Initialize IndexFund Tokens", async () => {
@@ -473,38 +512,40 @@ describe.only("Tests for MixedIndex", () => {
         );
       });
 
-      it("Invest 0.01 BNB should not revert , if investing token is not initialized", async () => {
+      it("Invest 0.16 BNB should not revert , if investing token is not initialized", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
+        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         console.log("indexSupplyBefore", indexSupplyBefore);
-        let balanceBefore;
-        // for(let i = 0 ; i < indexSwap.getTokens(); i++){
-
-        // }
         await indexSwap.investInFund(
           {
             _slippage: ["200", "200", "200"],
             _lpSlippage: ["800", "800", "800"],
-            _to: owner.address,
-            _tokenAmount: "10000000000000000",
+            _tokenAmount: "167352683749194728",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
           },
           {
-            value: "10000000000000000",
+            value: "167352683749194728",
           },
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
-        console.log(indexSupplyAfter);
-
+        // console.log(indexSupplyAfter);
+        await exchange.on("returnedUninvestedFunds", (_to: any, _token: any, _balance: any, _time: any) => {
+          expect(owner.address).to.be.equal(_to);
+          expect(Number(_balance)).to.be.greaterThan(0);
+        });
+        const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
+        const exchangeBalance = await provider.getBalance(exchange.address);
+        expect(Number(exchangeBalance)).to.be.equal(0);
+        expect(Number(CoolDownAfter)).to.be.greaterThan(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Invest 10BUSD should not revert , if investing token is not initialized", async () => {
+      it("Invest 10BUSD should revert , if investing token is not initialized", async () => {
         await expect(
           indexSwap.investInFund({
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "10000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.busdAddress,
@@ -525,20 +566,11 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Invest 0.1BNB into Top10 fund should fail if LP slippage is invalid", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-        const vETHBalanceBefore = await VBep20Interface.balanceOf(indexSwap.vault());
-
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        // console.log("0.1bnb before", indexSupplyBefore);
         await expect(
           indexSwap.investInFund(
             {
-              _slippage: ["100", "100", "100"],
-              _lpSlippage: ["2600", "2600", "2600"],
-              _to: owner.address,
+              _slippage: ["500", "500", "500"],
+              _lpSlippage: ["2800", "2800", "2800"],
               _tokenAmount: "100000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -547,27 +579,18 @@ describe.only("Tests for MixedIndex", () => {
               value: "100000000000000000",
             },
           ),
-        ).to.be.revertedWith("Invalid LP Slippage!");
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log("0.1bnb after:", indexSupplyAfter);
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
+        ).to.be.revertedWithCustomError(biSwapLPHandler, "InvalidLPSlippage");
       });
 
       it("Invest 0.1BNB into Top10 fund", async () => {
-        const VBep20Interface = await ethers.getContractAt(
-          "VBep20Interface",
-          "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
-        );
-        const vETHBalanceBefore = await VBep20Interface.balanceOf(indexSwap.vault());
-
+        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("0.1bnb before", indexSupplyBefore);
+        console.log("owner address", owner.address);
         await indexSwap.investInFund(
           {
             _slippage: ["100", "100", "100"],
             _lpSlippage: ["800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -578,13 +601,15 @@ describe.only("Tests for MixedIndex", () => {
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log("0.1bnb after:", indexSupplyAfter);
-
+        const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
+        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
       it("Invest 10BUSD into Top10 fund", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const busdtoken = ERC20.attach(iaddress.busdAddress);
         const ethtoken = ERC20.attach(iaddress.ethAddress);
         const btctoken = ERC20.attach(iaddress.btcAddress);
@@ -597,24 +622,25 @@ describe.only("Tests for MixedIndex", () => {
           });
 
         // console.log("swap done");
-        await busdtoken.approve(indexSwap.address, "10000000000000000000");
+        await busdtoken.approve(indexSwap.address, "19826472847483927477");
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("10busd before", indexSupplyBefore);
-        // console.log("vault eth balance before", await ethtoken.balanceOf(indexSwap.vault()));
-        // console.log("vault bnb balance before", await wbnbtoken.balanceOf(indexSwap.vault()));
+
         await indexSwap.investInFund({
           _slippage: ["200", "200", "200"],
           _lpSlippage: ["800", "800", "800"],
-          _to: owner.address,
-          _tokenAmount: "10000000000000000000",
+          _tokenAmount: "19826472847483927477",
           _swapHandler: swapHandler.address,
           _token: iaddress.busdAddress,
         });
         const indexSupplyAfter = await indexSwap.totalSupply();
+        const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
+        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         // console.log("10BUSD After", indexSupplyAfter);
-        // console.log("vault eth balance after", await ethtoken.balanceOf(indexSwap.vault()));
-        // console.log("vault bnb balance after", await wbnbtoken.balanceOf(indexSwap.vault()));
-
+        await exchange.on("returnedUninvestedFunds", (_to: any, _token: any, _balance: any, _time: any) => {
+          expect(owner.address).to.be.equal(_to);
+          expect(Number(_balance)).to.be.greaterThan(0);
+        });
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
@@ -626,7 +652,6 @@ describe.only("Tests for MixedIndex", () => {
             {
               _slippage: ["200", "200", "200"],
               _lpSlippage: ["200", "200", "200"],
-              _to: owner.address,
               _tokenAmount: "10000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -649,7 +674,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["500", "500", "500"],
             _lpSlippage: ["800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "2000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -675,7 +699,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["700", "700", "700"],
             _lpSlippage: ["800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -698,7 +721,6 @@ describe.only("Tests for MixedIndex", () => {
             {
               _slippage: ["200", "200", "200"],
               _lpSlippage: ["200", "200", "200"],
-              _to: owner.address,
               _tokenAmount: "1000000000000000000",
               _swapHandler: swapHandler.address,
               _token: iaddress.wbnbAddress,
@@ -853,7 +875,7 @@ describe.only("Tests for MixedIndex", () => {
           }),
         )
           .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
-          .withArgs("10000000000000000");
+          .withArgs("3000000000000000000");
       });
 
       it("should fail withdraw when balance falls below min investment amount (multi asset)", async () => {
@@ -872,7 +894,7 @@ describe.only("Tests for MixedIndex", () => {
           }),
         )
           .to.be.revertedWithCustomError(indexSwap, "BalanceCantBeBelowVelvetMinInvestAmount")
-          .withArgs("10000000000000000");
+          .withArgs("3000000000000000000");
       });
 
       it("should withdraw fund and burn index token successfully", async () => {
@@ -883,8 +905,8 @@ describe.only("Tests for MixedIndex", () => {
 
         txObject = await indexSwap.withdrawFund({
           tokenAmount: AMOUNT,
-          _slippage: ["200", "800", "200", "200"],
-          _lpSlippage: ["200", "200", "200", "200"],
+          _slippage: ["400", "800", "400", "400"],
+          _lpSlippage: ["700", "700", "700", "700"],
           isMultiAsset: false,
           _swapHandler: swapHandler.address,
           _token: iaddress.wbnbAddress,
@@ -901,7 +923,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["300", "300", "300", "300"],
             _lpSlippage: ["200", "200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -922,7 +943,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["300", "300", "300", "300"],
             _lpSlippage: ["200", "200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -943,7 +963,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["300", "300", "300", "300"],
             _lpSlippage: ["800", "800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -964,7 +983,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["700", "700", "700", "700"],
             _lpSlippage: ["800", "800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1009,7 +1027,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["700", "900", "700", "700"],
             _lpSlippage: ["800", "800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,
@@ -1030,7 +1047,6 @@ describe.only("Tests for MixedIndex", () => {
           {
             _slippage: ["700", "900", "700", "700"],
             _lpSlippage: ["800", "800", "800", "800"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler.address,
             _token: iaddress.wbnbAddress,

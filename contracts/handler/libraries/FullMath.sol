@@ -3,6 +3,7 @@ pragma solidity 0.8.16;
 
 // taken from https://medium.com/coinmonks/math-in-solidity-part-3-percents-and-proportions-4db014e080b1
 // license is CC-BY-4.0
+import {ErrorLibrary} from "contracts/library/ErrorLibrary.sol";
 library FullMath {
   function fullMul(uint256 x, uint256 y) internal pure returns (uint256 l, uint256 h) {
     uint256 mm = mulmod(x, y, type(uint).max);
@@ -37,7 +38,8 @@ library FullMath {
 
     if (h == 0) return l / d;
 
-    require(h < d, "FullMath: FULLDIV_OVERFLOW");
+    if(h >= d)
+      revert ErrorLibrary.FULLDIV_OVERFLOW();
     return fullDiv(l, h, d);
   }
 }

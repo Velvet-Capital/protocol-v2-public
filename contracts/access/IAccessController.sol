@@ -3,8 +3,8 @@
 /**
  * @title AccessController for the Index
  * @author Velvet.Capital
- * @notice You can use this contract to specify and grant different roles
- * @dev This contract includes functionalities:
+ * @notice Interface to specify and grant different roles
+ * @dev Functionalities included:
  *      1. Checks if an address has role
  *      2. Grant different roles to addresses
  */
