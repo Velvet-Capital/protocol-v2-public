@@ -6,7 +6,6 @@ import { ethers, upgrades } from "hardhat";
 import {
   tokenAddresses,
   IAddresses,
-  RebalancingDeploy,
   indexSwapLibrary,
   baseHandler,
   venusHandler,
@@ -122,23 +121,16 @@ describe.only("Tests for MixedIndex", () => {
       const registry = await upgrades.deployProxy(
         TokenRegistry,
         [
-          "2500", // protocol fee
-          "30", // protocolFeeBottomConstraint
-          "1000", // max asset manager fee
-          "3000", // max performance fee
-          "500",
-          "500",
           "3000000000000000000",
           "120000000000000000000000",
           treasury.address,
-          addresses.WETH_Address,
-          "1",
-          15,
+          addresses.WETH_Address
         ],
         { kind: "uups" },
       );
 
       tokenRegistry = TokenRegistry.attach(registry.address);
+      await tokenRegistry.setCoolDownPeriod("1");
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -290,37 +282,22 @@ describe.only("Tests for MixedIndex", () => {
       tokenRegistry.addNonDerivative(wombatHandler.address);
 
       let whitelistedTokens = [
-        iaddress.wbnbAddress,
         iaddress.busdAddress,
-        iaddress.ethAddress,
-        iaddress.daiAddress,
         iaddress.btcAddress,
+        iaddress.ethAddress,
+        iaddress.wbnbAddress,
         iaddress.dogeAddress,
-        addresses.vETH_Address,
-        addresses.vBTC_Address,
-        addresses.vBNB_Address,
-        addresses.vDAI_Address,
-        addresses.vDOGE_Address,
-        addresses.vLINK_Address,
+        iaddress.daiAddress,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
-        addresses.WBNB_BUSDLP_Address,
-        addresses.ADA_WBNBLP_Address,
-        addresses.BAND_WBNBLP_Address,
-        addresses.DOT_WBNBLP_Address,
-        addresses.BSwap_BUSDT_BUSDLP_Address,
-        addresses.BSwap_BUSDT_WBNBLP_Address,
-        addresses.BSwap_WBNB_BUSDLP_Address,
-        addresses.BSwap_BTC_WBNBLP_Address,
-        addresses.BSwap_ETH_BTCLP_Address,
-        addresses.ApeSwap_ETH_BTCB_Address,
-        addresses.ibBNB_Address,
-        addresses.ibBUSD_Address,
-        addresses.ibBTCB_Address,
-        addresses.MAIN_LP_DAI,
         addresses.MAIN_LP_BUSD,
-        addresses.mooBTCBUSDLP,
+        addresses.MAIN_LP_DAI,
+        addresses.SIDE_LP_BUSD,
         addresses.LP_BNBx,
+        addresses.BSwap_WBNB_BUSDLP_Address,
+        addresses.ApeSwap_ETH_BTCB_Address,
+        addresses.BSwap_BTC_WBNBLP_Address,
+        addresses.ApeSwap_WBNB_BUSD_Address,
       ];
       await tokenRegistry.enablePermittedTokens(
         [iaddress.busdAddress, iaddress.wbnbAddress, iaddress.ethAddress, iaddress.daiAddress],
@@ -370,10 +347,7 @@ describe.only("Tests for MixedIndex", () => {
             _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
-            _tokenRegistry: tokenRegistry.address,
-            _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
+            _tokenRegistry: tokenRegistry.address
           },
         ],
         { kind: "uups" },
@@ -666,6 +640,12 @@ describe.only("Tests for MixedIndex", () => {
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
+
+      it("Should change expectedRangeDecimal", async () => {
+        await tokenRegistry.setExceptedRangeDecimal("10000");
+        expect(await tokenRegistry.exceptedRangeDecimal()).to.be.equal(Number(10000));
+      });
+
 
       it("Invest 2BNB into Top10 fund", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();

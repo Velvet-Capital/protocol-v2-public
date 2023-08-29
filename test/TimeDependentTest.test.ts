@@ -56,7 +56,7 @@ var chai = require("chai");
 //use default BigNumber
 chai.use(require("chai-bignumber")());
 
-describe.only("Tests for IndexFactory", () => {
+describe.only("Tests for TimeDependent", () => {
   let iaddress: IAddresses;
   let accounts;
   // let priceOracle: PriceOracle;
@@ -155,23 +155,16 @@ describe.only("Tests for IndexFactory", () => {
       const registry = await upgrades.deployProxy(
         TokenRegistry,
         [
-          "2500", // protocol fee
-          "30", // protocolFeeBottomConstraint
-          "1000", // max asset manager fee
-          "3000", // max performance fee
-          "500",
-          "500",
-          "10000000000000000",
-          "500000000000000000000",
+          "3000000000000000000",
+          "120000000000000000000000",
           treasury.address,
-          addresses.WETH_Address,
-          "1",
-          15
+          addresses.WETH_Address
         ],
         { kind: "uups" },
       );
 
       tokenRegistry = TokenRegistry.attach(registry.address);
+      await tokenRegistry.setCoolDownPeriod("1");
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -472,9 +465,6 @@ describe.only("Tests for IndexFactory", () => {
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
-            _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "500000000000000000000",
-            _minInvestmentAmount: "10000000000000000",
           },
         ],
         { kind: "uups" },
@@ -483,60 +473,45 @@ describe.only("Tests for IndexFactory", () => {
       indexFactory = IndexFactory.attach(indexFactoryInstance.address);
 
       let whitelistedTokens = [
-        iaddress.busdAddress,
-        iaddress.btcAddress,
-        iaddress.ethAddress,
-        iaddress.wbnbAddress,
-        iaddress.dogeAddress,
-        iaddress.daiAddress,
-        addresses.vETH_Address,
         addresses.vBTC_Address,
-        addresses.vBNB_Address,
-        addresses.vDAI_Address,
-        addresses.vDOGE_Address,
-        addresses.vLINK_Address,
-        addresses.Cake_BUSDLP_Address,
-        addresses.Cake_WBNBLP_Address,
-        addresses.WBNB_BUSDLP_Address,
-        addresses.ADA_WBNBLP_Address,
-        addresses.BAND_WBNBLP_Address,
-        addresses.DOT_WBNBLP_Address,
-        addresses.BSwap_BUSDT_BUSDLP_Address,
-        addresses.BSwap_BUSDT_WBNBLP_Address,
-        addresses.BSwap_WBNB_BUSDLP_Address,
-        addresses.BSwap_BTC_WBNBLP_Address,
-        addresses.BSwap_ETH_BTCLP_Address,
-        addresses.ibBNB_Address,
-        addresses.ibBUSD_Address,
-        addresses.ibBTCB_Address,
-        addresses.MAIN_LP_BUSD,
-        addresses.mooVenusBNB,
-        addresses.mooValasBTCB,
+          addresses.vETH_Address,
+          addresses.vBNB_Address,
+          addresses.vDOGE_Address,
+          addresses.vDAI_Address,
+          iaddress.busdAddress,
+          iaddress.btcAddress,
+          iaddress.ethAddress,
+          iaddress.wbnbAddress,
+          iaddress.dogeAddress,
+          iaddress.daiAddress,
+          addresses.USDT,
+          addresses.Cake_BUSDLP_Address,
+          addresses.Cake_WBNBLP_Address,
+          addresses.MAIN_LP_BUSD,
+          addresses.mooBTCBUSDLP,
+          addresses.MAIN_LP_DAI,
+          addresses.oBNB,
+          addresses.BSwap_WBNB_BUSDLP_Address,
+          addresses.mooBTCBUSDLP,
+          addresses.ibBNB_Address,
+          addresses.ibBNB_Address,
+          addresses.vBNB_Address,
+          addresses.BSwap_BTC_WBNBLP_Address,
+          addresses.DOGE_WBNBLP_Address,
+          addresses.BSwap_DOGE_WBNBLPAddress,
+          addresses.ApeSwap_DOGE_WBNB_Address,
+          addresses.mooDOGEWBNB,
+          addresses.mooValasBUSD,
+          addresses.mooVenusBNB,
+          addresses.mooValasBTCB,
       ];
-
-      await assetManagerConfig.init({
-        _managementFee: "200",
-        _performanceFee: "2500",
-        _entryFee: "100",
-        _exitFee: "100",
-        _minInvestmentAmount: "10000000000000000",
-        _maxInvestmentAmount: "500000000000000000000",
-        _tokenRegistry: tokenRegistry.address,
-        _accessController: accessController.address,
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: whitelistedTokens,
-        _publicPortfolio: true,
-        _transferable: true,
-        _transferableToPublic: true,
-        _whitelistTokens: false,
-      });
 
       console.log("indexFactory address:", indexFactory.address);
       const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -553,8 +528,8 @@ describe.only("Tests for IndexFactory", () => {
         {
           name: "INDEXL",
           symbol: "IDX",
-          maxIndexInvestmentAmount: "500000000000000000000",
-          minIndexInvestmentAmount: "10000000000000000",
+          maxIndexInvestmentAmount: "120000000000000000000000",
+          minIndexInvestmentAmount: "3000000000000000000",
           _managementFee: "200",
           _performanceFee: "2500",
           _entryFee: "100",
@@ -573,8 +548,8 @@ describe.only("Tests for IndexFactory", () => {
       const indexFactoryCreate3 = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "0",
         _performanceFee: "0",
         _entryFee: "0",
@@ -590,8 +565,8 @@ describe.only("Tests for IndexFactory", () => {
       const indexFactoryCreate4 = await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
-        maxIndexInvestmentAmount: "500000000000000000000",
-        minIndexInvestmentAmount: "10000000000000000",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
         _managementFee: "200",
         _performanceFee: "2500",
         _entryFee: "0",
@@ -824,13 +799,24 @@ describe.only("Tests for IndexFactory", () => {
           const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
           const assetManagerConfig = AssetManagerConfig.attach(config);
           await assetManagerConfig.proposeNewManagementFee("150");
+          expect(await assetManagerConfig.newManagementFee()).to.be.equal(150);
         });
 
-        it("Asset manager should propose new management fee", async () => {
+        it("Asset manager should propose new performance fee", async () => {
           const config = await indexSwap.iAssetManagerConfig();
           const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
           const assetManagerConfig = AssetManagerConfig.attach(config);
           await assetManagerConfig.proposeNewPerformanceFee("150");
+          expect(await assetManagerConfig.newPerformanceFee()).to.be.equal(150);
+        });
+
+        it("Asset manager should propose new entry and exit fee", async () => {
+          const config = await indexSwap.iAssetManagerConfig();
+          const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+          const assetManagerConfig = AssetManagerConfig.attach(config);
+          await assetManagerConfig.proposeNewEntryAndExitFee("100","100");
+          expect(await assetManagerConfig.newEntryFee()).to.be.equal(100);
+          expect(await assetManagerConfig.newExitFee()).to.be.equal(100);
         });
   
         it("Asset manager should be able to update management fee after 28 days passed", async () => {
@@ -840,13 +826,24 @@ describe.only("Tests for IndexFactory", () => {
           const assetManagerConfig = AssetManagerConfig.attach(config);
   
           await assetManagerConfig.updateManagementFee();
+          expect(await assetManagerConfig.managementFee()).to.be.equal(150);
         });
   
-        it("Asset manager should be able to update management fee after 28 days passed", async () => {
+        it("Asset manager should be able to update performance fee after 28 days passed", async () => {
           const config = await indexSwap.iAssetManagerConfig();
           const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
           const assetManagerConfig = AssetManagerConfig.attach(config);
           await assetManagerConfig.updatePerformanceFee();
+          expect(await assetManagerConfig.performanceFee()).to.be.equal(150);
+        });
+
+        it("Asset manager should be able to update entry fee after 28 days passed", async () => {
+          const config = await indexSwap.iAssetManagerConfig();
+          const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+          const assetManagerConfig = AssetManagerConfig.attach(config);
+          await assetManagerConfig.updateEntryAndExitFee();
+          expect(await assetManagerConfig.entryFee()).to.be.equal(100);
+          expect(await assetManagerConfig.exitFee()).to.be.equal(100);
         });
 
         // Time Increased For Claim Reward

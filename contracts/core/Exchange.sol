@@ -45,14 +45,13 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
   IPriceOracle internal oracle;
   ITokenRegistry internal tokenRegistry;
   address internal WETH;
-  address internal zeroAddress;
 
   constructor() {
     _disableInitializers();
   }
 
-  event TokensClaimed(uint256 indexed time, address indexed _index, address[] _tokens);
-  event returnedUninvestedFunds(address indexed _to, address _token, uint256 indexed _balance, uint256 indexed _time);
+  event TokensClaimed(address indexed _index, address[] _tokens);
+  event returnedUninvestedFunds(address indexed _to, address _token, uint256 indexed _balance);
 
   /**
    * @notice This function is used to init the Exchange while deployment
@@ -69,11 +68,9 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
   ) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
+    __ReentrancyGuard_init();
     if (
-      _accessController == zeroAddress ||
-      _module == zeroAddress ||
-      _oracle == zeroAddress ||
-      _tokenRegistry == zeroAddress
+      _accessController == address(0) || _module == address(0) || _oracle == address(0) || _tokenRegistry == address(0)
     ) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -119,12 +116,12 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
 
       (bytes memory callData, address callAddress) = handler.getClaimTokenCalldata(_token, getVault(_index));
 
-      if (callAddress != zeroAddress) {
+      if (callAddress != address(0)) {
         safe.executeWallet(callAddress, callData);
       }
     }
 
-    emit TokensClaimed(block.timestamp, address(_index), _tokens);
+    emit TokensClaimed(address(_index), _tokens);
   }
 
   /**
@@ -504,6 +501,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
           if (swapAmount == 0) {
             revert ErrorLibrary.ZeroBalanceAmount();
           }
+          swapResult[i] = swapAmount;
           TransferHelper.safeTransfer(underlyingToken, to, swapAmount);
         } else if (underlyingToken == WETH) {
           swapAmount = address(this).balance;
@@ -635,7 +633,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     uint256[] calldata _buyAmount,
     uint256 balanceBefore,
     address _toUser
-  ) external virtual returns (uint256 investedAmountAfterSlippage) {
+  ) external virtual onlyIndexManager returns (uint256 investedAmountAfterSlippage) {
     uint256 underlyingIndex;
     uint256 _mintedAmount;
     for (uint256 i = 0; i < _tokens.length; i++) {
@@ -766,8 +764,8 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    * @param userAmount Amount of the token passed to be validated
    * @param underlyingLen Lenght of the underlying token array
    */
-  function validateAmount(uint256 expectedAmount, uint256 userAmount, uint256 underlyingLen) internal pure {
-    uint256 exceptedRangeDecimal = 10 ** 6;
+  function validateAmount(uint256 expectedAmount, uint256 userAmount, uint256 underlyingLen) internal view {
+    uint256 exceptedRangeDecimal = tokenRegistry.exceptedRangeDecimal();
     uint256[] memory diff = new uint256[](underlyingLen);
 
     if (underlyingLen > 1) {
@@ -796,12 +794,12 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     if (_token != WETH) {
       TransferHelper.safeTransfer(_token, _to, _balance);
     } else {
-      (bool success, ) = payable(_to).call{value: _balance}("");
+      (bool success, ) = payable(_to).call{value: _balance, gas: 5000}("");
       if (!success) {
         revert ErrorLibrary.ETHTransferFailed();
       }
     }
-    emit returnedUninvestedFunds(_to, _token, _balance, block.timestamp);
+    emit returnedUninvestedFunds(_to, _token, _balance);
   }
 
   /**

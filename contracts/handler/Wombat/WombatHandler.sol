@@ -40,9 +40,8 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
 
   IPriceOracle internal _oracle;
 
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
-    uint256 time,
     address indexed user,
     address indexed token,
     uint256 amount,
@@ -103,7 +102,7 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
 
     _returnDust(address(underlyingToken), user);
 
-    emit Deposit(block.timestamp, msg.sender, _lpAsset, _amount, _to);
+    emit Deposit(msg.sender, _lpAsset, _amount, _to);
 
     (uint256 _potentialWithdrawalAmount, ) = _pool.quotePotentialWithdraw(address(underlyingToken), _mintedAmount);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _potentialWithdrawalAmount);
@@ -145,7 +144,7 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
         block.timestamp
       );
     }
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**

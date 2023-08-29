@@ -170,7 +170,8 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
     }
     uint fairLPPrice = IPriceOracle(_oracle).getPriceForOneTokenInUSD(_token);
 
-    finalLPPrice = (fairLPPrice * _balance) / (10 ** 18);
+    uint256 _tokenDecimal = IERC20Metadata(_token).decimals();
+    finalLPPrice = (fairLPPrice * _balance) / (10 ** _tokenDecimal);
   }
 
   /**

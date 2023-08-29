@@ -30,15 +30,8 @@ import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 contract AlpacaHandler is IHandler {
   IPriceOracle internal _oracle;
 
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256 amount, address indexed to);
-  event Redeem(
-    uint256 time,
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Deposit(address indexed user, address indexed token, uint256 amount, address indexed to);
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _priceOracle) {
     require(_priceOracle != address(0), "Oracle having zero address");
@@ -80,7 +73,7 @@ contract AlpacaHandler is IHandler {
       uint256 yBalance = yieldToken.balanceOf(address(this));
       TransferHelper.safeTransfer(_yieldAsset, _to, yBalance);
     }
-    emit Deposit(block.timestamp, msg.sender, _yieldAsset, _amount[0], _to);
+    emit Deposit(msg.sender, _yieldAsset, _amount[0], _to);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);
   }
 
@@ -110,7 +103,7 @@ contract AlpacaHandler is IHandler {
         TransferHelper.safeTransfer(address(underlyingToken), inputData._to, tokenAmount);
       }
     }
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**

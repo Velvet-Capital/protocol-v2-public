@@ -18,8 +18,6 @@
 
 pragma solidity 0.8.16;
 
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
@@ -30,15 +28,8 @@ import {FunctionParameters} from "../../FunctionParameters.sol";
 import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
 contract BeefyHandler is IHandler {
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
-  event Redeem(
-    uint256 time,
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   IPriceOracle internal _oracle;
   address internal constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
@@ -87,7 +78,7 @@ contract BeefyHandler is IHandler {
         TransferHelper.safeTransfer(_mooAsset, _to, assetBalance);
       }
     }
-    emit Deposit(block.timestamp, msg.sender, _mooAsset, _amount, _to);
+    emit Deposit(msg.sender, _mooAsset, _amount, _to);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);
   }
 
@@ -117,7 +108,7 @@ contract BeefyHandler is IHandler {
         TransferHelper.safeTransfer(address(underlyingToken), inputData._to, tokenAmount);
       }
     }
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**

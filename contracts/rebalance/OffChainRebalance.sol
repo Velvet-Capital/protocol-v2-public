@@ -38,7 +38,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   address internal WETH;
   address internal vault;
   address internal _contract;
-  address internal zeroAddress;
 
   //Used to store sellToken address
   address[] internal sellTokensToSwap;
@@ -54,9 +53,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   mapping(address => bool) public sellTokensData;
 
   enum Steps {
+    None,
     FirstEnable,
-    SecondSell,
-    None
+    SecondSell
   }
   Steps internal step;
   event EnableRebalance(uint96[] _newWeights);
@@ -95,14 +94,15 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   ) external initializer {
     __Ownable_init();
     __UUPSUpgradeable_init();
+    __ReentrancyGuard_init();
     if (
-      _index == zeroAddress ||
-      _accessController == zeroAddress ||
-      _exchange == zeroAddress ||
-      _tokenRegistry == zeroAddress ||
-      _assetManagerConfig == zeroAddress ||
-      _vault == zeroAddress ||
-      _aggregator == zeroAddress
+      _index == address(0) ||
+      _accessController == address(0) ||
+      _exchange == address(0) ||
+      _tokenRegistry == address(0) ||
+      _assetManagerConfig == address(0) ||
+      _vault == address(0) ||
+      _aggregator == address(0)
     ) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -140,6 +140,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   function enableRebalance(
     FunctionParameters.EnableRebalanceData memory inputData
   ) external virtual nonReentrant onlyAssetManager {
+    if (Steps.None != step) {
+      revert ErrorLibrary.InvalidExecution();
+    }
     RebalanceLibrary.validateEnableRebalance(index, tokenRegistry, getRedeemed());
     //Keeping track of oldWeights and OldTokens for further use
     address[] memory _tokens = setRebalanceDataAndPause();
@@ -162,13 +165,16 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     uint96[] memory _newWeights,
     uint256[] calldata _lpSlippage
   ) public virtual nonReentrant onlyAssetManager {
+    if (Steps.None != step) {
+      revert ErrorLibrary.InvalidExecution();
+    }
     uint256 newTokenLength = _newTokens.length;
     uint256 oldTokensLength = getTokens().length;
     if (_newWeights.length != newTokenLength) {
       revert ErrorLibrary.LengthsDontMatch();
     }
     uint256 length = oldTokensLength > newTokenLength ? oldTokensLength : newTokenLength;
-    if(_lpSlippage.length != length){
+    if (_lpSlippage.length != length) {
       revert ErrorLibrary.InvalidSlippageLength();
     }
     if (getRedeemed()) {
@@ -319,7 +325,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (Steps.SecondSell != step) {
       revert ErrorLibrary.InvalidExecution();
     }
-    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry,inputData._offChainHandler);
+    RebalanceLibrary.beforeExternalRebalance(index, tokenRegistry, inputData._offChainHandler);
     _externalRebalance(inputData, _lpSlippage);
     emit EXTERNAL_REBALANCE_COMPLETED(msg.sender);
   }
@@ -348,7 +354,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     //Looping through the decoded data ( buyTokens)
     for (uint i = 0; i < _buyTokens.length; i++) {
       address _token = _buyTokens[i];
-      if (_token != zeroAddress) {
+      if (_token != address(0)) {
         uint256 buyVal = (balance * _buyWeight[i]) / _sumWeight;
         underlyingIndex = _stake(inputData, _lpSlippage, buyVal, underlyingIndex, inputIndex, _token);
         inputIndex++;
@@ -424,6 +430,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     address offChainHandler,
     uint256[] memory lpSlippage
   ) external virtual nonReentrant onlyAssetManager {
+    if (Steps.None != step) {
+      revert ErrorLibrary.InvalidExecution();
+    }
     address[] memory tokens = getTokens();
     setPaused(true);
     validatePrimaryAndHandler(tokens, offChainHandler);
@@ -453,6 +462,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     bytes[] calldata swapData,
     address offChainHandler
   ) external virtual nonReentrant onlyAssetManager {
+    if (Steps.None != step) {
+      revert ErrorLibrary.InvalidExecution();
+    }
     setPaused(true);
     validatePrimaryAndHandler(getTokens(), offChainHandler);
     address[] memory sellTokens;
@@ -497,7 +509,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   ) internal returns (uint256) {
     for (uint256 i = 0; i < sellTokens.length; i++) {
       address _token = sellTokens[i];
-      if (_token != zeroAddress && _token != WETH) {
+      if (_token != address(0) && _token != WETH) {
         uint256 sellAmount = getBalance(_token, _contract);
         TransferHelper.safeTransfer(_token, offChainHandler, sellAmount);
         IExternalSwapHandler(offChainHandler).swap(_token, WETH, sellAmount, swapData[_index], _contract);
@@ -628,7 +640,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
    * @param weights Array of token weights
    */
   function _updateTokenListAndRecords(address[] memory tokens, uint96[] memory weights) internal {
-    index.updateTokenListAndRecords(tokens,weights);
+    index.updateTokenListAndRecords(tokens, weights);
   }
 
   /**
@@ -636,7 +648,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
    * @param tokens Array of token addresses
    * @param weights Array of token weights
    */
-  function updateRecord(address[] memory tokens, uint96[] memory weights) internal{
+  function updateRecord(address[] memory tokens, uint96[] memory weights) internal {
     index.updateRecords(tokens, weights);
   }
 

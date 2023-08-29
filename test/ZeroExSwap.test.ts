@@ -102,19 +102,13 @@ describe.only("Tests for ZeroExSwap", () => {
       tokenRegistry = await TokenRegistry.deploy();
       await tokenRegistry.deployed();
       await tokenRegistry.initialize(
-        "2500", // protocol fee
-        "30", // protocolFeeBottomConstraint
-        "1000", // max asset manager fee
-        "3000", // max performance fee
-        "500",
-        "500",
         "3000000000000000000",
         "120000000000000000000000",
         treasury.address,
-        addresses.WETH_Address,
-        "1",
-        15,
+        addresses.WETH_Address
       );
+
+      await tokenRegistry.setCoolDownPeriod("1");
 
       const Exchange = await ethers.getContractFactory("Exchange", {
         libraries: {
@@ -169,22 +163,6 @@ describe.only("Tests for ZeroExSwap", () => {
       const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
       const assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
-      await assetManagerConfig.init({
-        _managementFee: "200",
-        _performanceFee: "2500",
-        _entryFee: "0",
-        _exitFee: "0",
-        _maxInvestmentAmount: "120000000000000000000000",
-        _minInvestmentAmount: "3000000000000000000",
-        _tokenRegistry: tokenRegistry.address,
-        _accessController: accessController.address,
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: [],
-        _publicPortfolio: true,
-        _transferable: true,
-        _transferableToPublic: true,
-        _whitelistTokens: false,
-      });
 
       const IndexSwap = await ethers.getContractFactory("IndexSwap", {
         libraries: {
@@ -287,34 +265,19 @@ describe.only("Tests for ZeroExSwap", () => {
       tokenRegistry.addNonDerivative(wombatHandler.address);
 
       let whitelistedTokens = [
-        iaddress.wbnbAddress,
         iaddress.busdAddress,
-        iaddress.ethAddress,
         iaddress.btcAddress,
+        iaddress.ethAddress,
+        iaddress.wbnbAddress,
         iaddress.dogeAddress,
-        addresses.vETH_Address,
+        iaddress.daiAddress,
         addresses.vBTC_Address,
+        addresses.vETH_Address,
         addresses.vBNB_Address,
-        addresses.vDAI_Address,
         addresses.vDOGE_Address,
-        addresses.vLINK_Address,
-        addresses.qBNB,
-        addresses.qETH,
-        addresses.qUSX,
+        addresses.vDAI_Address,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
-        addresses.WBNB_BUSDLP_Address,
-        addresses.ADA_WBNBLP_Address,
-        addresses.BAND_WBNBLP_Address,
-        addresses.DOT_WBNBLP_Address,
-        addresses.BSwap_BUSDT_BUSDLP_Address,
-        addresses.BSwap_BUSDT_WBNBLP_Address,
-        addresses.BSwap_WBNB_BUSDLP_Address,
-        addresses.BSwap_BTC_WBNBLP_Address,
-        addresses.BSwap_ETH_BTCLP_Address,
-        addresses.ibBNB_Address,
-        addresses.ibBUSD_Address,
-        addresses.ibBTCB_Address,
         addresses.MAIN_LP_BUSD,
       ];
 
@@ -360,9 +323,6 @@ describe.only("Tests for ZeroExSwap", () => {
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
-            _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },
@@ -764,7 +724,7 @@ describe.only("Tests for ZeroExSwap", () => {
       it("should _revert after enable Rebalance(1st Transaction)", async () => {
         await tokenRegistry.enableExternalSwapHandler(zeroExHandler.address);
 
-        const _tokens = [addresses.vETH_Address,iaddress.wbnbAddress];
+        const _tokens = [addresses.vETH_Address, iaddress.wbnbAddress];
         const newWeights = [5500, 4500];
 
         const v = await indexSwap1.vault();
@@ -777,9 +737,11 @@ describe.only("Tests for ZeroExSwap", () => {
         }
 
         // 1. Enabling Token - Pulling from vault and redeeming the tokens
-        const tx = await offChainRebalance1.connect(nonOwner).enableRebalanceAndUpdateRecord(_tokens,newWeights,["200", "200", "200", "200", "200"]);
+        const tx = await offChainRebalance1
+          .connect(nonOwner)
+          .enableRebalanceAndUpdateRecord(_tokens, newWeights, ["200", "200", "200"]);
 
-        await offChainRebalance1.connect(nonOwner).revertEnableRebalancing(["200", "200", "200", "200", "200"]);
+        await offChainRebalance1.connect(nonOwner).revertEnableRebalancing(["200", "200", "200"]);
         var balanceAfter = [];
         var tokens = await indexSwap1.getTokens();
         const tokenLengthAfter = tokens.length;
@@ -1071,7 +1033,7 @@ describe.only("Tests for ZeroExSwap", () => {
         const newTokens = [
           "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
           "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
-          iaddress.daiAddress,
+          addresses.MAIN_LP_DAI,
         ];
         const newWeights = [3000, 1000, 6000];
         await expect(
@@ -1355,112 +1317,6 @@ describe.only("Tests for ZeroExSwap", () => {
           offChainRebalance1,
           "InvalidExecution",
         );
-      });
-
-      it("non assetManager should not be able to update portfolio to new tokens", async () => {
-        const newTokens = [iaddress.wbnbAddress];
-        const newWeights = [10000];
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-        var tokenSell = [];
-        var sellTokens = [];
-        var sellAmount = [];
-        var swapAmount = [];
-        var tokenSellSwapData = [];
-        var buyTokens = [];
-        var buyWeights = [];
-        var sumWeight;
-
-        const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
-          newTokens,
-          newWeights,
-        );
-        tokenSell = data[0];
-        sellTokens = data[1];
-        sellAmount = data[2];
-        swapAmount = data[3];
-        for (let i = 0; i < sellTokens.length; i++) {
-          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
-            if (sellTokens[i] != wbnb) {
-              const params = {
-                sellToken: sellTokens[i].toString(),
-                buyToken: wbnb,
-                sellAmount: swapAmount[i].toString(),
-                slippagePercentage: 0.1,
-                gasPrice: "2000457106",
-                gas: "200000",
-              };
-
-              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
-                headers: {
-                  "0x-api-key": process.env.ZEROX_KEY,
-                },
-              });
-              await delay(500);
-              tokenSellSwapData.push(response.data.data.toString());
-            }
-          }
-        }
-
-        for (let i = 0; i < tokenSell.length; i++) {
-          if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
-            if (tokenSell[i] != wbnb) {
-              const params = {
-                sellToken: tokenSell[i].toString(),
-                buyToken: wbnb,
-                sellAmount: sellAmount[i].toString(),
-                slippagePercentage: 0.1,
-                gasPrice: "2000457106",
-                gas: "200000",
-              };
-
-              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
-                headers: {
-                  "0x-api-key": process.env.ZEROX_KEY,
-                },
-              });
-              await delay(500);
-              tokenSellSwapData.push(response.data.data.toString());
-            }
-          }
-        }
-        await offChainRebalance.enableAndUpdatePrimaryTokens(
-          newTokens,
-          newWeights,
-          [0, 0, 0, 0, 0, 0],
-          tokenSellSwapData,
-          zeroExHandler.address,
-        );
-
-        const abiCoder = ethers.utils.defaultAbiCoder;
-        var stateData = abiCoder.decode(
-          ["address[]", "address[]", "uint[]", "uint"],
-          await offChainRebalance.updateWeightStateData(),
-        );
-
-        buyTokens = stateData[1];
-        buyWeights = stateData[2];
-        sumWeight = stateData[3];
-
-        const buyAmount = await ERC20.attach(wbnb).balanceOf(offChainRebalance.address);
-        var tokens = await indexSwap.getTokens();
-        const v = await indexSwap.vault();
-        var balanceBeforeToken = [];
-        for (let i = 0; i < tokens.length; i++) {
-          const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
-          balanceBeforeToken.push(await token2.balanceOf(v));
-        }
-
-        await expect(
-          offChainRebalance.connect(nonOwner).externalRebalance(
-            {
-              _offChainHandler: zeroExHandler.address,
-              _buyAmount: [BigNumber.from(buyAmount)],
-              _buySwapData: ["0x"],
-            },
-            ["200", "200", "200"],
-          ),
-        ).to.be.revertedWithCustomError(offChainRebalance, "CallerNotAssetManager");
       });
 
       it("should update portfolio to new tokens", async () => {
@@ -2893,6 +2749,112 @@ describe.only("Tests for ZeroExSwap", () => {
             ["200", "200", "200"],
           ),
         ).to.be.revertedWithCustomError(offChainRebalance1, "InvalidExecution");
+      });
+
+      it("non assetManager should not be able to update portfolio to new tokens", async () => {
+        const newTokens = [iaddress.wbnbAddress];
+        const newWeights = [10000];
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        var tokenSell = [];
+        var sellTokens = [];
+        var sellAmount = [];
+        var swapAmount = [];
+        var tokenSellSwapData = [];
+        var buyTokens = [];
+        var buyWeights = [];
+        var sumWeight;
+
+        const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
+          newTokens,
+          newWeights,
+        );
+        tokenSell = data[0];
+        sellTokens = data[1];
+        sellAmount = data[2];
+        swapAmount = data[3];
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != wbnb) {
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: wbnb,
+                sellAmount: swapAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+
+        for (let i = 0; i < tokenSell.length; i++) {
+          if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
+            if (tokenSell[i] != wbnb) {
+              const params = {
+                sellToken: tokenSell[i].toString(),
+                buyToken: wbnb,
+                sellAmount: sellAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        await offChainRebalance.enableAndUpdatePrimaryTokens(
+          newTokens,
+          newWeights,
+          [0, 0, 0, 0, 0, 0],
+          tokenSellSwapData,
+          zeroExHandler.address,
+        );
+
+        const abiCoder = ethers.utils.defaultAbiCoder;
+        var stateData = abiCoder.decode(
+          ["address[]", "address[]", "uint[]", "uint"],
+          await offChainRebalance.updateWeightStateData(),
+        );
+
+        buyTokens = stateData[1];
+        buyWeights = stateData[2];
+        sumWeight = stateData[3];
+
+        const buyAmount = await ERC20.attach(wbnb).balanceOf(offChainRebalance.address);
+        var tokens = await indexSwap.getTokens();
+        const v = await indexSwap.vault();
+        var balanceBeforeToken = [];
+        for (let i = 0; i < tokens.length; i++) {
+          const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
+          balanceBeforeToken.push(await token2.balanceOf(v));
+        }
+
+        await expect(
+          offChainRebalance.connect(nonOwner).externalRebalance(
+            {
+              _offChainHandler: zeroExHandler.address,
+              _buyAmount: [BigNumber.from(buyAmount)],
+              _buySwapData: ["0x"],
+            },
+            ["200", "200", "200"],
+          ),
+        ).to.be.revertedWithCustomError(offChainRebalance, "CallerNotAssetManager");
       });
     });
   });

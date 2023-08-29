@@ -20,7 +20,6 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
   uint256 internal constant MIN_FEE_MINT = 10000000000000000;
 
   event FeesToBeMinted(
-    uint256 time,
     address indexed index,
     address indexed assetManagementTreasury,
     address indexed protocolTreasury,
@@ -29,7 +28,6 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
   );
 
   event PerformanceFeeCalculated(
-    uint256 time,
     address indexed index,
     uint256 performanceFee,
     uint256 currentPrice,
@@ -37,15 +35,14 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
   );
 
   event ManagementFeeCalculated(
-    uint256 time,
     address indexed index,
     uint256 managementFee,
     uint256 protocolStreamingFee
   );
 
-  event EntryFeeCharged(uint256 time, address indexed index, uint256 entryProtocolFee, uint256 entryAssetManagerFee);
+  event EntryFeeCharged(address indexed index, uint256 entryProtocolFee, uint256 entryAssetManagerFee);
 
-  event ExitFeeCharged(uint256 time, address indexed index, uint256 exitProtocolFee, uint256 exitAssetManagerFee);
+  event ExitFeeCharged(address indexed index, uint256 exitProtocolFee, uint256 exitAssetManagerFee);
 
   IIndexSwap public index;
   IAssetManagerConfig public assetManagerConfig;
@@ -81,6 +78,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
   ) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
+    __ReentrancyGuard_init();
 
     highWatermark = 10 ** 18;
     index = IIndexSwap(_indexSwap);
@@ -105,7 +103,6 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
     _mintManagementFeeShares(assetManagerFeeToMint, _protocolFeeToMint);
 
     emit FeesToBeMinted(
-      block.timestamp,
       address(index),
       assetManagerConfig.assetManagerTreasury(),
       tokenRegistry.velvetTreasury(),
@@ -216,7 +213,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
       tokenRegistry.protocolFeeBottomConstraint() // 0.3%, TODO add to token registry
     );
 
-    emit ManagementFeeCalculated(block.timestamp, address(index), _fee, _protocolStreamingFeeMin);
+    emit ManagementFeeCalculated(address(index), _fee, _protocolStreamingFeeMin);
   }
 
   /**
@@ -240,7 +237,6 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
       assetManagerConfig.performanceFee()
     );
     emit PerformanceFeeCalculated(
-      block.timestamp,
       address(index),
       _performanceFee,
       currentPrice,
@@ -263,7 +259,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
 
     uint256 _userMintAmount = _mintAmount - protocolFee - assetManagerFee;
 
-    emit EntryFeeCharged(block.timestamp, address(index), protocolFee, assetManagerFee);
+    emit EntryFeeCharged(address(index), protocolFee, assetManagerFee);
 
     return _userMintAmount;
   }
@@ -281,7 +277,7 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
     protocolFee = _mintSharesSingle(tokenRegistry.velvetTreasury(), protocolFee);
     assetManagerFee = _mintSharesSingle(assetManagerConfig.assetManagerTreasury(), assetManagerFee);
 
-    emit ExitFeeCharged(block.timestamp, address(index), protocolFee, assetManagerFee);
+    emit ExitFeeCharged(address(index), protocolFee, assetManagerFee);
 
     return (protocolFee, assetManagerFee, protocolFee + assetManagerFee);
   }

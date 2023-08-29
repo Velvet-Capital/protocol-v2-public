@@ -199,7 +199,7 @@ interface IIndexSwap {
 
   function lastInvestmentTime(address owner) external view returns (uint256);
 
-  function checkCoolDownPeriod() external view;
+  function checkCoolDownPeriod(address _user) external view;
 
   function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external;
 

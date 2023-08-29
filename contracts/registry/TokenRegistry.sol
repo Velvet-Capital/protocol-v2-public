@@ -42,6 +42,8 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
   uint256 public protocolFee;
   uint256 public protocolFeeBottomConstraint;
 
+  uint256 public exceptedRangeDecimal;
+
   uint256 public MAX_VELVET_INVESTMENTAMOUNT;
   uint256 public MIN_VELVET_INVESTMENTAMOUNT;
 
@@ -53,56 +55,50 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   address internal WETH;
   event EnableToken(
-    uint256 time,
     address[] _oracle,
     address[] _token,
     address[] _handler,
     address[][] _rewardTokens,
     bool[] _primary
   );
-  event EnableExternalSwapHandler(uint256 time, address swapHandler);
-  event DisableExternalSwapHandler(uint256 time, address indexed swapHandler);
-  event EnablePermittedTokens(uint256 time, address[] newTokens);
-  event DisablePermittedTokens(uint256 time, address[] newTokens);
-  event EnableSwapHandlers(uint256 time, address[] handler);
-  event DisableSwapHandlers(uint256 time, address[] handler);
-  event AddNonDerivative(uint256 time, address handler);
-  event AddRewardToken(uint256 time, address[] token, address _baseHandler);
-  event RemoveRewardToken(uint256 time, address token);
-  event DisableToken(uint256 time, address token);
+  event EnableExternalSwapHandler(address swapHandler);
+  event DisableExternalSwapHandler(address indexed swapHandler);
+  event EnablePermittedTokens(address[] newTokens);
+  event DisablePermittedTokens(address[] newTokens);
+  event EnableSwapHandlers(address[] handler);
+  event DisableSwapHandlers(address[] handler);
+  event AddNonDerivative(address handler);
+  event AddRewardToken(address[] token, address _baseHandler);
+  event RemoveRewardToken(address token);
+  event DisableToken(address token);
 
   /**
    * @notice This function is used to init the Token Registry while deployment
    */
   function initialize(
-    uint256 _protocolFee,
-    uint256 _protocolFeeBottomConstraint,
-    uint256 _maxAssetManagerFee,
-    uint256 _maxPerformanceFee,
-    uint256 _maxEntryFee,
-    uint256 _maxExitFee,
     uint256 _minVelvetInvestmentAmount,
     uint256 _maxVelvetInvestmentAmount,
     address _velvetTreasury,
-    address _weth,
-    uint256 coolDownPeriod,
-    uint256 _maxAssetLimit
+    address _weth
   ) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
     if (_velvetTreasury == address(0)) {
       revert ErrorLibrary.ZeroAddressTreasury();
     }
-    if (!(_maxAssetManagerFee > 0 && _maxPerformanceFee > 0)) {
-      revert ErrorLibrary.ZeroFee();
-    }
 
-    protocolFee = _protocolFee;
-    protocolFeeBottomConstraint = _protocolFeeBottomConstraint;
-    maxManagementFee = _maxAssetManagerFee;
-    maxPerformanceFee = _maxPerformanceFee;
-    maxEntryFee = _maxEntryFee;
-    maxExitFee = _maxExitFee;
+    //25% protocolFee
+    protocolFee = 2500;
+    //0.3% contraint
+    protocolFeeBottomConstraint = 30;
+    //10% maxManagementFee
+    maxManagementFee = 1000;
+    //30% maxPerformanceFee
+    maxPerformanceFee = 3000;
+    //5% maxEntryFee
+    maxEntryFee = 500;
+    //5% maxExitFee
+    maxExitFee = 500;
 
     MIN_VELVET_INVESTMENTAMOUNT = _minVelvetInvestmentAmount;
     MAX_VELVET_INVESTMENTAMOUNT = _maxVelvetInvestmentAmount;
@@ -110,8 +106,12 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     velvetTreasury = _velvetTreasury;
 
     WETH = _weth;
-    COOLDOWN_PERIOD = coolDownPeriod;
-    maxAssetLimit = _maxAssetLimit;
+    //1day cooldownperiod
+    COOLDOWN_PERIOD = 1 days;
+    maxAssetLimit = 15;
+
+    //10^6 expectedRange
+    exceptedRangeDecimal = 1000000;
   }
 
   /**
@@ -137,8 +137,12 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     address[][] memory _rewardTokens,
     bool[] memory _primary
   ) external virtual onlyOwner {
-    if(!((_oracle.length == _token.length) && (_token.length == _handler.length) && (_handler.length == _rewardTokens.length) && (_rewardTokens.length == _primary.length)))
-      revert ErrorLibrary.IncorrectArrayLength();
+    if (
+      !((_oracle.length == _token.length) &&
+        (_token.length == _handler.length) &&
+        (_handler.length == _rewardTokens.length) &&
+        (_rewardTokens.length == _primary.length))
+    ) revert ErrorLibrary.IncorrectArrayLength();
 
     for (uint256 i = 0; i < _token.length; i++) {
       if (_oracle[i] == address(0)) {
@@ -158,9 +162,9 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
           revert ErrorLibrary.TokenNotInPriceOracle();
         }
       }
-      setTokenInfo(_token[i],_primary[i],_handler[i],true,_rewardTokens[i]);
+      setTokenInfo(_token[i], _primary[i], _handler[i], true, _rewardTokens[i]);
     }
-    emit EnableToken(block.timestamp, _oracle, _token, _handler, _rewardTokens, _primary);
+    emit EnableToken(_oracle, _token, _handler, _rewardTokens, _primary);
   }
 
   /**
@@ -168,24 +172,23 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _token Array of address of the token to be added as a reward token
    * @param _baseHandler Address of base handler of the token
    */
-  function addRewardToken(address[] memory _token, address _baseHandler) 
-     external onlyOwner {
-     for(uint i = 0; i<_token.length;i++){
-       if (_token[i] == address(0)) {
-         revert ErrorLibrary.InvalidTokenAddress();
-       }
-       if (_baseHandler == address(0)) {
-         revert ErrorLibrary.InvalidHandlerAddress();
-       }
-       address[] memory zeroAddress = new address[](1);
-       zeroAddress[0] = address(0);
-       if (!tokenInformation[_token[i]].enabled) {
-        setTokenInfo(_token[i],true,_baseHandler,false,zeroAddress);
-       }
-       isRewardToken[_token[i]] = true;
-     }
+  function addRewardToken(address[] memory _token, address _baseHandler) external onlyOwner {
+    for (uint i = 0; i < _token.length; i++) {
+      if (_token[i] == address(0)) {
+        revert ErrorLibrary.InvalidTokenAddress();
+      }
+      if (_baseHandler == address(0)) {
+        revert ErrorLibrary.InvalidHandlerAddress();
+      }
+      address[] memory zeroAddress = new address[](1);
+      zeroAddress[0] = address(0);
+      if (!tokenInformation[_token[i]].enabled) {
+        setTokenInfo(_token[i], true, _baseHandler, false, zeroAddress);
+      }
+      isRewardToken[_token[i]] = true;
+    }
 
-     emit AddRewardToken(block.timestamp, _token, _baseHandler);
+    emit AddRewardToken(_token, _baseHandler);
   }
 
   /**
@@ -193,11 +196,10 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _token Address of the token to be removed as a reward token
    */
   function removeRewardToken(address _token) external onlyOwner {
-    if(_token == address(0))
-      revert ErrorLibrary.InvalidAddress();
-    
+    if (_token == address(0)) revert ErrorLibrary.InvalidAddress();
+
     delete isRewardToken[_token];
-    emit RemoveRewardToken(block.timestamp, _token);
+    emit RemoveRewardToken(_token);
   }
 
   /**
@@ -217,7 +219,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       }
       _swapHandler[_handler[i]] = true;
     }
-    emit EnableSwapHandlers(block.timestamp, _handler);
+    emit EnableSwapHandlers(_handler);
   }
 
   /**
@@ -229,15 +231,16 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       revert ErrorLibrary.InvalidLength();
     }
     for (uint256 i = 0; i < _handler.length; i++) {
-      if (!_swapHandler[_handler[i]]) {
+      address handler = _handler[i];
+      if (!_swapHandler[handler]) {
         revert ErrorLibrary.HandlerAlreadyDisabled();
       }
-      if (_handler[i] == address(0)) {
+      if (handler == address(0)) {
         revert ErrorLibrary.InvalidAddress();
       }
-      _swapHandler[_handler[i]] = false;
+      _swapHandler[handler] = false;
     }
-    emit DisableSwapHandlers(block.timestamp, _handler);
+    emit DisableSwapHandlers(_handler);
   }
 
   /**
@@ -269,7 +272,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       revert ErrorLibrary.InvalidAddress();
     }
     nonDerivativeToken[handler] = true;
-    emit AddNonDerivative(block.timestamp, handler);
+    emit AddNonDerivative(handler);
   }
 
   /**
@@ -299,7 +302,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       revert ErrorLibrary.InvalidAddress();
     }
     tokenInformation[_token].enabled = false;
-    emit DisableToken(block.timestamp, _token);
+    emit DisableToken(_token);
   }
 
   /**
@@ -311,7 +314,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       revert ErrorLibrary.InvalidAddress();
     }
     externalSwapHandler[swapHandler] = true;
-    emit EnableExternalSwapHandler(block.timestamp, swapHandler);
+    emit EnableExternalSwapHandler(swapHandler);
   }
 
   /**
@@ -323,7 +326,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       revert ErrorLibrary.InvalidAddress();
     }
     externalSwapHandler[swapHandler] = false;
-    emit DisableExternalSwapHandler(block.timestamp, swapHandler);
+    emit DisableExternalSwapHandler(swapHandler);
   }
 
   /**
@@ -359,7 +362,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
   /**
    * @notice This function sets a list of tokens that are permitted from the registry level to be used as investment/withdrawal tokens
-   * @param _newTokens Array of token addresses to be permitted from the registry 
+   * @param _newTokens Array of token addresses to be permitted from the registry
    * @param _oracle Array of the corresponding price oracle addresses for the tokens
    */
   function enablePermittedTokens(address[] calldata _newTokens, address[] calldata _oracle) external virtual onlyOwner {
@@ -368,33 +371,34 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     for (uint256 i = 0; i < _newTokens.length; i++) {
-      TokenRecord memory tokenInfo = tokenInformation[_newTokens[i]];
+      address _token = _newTokens[i];
+      TokenRecord memory tokenInfo = tokenInformation[_token];
 
-      if (_permittedToken[_newTokens[i]]) {
+      if (_permittedToken[_token]) {
         revert ErrorLibrary.AddressAlreadyApproved();
       }
-      if (!tokenInformation[_newTokens[i]].enabled) {
+      if (!tokenInformation[_token].enabled) {
         revert ErrorLibrary.TokenNotEnabled();
       }
       if (!tokenInfo.primary) {
         revert ErrorLibrary.TokenNotPrimary();
       }
-      if (_newTokens[i] == address(0)) {
+      if (_token == address(0)) {
         revert ErrorLibrary.InvalidAddress();
       }
 
       IPriceOracle oracle = IPriceOracle(_oracle[i]);
 
-      address[] memory underlying = IHandler(tokenInfo.handler).getUnderlying(_newTokens[i]);
+      address[] memory underlying = IHandler(tokenInfo.handler).getUnderlying(_token);
       for (uint256 j = 0; j < underlying.length; j++) {
         if (!(oracle.getPriceTokenUSD18Decimals(underlying[j], 1 ether) > 0)) {
           revert ErrorLibrary.TokenNotInPriceOracle();
         }
       }
 
-      _permittedToken[_newTokens[i]] = true;
+      _permittedToken[_token] = true;
     }
-    emit EnablePermittedTokens(block.timestamp, _newTokens);
+    emit EnablePermittedTokens(_newTokens);
   }
 
   /**
@@ -406,19 +410,20 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       revert ErrorLibrary.InvalidLength();
     }
     for (uint256 i = 0; i < _tokens.length; i++) {
-      if (_tokens[i] == address(0)) {
+      address _token = _tokens[i];
+      if (_token == address(0)) {
         revert ErrorLibrary.InvalidTokenAddress();
       }
-      if (!(_permittedToken[_tokens[i]])) {
+      if (!(_permittedToken[_token])) {
         revert ErrorLibrary.AddressNotApproved();
       }
-      if (_tokens[i] == address(0)) {
+      if (_token == address(0)) {
         revert ErrorLibrary.InvalidAddress();
       }
 
-      delete _permittedToken[_tokens[i]];
+      delete _permittedToken[_token];
     }
-    emit DisablePermittedTokens(block.timestamp, _tokens);
+    emit DisablePermittedTokens(_tokens);
   }
 
   /**
@@ -436,6 +441,15 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    */
   function setProtocolPause(bool _state) external virtual onlyOwner {
     protocolPause = _state;
+  }
+
+  /**
+   * @notice This function allows us to set new expectedRangeDecimal, based on market condition
+   * @param _newRange Value of new Range
+   */
+  function setExceptedRangeDecimal(uint256 _newRange) external onlyOwner {
+    if (_newRange == 0) revert ErrorLibrary.InvalidAmount();
+    exceptedRangeDecimal = _newRange;
   }
 
   /**
@@ -486,7 +500,13 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _enabled Boolean parameter to enable the token
    * @param _rewardToken Address of the reward token associated with the token of that protocol
    */
-  function setTokenInfo(address _token, bool _primary, address _handler, bool _enabled, address[] memory _rewardToken) internal {
+  function setTokenInfo(
+    address _token,
+    bool _primary,
+    address _handler,
+    bool _enabled,
+    address[] memory _rewardToken
+  ) internal {
     tokenInformation[_token].primary = _primary;
     tokenInformation[_token].handler = _handler;
     tokenInformation[_token].enabled = _enabled;

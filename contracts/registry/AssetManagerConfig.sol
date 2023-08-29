@@ -26,9 +26,12 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
 
   uint256 public newPerformanceFee;
   uint256 public newManagementFee;
+  uint256 public newEntryFee;
+  uint256 public newExitFee;
 
   uint256 public proposedPerformanceFeeTime;
   uint256 public proposedManagementFeeTime;
+  uint256 public proposedEntryAndExitFeeTime;
 
   address public assetManagerTreasury;
 
@@ -46,20 +49,23 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   bool public transferable;
   bool public transferableToPublic;
 
-  event ProposeManagementFee(uint256 indexed time, uint256 indexed newManagementFee);
-  event ProposePerformanceFee(uint256 indexed time, uint256 indexed performanceFee);
-  event DeleteProposedManagementFee();
-  event DeleteProposedPerformanceFee();
-  event UpdateManagementFee(uint256 indexed time, uint256 indexed newManagementFee);
-  event UpdatePerformanceFee(uint256 indexed time, uint256 indexed performanceFee);
-  event SetPermittedTokens(uint256 indexed time, address[] _newTokens);
-  event RemovePermittedTokens(uint256 indexed time, address[] tokens);
-  event UpdateAssetManagerTreasury(uint256 indexed time, address treasuryAddress);
-  event AddWhitelistedUser(uint256 indexed time, address[] users);
-  event RemoveWhitelistedUser(uint256 indexed time, address[] users);
-  event AddWhitelistTokens(uint256 indexed time, address[] tokens);
-  event ChangedPortfolioToPublic(uint256 indexed time);
-  event TransferabilityUpdate(uint256 indexed time, bool _transferable, bool _publicTransfers);
+  event ProposeManagementFee(uint256 indexed newManagementFee);
+  event ProposePerformanceFee(uint256 indexed performanceFee);
+  event DeleteProposedManagementFee(address indexed user);
+  event DeleteProposedPerformanceFee(address indexed user);
+  event UpdateManagementFee(uint256 indexed newManagementFee);
+  event UpdatePerformanceFee(uint256 indexed performanceFee);
+  event SetPermittedTokens(address[] _newTokens);
+  event RemovePermittedTokens(address[] tokens);
+  event UpdateAssetManagerTreasury(address treasuryAddress);
+  event AddWhitelistedUser(address[] users);
+  event RemoveWhitelistedUser(address[] users);
+  event AddWhitelistTokens(address[] tokens);
+  event ChangedPortfolioToPublic(address indexed user);
+  event TransferabilityUpdate(bool _transferable, bool _publicTransfers);
+  event ProposeEntryAndExitFee(uint256 indexed time, uint256 indexed newEntryFee, uint256 indexed newExitFee);
+  event DeleteProposedEntryAndExitFee(uint indexed time);
+  event UpdateEntryAndExitFee(uint256 indexed time, uint256 indexed newEntryFee, uint256 indexed newExitFee);
 
   /**
    * @notice This function is used to init the assetmanager-config data while deployment
@@ -99,8 +105,9 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     transferableToPublic = initData._transferableToPublic;
 
     whitelistTokens = initData._whitelistTokens;
-
-    addTokensToWhitelist(initData._whitelistedTokens);
+    if (whitelistTokens) {
+      addTokensToWhitelist(initData._whitelistedTokens);
+    }
   }
 
   modifier onlyAssetManager() {
@@ -127,7 +134,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     }
     newManagementFee = _newManagementFee;
     proposedManagementFeeTime = block.timestamp;
-    emit ProposeManagementFee(proposedManagementFeeTime, newManagementFee);
+    emit ProposeManagementFee(newManagementFee);
   }
 
   /**
@@ -136,18 +143,21 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   function deleteProposedManagementFee() public virtual onlyAssetManager {
     proposedManagementFeeTime = 0;
     newManagementFee = 0;
-    emit DeleteProposedManagementFee();
+    emit DeleteProposedManagementFee(msg.sender);
   }
 
   /**
    * @notice This function updates the existing managementFee with newManagementFee
    */
   function updateManagementFee() public virtual onlyAssetManager {
+    if (proposedManagementFeeTime == 0) {
+      revert ErrorLibrary.NoNewFeeSet();
+    }
     if (block.timestamp < (proposedManagementFeeTime + 28 days)) {
       revert ErrorLibrary.TimePeriodNotOver();
     }
     managementFee = newManagementFee;
-    emit UpdateManagementFee(block.timestamp, managementFee);
+    emit UpdateManagementFee(managementFee);
   }
 
   /**
@@ -160,7 +170,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     }
     newPerformanceFee = _newPerformanceFee;
     proposedPerformanceFeeTime = block.timestamp;
-    emit ProposePerformanceFee(proposedPerformanceFeeTime, newPerformanceFee);
+    emit ProposePerformanceFee(newPerformanceFee);
   }
 
   /**
@@ -172,19 +182,25 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
       revert ErrorLibrary.InvalidLength();
     }
     for (uint256 i = 0; i < _newTokens.length; i++) {
-      if (_newTokens[i] == address(0)) {
+      address _newToken = _newTokens[i];
+      if (_newToken == address(0)) {
         revert ErrorLibrary.InvalidTokenAddress();
       }
-      if (!(tokenRegistry.isPermitted(_newTokens[i]))) {
+      if (!(tokenRegistry.isPermitted(_newToken))) {
         revert ErrorLibrary.TokenNotPermitted();
       }
-      if (_permittedTokens[_newTokens[i]]) {
+
+      if (_newToken == address(0)) {
+        revert ErrorLibrary.InvalidTokenAddress();
+      }
+
+      if (_permittedTokens[_newToken]) {
         revert ErrorLibrary.AddressAlreadyApproved();
       }
 
-      _permittedTokens[_newTokens[i]] = true;
+      _permittedTokens[_newToken] = true;
     }
-    emit SetPermittedTokens(block.timestamp, _newTokens);
+    emit SetPermittedTokens(_newTokens);
   }
 
   /**
@@ -196,15 +212,16 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
       revert ErrorLibrary.InvalidLength();
     }
     for (uint256 i = 0; i < _tokens.length; i++) {
-      if (_tokens[i] == address(0)) {
+      address _token = _tokens[i];
+      if (_token == address(0)) {
         revert ErrorLibrary.InvalidTokenAddress();
       }
-      if (_permittedTokens[_tokens[i]] != true) {
+      if (_permittedTokens[_token] != true) {
         revert ErrorLibrary.TokenNotApproved();
       }
-      delete _permittedTokens[_tokens[i]];
+      delete _permittedTokens[_token];
     }
-    emit RemovePermittedTokens(block.timestamp, _tokens);
+    emit RemovePermittedTokens(_tokens);
   }
 
   /**
@@ -230,7 +247,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
       }
     }
 
-    emit ChangedPortfolioToPublic(block.timestamp);
+    emit ChangedPortfolioToPublic(msg.sender);
   }
 
   /**
@@ -253,7 +270,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
         transferableToPublic = _publicTransfer;
       }
     }
-    emit TransferabilityUpdate(block.timestamp, transferable, transferableToPublic);
+    emit TransferabilityUpdate(transferable, transferableToPublic);
   }
 
   /**
@@ -262,18 +279,21 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   function deleteProposedPerformanceFee() public virtual onlyAssetManager {
     proposedPerformanceFeeTime = 0;
     newPerformanceFee = 0;
-    emit DeleteProposedPerformanceFee();
+    emit DeleteProposedPerformanceFee(msg.sender);
   }
 
   /**
    * @notice This function updates the existing performance fee with newPerformanceFee
    */
   function updatePerformanceFee() public virtual onlyAssetManager {
+    if (proposedPerformanceFeeTime == 0) {
+      revert ErrorLibrary.NoNewFeeSet();
+    }
     if (block.timestamp < (proposedPerformanceFeeTime + 28 days)) {
       revert ErrorLibrary.TimePeriodNotOver();
     }
     performanceFee = newPerformanceFee;
-    emit UpdatePerformanceFee(block.timestamp, performanceFee);
+    emit UpdatePerformanceFee(performanceFee);
   }
 
   /**
@@ -281,10 +301,9 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
    * @param _newAssetManagementTreasury New proposed address of the asset manager treasury
    */
   function updateAssetManagerTreasury(address _newAssetManagementTreasury) public virtual onlyAssetManager {
-    if(_newAssetManagementTreasury == address(0))
-      revert ErrorLibrary.InvalidAddress();
+    if (_newAssetManagementTreasury == address(0)) revert ErrorLibrary.InvalidAddress();
     assetManagerTreasury = _newAssetManagementTreasury;
-    emit UpdateAssetManagerTreasury(block.timestamp, _newAssetManagementTreasury);
+    emit UpdateAssetManagerTreasury(_newAssetManagementTreasury);
   }
 
   /**
@@ -294,11 +313,11 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   function addWhitelistedUser(address[] calldata users) public virtual onlyWhitelistManager {
     uint256 len = users.length;
     for (uint256 i = 0; i < len; i++) {
-      if(users[i] == address(0))
-        revert ErrorLibrary.InvalidAddress();
-      whitelistedUsers[users[i]] = true;
+      address _user = users[i];
+      if (_user == address(0)) revert ErrorLibrary.InvalidAddress();
+      whitelistedUsers[_user] = true;
     }
-    emit AddWhitelistedUser(block.timestamp, users);
+    emit AddWhitelistedUser(users);
   }
 
   /**
@@ -308,11 +327,10 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   function removeWhitelistedUser(address[] calldata users) public virtual onlyWhitelistManager {
     uint256 len = users.length;
     for (uint256 i = 0; i < len; i++) {
-      if(users[i] == address(0))
-        revert ErrorLibrary.InvalidAddress();
+      if (users[i] == address(0)) revert ErrorLibrary.InvalidAddress();
       whitelistedUsers[users[i]] = false;
     }
-    emit RemoveWhitelistedUser(block.timestamp, users);
+    emit RemoveWhitelistedUser(users);
   }
 
   /**
@@ -322,11 +340,52 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   function addTokensToWhitelist(address[] calldata tokens) internal virtual {
     uint256 len = tokens.length;
     for (uint256 i = 0; i < len; i++) {
-      if(tokens[i] == address(0))
-        revert ErrorLibrary.InvalidAddress();
-      whitelistedToken[tokens[i]] = true;
+      address _token = tokens[i];
+      if (_token == address(0)) revert ErrorLibrary.InvalidAddress();
+      if (!tokenRegistry.isEnabled(_token)) revert ErrorLibrary.TokenNotEnabled();
+      whitelistedToken[_token] = true;
     }
-    emit AddWhitelistTokens(block.timestamp, tokens);
+    emit AddWhitelistTokens(tokens);
+  }
+
+  /**
+   * @notice This function updates the newEntryFee and newExitFee (staging)
+   * @param _newEntryFee The new proposed entry fee (integral) value - has to be in the range of min and max fee values
+   * @param _newExitFee The new proposed exit fee (integral) value - has to be in the range of min and max fee values
+   */
+  function proposeNewEntryAndExitFee(uint256 _newEntryFee, uint256 _newExitFee) public virtual onlyAssetManager {
+    if (_newEntryFee > tokenRegistry.maxEntryFee() && _newExitFee > tokenRegistry.maxExitFee()) {
+      revert ErrorLibrary.InvalidFee();
+    }
+    newEntryFee = _newEntryFee;
+    newExitFee = _newExitFee;
+    proposedEntryAndExitFeeTime = block.timestamp;
+    emit ProposeEntryAndExitFee(proposedEntryAndExitFeeTime, newEntryFee, newExitFee);
+  }
+
+  /**
+   * @notice This function deletes the newEntryFee and newExitFee
+   */
+  function deleteProposedEntryAndExitFee() public virtual onlyAssetManager {
+    proposedEntryAndExitFeeTime = 0;
+    newEntryFee = 0;
+    newExitFee = 0;
+    emit DeleteProposedEntryAndExitFee(block.timestamp);
+  }
+
+  /**
+   * @notice This function updates the existing entryFee with newEntryFee and exitFee with newExitFee
+   */
+  function updateEntryAndExitFee() public virtual onlyAssetManager {
+    if (proposedEntryAndExitFeeTime == 0) {
+      revert ErrorLibrary.NoNewFeeSet();
+    }
+    if (block.timestamp < (proposedEntryAndExitFeeTime + 28 days)) {
+      revert ErrorLibrary.TimePeriodNotOver();
+    }
+    entryFee = newEntryFee;
+    exitFee = newExitFee;
+    emit UpdateEntryAndExitFee(block.timestamp, entryFee, exitFee);
   }
 
   /**
