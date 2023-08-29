@@ -156,19 +156,13 @@ describe.only("Tests for MetaAggregator", () => {
 
       const latestBlock = await hre.ethers.provider.getBlock("latest");
       await tokenRegistry.initialize(
-        "2500", // protocol fee
-        "30", // protocolFeeBottomConstraint
-        "1000", // max asset manager fee
-        "3000", // max performance fee
-        "500",
-        "500",
         "3000000000000000000",
         "120000000000000000000000",
         treasury.address,
-        addresses.WETH_Address,
-        "1",
-        15,
+        addresses.WETH_Address
       );
+
+      await tokenRegistry.setCoolDownPeriod("1");
 
       const Exchange = await ethers.getContractFactory("Exchange", {
         libraries: {
@@ -223,22 +217,6 @@ describe.only("Tests for MetaAggregator", () => {
       const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
       const assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
-      await assetManagerConfig.init({
-        _managementFee: "200",
-        _performanceFee: "2500",
-        _entryFee: "0",
-        _exitFee: "0",
-        _maxInvestmentAmount: "120000000000000000000000",
-        _minInvestmentAmount: "3000000000000000000",
-        _tokenRegistry: tokenRegistry.address,
-        _accessController: accessController.address,
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: [],
-        _publicPortfolio: true,
-        _transferable: true,
-        _transferableToPublic: true,
-        _whitelistTokens: false,
-      });
 
       const IndexSwap = await ethers.getContractFactory("IndexSwap", {
         libraries: {
@@ -363,35 +341,21 @@ describe.only("Tests for MetaAggregator", () => {
       tokenRegistry.addNonDerivative(wombatHandler.address);
 
       let whitelistedTokens = [
-        iaddress.wbnbAddress,
         iaddress.busdAddress,
-        iaddress.daiAddress,
-        iaddress.ethAddress,
-        iaddress.btcAddress,
-        iaddress.dogeAddress,
-        iaddress.usdtAddress,
-        addresses.vETH_Address,
-        addresses.vBTC_Address,
-        addresses.vBNB_Address,
-        addresses.vDAI_Address,
-        addresses.vDOGE_Address,
-        addresses.vLINK_Address,
-        addresses.Cake_BUSDLP_Address,
-        addresses.Cake_WBNBLP_Address,
-        addresses.WBNB_BUSDLP_Address,
-        addresses.ADA_WBNBLP_Address,
-        addresses.BAND_WBNBLP_Address,
-        addresses.DOT_WBNBLP_Address,
-        addresses.BSwap_BUSDT_BUSDLP_Address,
-        addresses.BSwap_BUSDT_WBNBLP_Address,
-        addresses.BSwap_WBNB_BUSDLP_Address,
-        addresses.BSwap_BTC_WBNBLP_Address,
-        addresses.BSwap_ETH_BTCLP_Address,
-        addresses.ibBNB_Address,
-        addresses.ibBUSD_Address,
-        addresses.ibBTCB_Address,
-        addresses.MAIN_LP_BUSD,
-        addresses.oBNB,
+          iaddress.btcAddress,
+          iaddress.ethAddress,
+          iaddress.wbnbAddress,
+          iaddress.dogeAddress,
+          iaddress.daiAddress,
+          addresses.vBNB_Address,
+          addresses.WBNB_BUSDLP_Address,
+          addresses.Cake_WBNBLP_Address,
+          addresses.BSwap_BTC_WBNBLP_Address,
+          addresses.ApeSwap_ETH_BTCB_Address,
+          addresses.ibBUSD_Address,
+          addresses.MAIN_LP_BUSD,
+          addresses.oBNB,
+          addresses.vETH_Address,
       ];
 
       let whitelist = [owner.address];
@@ -434,9 +398,6 @@ describe.only("Tests for MetaAggregator", () => {
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
             _tokenRegistry: tokenRegistry.address,
-            _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },

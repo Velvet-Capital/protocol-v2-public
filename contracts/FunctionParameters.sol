@@ -21,8 +21,6 @@ library FunctionParameters {
    * @param _priceOracle Address of the base Price Oracle to be used
    * @param _tokenRegistry Address of the Token Registry to be used
    * @param _velvetProtocolFee Fee cut that is being charged (eg: 25% of the fees)
-   * @param _maxInvestmentAmount The max investment amount for the factory's indexes
-   * @param _minInvestmentAmount The min investment amount for the factory's indexes
    */
   struct IndexFactoryInitData {
     address _indexSwapLibrary;
@@ -41,9 +39,6 @@ library FunctionParameters {
     address _gnosisSafeProxyFactory;
     address _priceOracle;
     address _tokenRegistry;
-    uint256 _velvetProtocolFee;
-    uint256 _maxInvestmentAmount;
-    uint256 _minInvestmentAmount;
   }
 
   /**

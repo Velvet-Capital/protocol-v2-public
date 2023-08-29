@@ -22,8 +22,8 @@ contract PriceOracle is Ownable {
   uint256 public oracleExpirationThreshold;
 
   // Events
-  event addFeed(uint256 time, address[] base, address[] quote, AggregatorV2V3Interface[] aggregator);
-  event updateFeed(uint256 time, address base, address quote, address aggregator);
+  event addFeed(address[] base, address[] quote, AggregatorV2V3Interface[] aggregator);
+  event updateFeed(address base, address quote, address aggregator);
 
   constructor() {
     oracleExpirationThreshold = 90000; // 25 hours
@@ -66,7 +66,7 @@ contract PriceOracle is Ownable {
       }
       aggregatorAddresses[base[i]].aggregatorInterfaces[quote[i]] = aggregator[i];
     }
-    emit addFeed(block.timestamp, base, quote, aggregator);
+    emit addFeed(base, quote, aggregator);
   }
 
   /**
@@ -84,7 +84,7 @@ contract PriceOracle is Ownable {
       revert ErrorLibrary.InvalidAddress();
     
     aggregatorAddresses[base].aggregatorInterfaces[quote] = aggregator;
-    emit updateFeed(block.timestamp, base, quote, address(aggregator));
+    emit updateFeed(base, quote, address(aggregator));
   }
 
   /**

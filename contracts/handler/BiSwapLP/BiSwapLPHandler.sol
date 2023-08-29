@@ -46,9 +46,8 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   address internal constant SWAP_FEE_REWARD = 0x04eFD76283A70334C72BB4015e90D034B9F3d245;
   address internal constant MASTER_CHEF = 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739;
 
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
-    uint256 time,
     address indexed user,
     address indexed token,
     uint256 amount,
@@ -79,7 +78,7 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
     _mintedAmount = _deposit(_lpAsset, _amount, _lpSlippage, _to, address(router), user, address(_oracle), p1, p2);
-    emit Deposit(block.timestamp, msg.sender, _lpAsset, _amount, _to);
+    emit Deposit(msg.sender, _lpAsset, _amount, _to);
   }
 
   /**
@@ -90,7 +89,7 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
     _redeem(inputData, routerAddress, p1, p2);
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**

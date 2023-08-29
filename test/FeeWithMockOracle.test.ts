@@ -200,23 +200,17 @@ describe.only("Tests for Mock Fee", () => {
       const registry = await upgrades.deployProxy(
         TokenRegistry,
         [
-          "2500", // protocol fee
-          "30", // protocolFeeBottomConstraint
-          "1000", // max asset manager fee
-          "3000", // max performance fee
-          "500",
-          "500",
-          "10000000000000000",
-          "500000000000000000000",
+          "3000000000000000000",
+          "120000000000000000000000",
           treasury.address,
-          addresses.WETH_Address,
-          "1",
-          15,
+          addresses.WETH_Address
         ],
         { kind: "uups" },
       );
 
       tokenRegistry = TokenRegistry.attach(registry.address);
+
+      await tokenRegistry.setCoolDownPeriod("1");
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -354,9 +348,6 @@ describe.only("Tests for Mock Fee", () => {
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: mockPriceOracle.address,
             _tokenRegistry: tokenRegistry.address,
-            _velvetProtocolFee: "100",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
           },
         ],
         { kind: "uups" },
@@ -365,23 +356,6 @@ describe.only("Tests for Mock Fee", () => {
       indexFactory = IndexFactory.attach(indexFactoryInstance.address);
 
       let whitelistedTokens = [busdInstance.address, wbnbInstance.address, dogeInstance.address];
-
-      await assetManagerConfig.init({
-        _managementFee: "200",
-        _performanceFee: "2500",
-        _entryFee: "100",
-        _exitFee: "100",
-        _maxInvestmentAmount: "120000000000000000000000",
-        _minInvestmentAmount: "3000000000000000000",
-        _tokenRegistry: tokenRegistry.address,
-        _accessController: accessController.address,
-        _assetManagerTreasury: treasury.address,
-        _whitelistedTokens: whitelistedTokens,
-        _publicPortfolio: true,
-        _transferable: true,
-        _transferableToPublic: true,
-        _whitelistTokens: false,
-      });
 
       console.log("indexFactory address:", indexFactory.address);
       const indexFactoryCreate = await indexFactory.createIndexNonCustodial({

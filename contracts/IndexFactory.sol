@@ -34,8 +34,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   address internal baseVelvetGnosisSafeModuleAddress;
   address public tokenRegistry;
   address public priceOracle;
-  uint256 internal maxInvestmentAmount;
-  uint256 internal minInvestmentAmount;
   bool internal indexCreationPause;
   //Gnosis Helper Contracts
   address public gnosisSingleton;
@@ -44,8 +42,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   address public gnosisSafeProxyFactory;
 
   uint256 public indexId;
-
-  uint256 public velvetProtocolFee;
 
   mapping(address => uint256) internal indexSwapToId;
 
@@ -65,18 +61,17 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   IndexSwaplInfo[] public IndexSwapInfolList;
   //Events
-  event IndexInfo(uint256 time, IndexSwaplInfo indexData, uint256 indexed indexId, address _owner);
-  event IndexCreationState(uint256 time, bool state);
-  event UpgradeIndexSwap(uint256 time, address newImplementation);
-  event UpgradeExchange(uint256 time, address newImplementation);
-  event UpgradeAssetManagerConfig(uint256 time, address newImplementation);
-  event UpgradeOffchainRebalance(uint256 time, address newImplementation);
-  event UpgradeOffChainIndex(uint256 time, address newImplementation);
-  event UpgradeFeeModule(uint256 time, address newImplementation);
-  event UpgradeRebalanceAggregator(uint256 time, address newImplementation);
-  event UpgradeRebalance(uint256 time, address newImplementation);
+  event IndexInfo(IndexSwaplInfo indexData, uint256 indexed indexId, address _owner);
+  event IndexCreationState(bool state);
+  event UpgradeIndexSwap(address newImplementation);
+  event UpgradeExchange(address newImplementation);
+  event UpgradeAssetManagerConfig(address newImplementation);
+  event UpgradeOffchainRebalance(address newImplementation);
+  event UpgradeOffChainIndex(address newImplementation);
+  event UpgradeFeeModule(address newImplementation);
+  event UpgradeRebalanceAggregator(address newImplementation);
+  event UpgradeRebalance(address newImplementation);
   event UpdateGnosisAddresses(
-    uint256 time,
     address newGnosisSingleton,
     address newGnosisFallbackLibrary,
     address newGnosisMultisendLibrary,
@@ -89,6 +84,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function initialize(FunctionParameters.IndexFactoryInitData memory initData) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
+    __ReentrancyGuard_init();
     if (
       initData._indexSwapLibrary == address(0) ||
       initData._baseExchangeHandlerAddress == address(0) ||
@@ -119,9 +115,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
     _setFeeModuleImplementationAddress(initData._feeModuleImplementationAddress);
     baseVelvetGnosisSafeModuleAddress = initData._baseVelvetGnosisSafeModuleAddress;
     tokenRegistry = initData._tokenRegistry;
-    maxInvestmentAmount = initData._maxInvestmentAmount;
-    minInvestmentAmount = initData._minInvestmentAmount;
-    velvetProtocolFee = initData._velvetProtocolFee;
     gnosisSingleton = initData._gnosisSingleton;
     gnosisFallbackLibrary = initData._gnosisFallbackLibrary;
     gnosisMultisendLibrary = initData._gnosisMultisendLibrary;
@@ -173,10 +166,10 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
     address[] memory _owner,
     uint256 _threshold
   ) internal virtual {
-    if (initData.minIndexInvestmentAmount < minInvestmentAmount) {
+    if (initData.minIndexInvestmentAmount < ITokenRegistry(tokenRegistry).MIN_VELVET_INVESTMENTAMOUNT()) {
       revert ErrorLibrary.InvalidMinInvestmentAmount();
     }
-    if (initData.maxIndexInvestmentAmount > maxInvestmentAmount) {
+    if (initData.maxIndexInvestmentAmount > ITokenRegistry(tokenRegistry).MAX_VELVET_INVESTMENTAMOUNT()) {
       revert ErrorLibrary.InvalidMaxInvestmentAmount();
     }
     if (indexCreationPause) {
@@ -335,7 +328,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
       address(accessController)
     );
 
-    emit IndexInfo(block.timestamp, IndexSwapInfolList[indexId], indexId, msg.sender);
+    emit IndexInfo(IndexSwapInfolList[indexId], indexId, msg.sender);
     indexId = indexId + 1;
   }
 
@@ -356,7 +349,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeIndexSwap(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseIndexSwapAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeIndexSwap(block.timestamp, _newImpl);
+    emit UpgradeIndexSwap(_newImpl);
   }
 
   /**
@@ -367,7 +360,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeExchange(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseExchangeHandlerAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeExchange(block.timestamp, _newImpl);
+    emit UpgradeExchange(_newImpl);
   }
 
   /**
@@ -378,7 +371,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeAssetManagerConfig(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseAssetManagerConfigAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeAssetManagerConfig(block.timestamp, _newImpl);
+    emit UpgradeAssetManagerConfig(_newImpl);
   }
 
   /**
@@ -389,7 +382,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeOffchainRebalance(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseOffChainRebalancingAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeOffchainRebalance(block.timestamp, _newImpl);
+    emit UpgradeOffchainRebalance(_newImpl);
   }
 
   /**
@@ -400,7 +393,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeOffChainIndex(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseOffChainIndexSwapAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeOffChainIndex(block.timestamp, _newImpl);
+    emit UpgradeOffChainIndex(_newImpl);
   }
 
   /**
@@ -411,7 +404,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeFeeModule(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setFeeModuleImplementationAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeFeeModule(block.timestamp, _newImpl);
+    emit UpgradeFeeModule(_newImpl);
   }
 
   /**
@@ -422,7 +415,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeRebalanceAggregator(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setRebalanceAggregatorAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeRebalanceAggregator(block.timestamp, _newImpl);
+    emit UpgradeRebalanceAggregator(_newImpl);
   }
 
   /**
@@ -433,7 +426,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
   function upgradeRebalance(address[] calldata _proxy, address _newImpl) external virtual onlyOwner {
     _setBaseRebalancingAddress(_newImpl);
     _upgrade(_proxy, _newImpl);
-    emit UpgradeRebalance(block.timestamp, _newImpl);
+    emit UpgradeRebalance(_newImpl);
   }
 
   /**
@@ -459,7 +452,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
    */
   function setIndexCreationState(bool _state) public virtual onlyOwner {
     indexCreationPause = _state;
-    emit IndexCreationState(block.timestamp, _state);
+    emit IndexCreationState(_state);
   }
 
   /**
@@ -545,7 +538,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
     gnosisSafeProxyFactory = _newGnosisSafeProxyFactory;
 
     emit UpdateGnosisAddresses(
-      block.timestamp,
       _newGnosisSingleton,
       _newGnosisFallbackLibrary,
       _newGnosisMultisendLibrary,

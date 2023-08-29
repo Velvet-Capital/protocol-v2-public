@@ -284,6 +284,8 @@ library ErrorLibrary {
   error TokenCountOutOfLimit(uint256 limit);
   /// @notice Throws when the array lenghts don't match for adding price feed or enabling tokens
   error IncorrectArrayLength();
-  // Common Reentrancy error for IndexSwap and IndexSwapOffChain
+  /// @notice Common Reentrancy error for IndexSwap and IndexSwapOffChain
   error ReentrancyGuardReentrantCall();
+  /// @notice Throws when user calls updateFees function before proposing a new fee
+  error NoNewFeeSet();
 }

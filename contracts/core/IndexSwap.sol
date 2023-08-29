@@ -90,20 +90,18 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     uint256 tokenAmount,
     uint256 rate,
     uint256 currentUserBalance,
-    address index,
-    uint256 time
+    address index
   );
   event WithdrawFund(
     address indexed user,
     uint256 tokenAmount,
     uint256 indexed rate,
     uint256 currentUserBalance,
-    address indexed index,
-    uint256 time
+    address indexed index
   );
 
   // /** @dev Emitted when public trades are enabled. */
-  event LOG_PUBLIC_SWAP_ENABLED();
+  event LOG_PUBLIC_SWAP_ENABLED(uint indexed time);
 
   constructor() {
     _disableInitializers();
@@ -124,7 +122,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     ) {
       revert ErrorLibrary.Transferprohibited();
     }
-    checkCoolDownPeriod();
+    checkCoolDownPeriod(from);
   }
 
   /**
@@ -135,7 +133,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     __ERC20_init(initData._name, initData._symbol);
     __UUPSUpgradeable_init();
     __Ownable_init();
-    __ReentrancyGuard_init();
     _vault = initData._vault;
     _module = initData._module;
     _accessController = IAccessController(initData._accessController);
@@ -173,7 +170,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
       totalWeight = totalWeight + _denorm;
     }
     _weightCheck(totalWeight);
-    emit LOG_PUBLIC_SWAP_ENABLED();
+    emit LOG_PUBLIC_SWAP_ENABLED(getTimeStamp());
   }
 
   modifier onlySuperAdmin() {
@@ -289,8 +286,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
       tokenAmount,
       IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
       balanceOf(msg.sender),
-      address(this),
-      getTimeStamp()
+      address(this)
     );
   }
 
@@ -310,7 +306,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
    *
    */
   function withdrawFund(FunctionParameters.WithdrawFund calldata initData) external nonReentrant notPaused {
-    checkCoolDownPeriod();
+    checkCoolDownPeriod(msg.sender);
     IndexSwapLibrary.beforeWithdrawCheck(
       initData._slippage.length,
       initData._lpSlippage.length,
@@ -356,13 +352,12 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
         );
       }
     }
-   emit WithdrawFund(
+    emit WithdrawFund(
       msg.sender,
       initData.tokenAmount,
       IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
       balanceOf(msg.sender),
-      address(this),
-      getTimeStamp()
+      address(this)
     );
   }
 
@@ -545,7 +540,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
    * @param denorms The new weights for for the portfolio
    */
   function updateRecords(address[] calldata tokens, uint96[] calldata denorms) external virtual onlyRebalancerContract {
-    _updateRecords(tokens,denorms);
+    _updateRecords(tokens, denorms);
   }
 
   /**
@@ -579,7 +574,10 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
    * @param tokens Array of the tokens to be updated
    * @param _denorms Array of the updated denorm values
    */
-  function updateTokenListAndRecords(address[] calldata tokens, uint96[] calldata _denorms) external virtual onlyRebalancerContract {
+  function updateTokenListAndRecords(
+    address[] calldata tokens,
+    uint96[] calldata _denorms
+  ) external virtual onlyRebalancerContract {
     _updateTokenList(tokens);
     _updateRecords(tokens, _denorms);
   }
@@ -779,16 +777,16 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
   /**
    * @notice This function returns remaining cooldown for user
    */
-  function getRemainingCoolDown() public view returns (uint256) {
-    uint256 userCoolDownPeriod = lastInvestmentTime[msg.sender] + lastWithdrawCooldown[msg.sender];
+  function getRemainingCoolDown(address _user) public view returns (uint256) {
+    uint256 userCoolDownPeriod = lastInvestmentTime[_user] + lastWithdrawCooldown[_user];
     return userCoolDownPeriod < getTimeStamp() ? 0 : userCoolDownPeriod - getTimeStamp();
   }
 
   /**
    * @notice This function check whether the cooldown period is passed or not
    */
-  function checkCoolDownPeriod() public view {
-    if (getRemainingCoolDown() > 0) {
+  function checkCoolDownPeriod(address _user) public view {
+    if (getRemainingCoolDown(_user) > 0) {
       revert ErrorLibrary.CoolDownPeriodNotPassed();
     }
   }

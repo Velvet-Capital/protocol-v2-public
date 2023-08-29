@@ -53,18 +53,16 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     uint256 indexed rate,
     uint currentUserBalance,
     address indexed index,
-    uint256 time,
     address indexed user
   );
-  event WithdrawFund(address indexed user, uint256 tokenAmount, address indexed index, uint256 timestamp);
+  event WithdrawFund(address indexed user, uint256 tokenAmount, address indexed index);
   event MultipleTokenWithdrawalTriggered(address indexed user, address[] tokens);
   event UserTokenRedeemed(
     address indexed user,
     uint256 tokenAmount,
     uint256 indexed rate,
     uint currentUserBalance,
-    address indexed index,
-    uint256 timestamp
+    address indexed index
   );
 
   constructor() {
@@ -137,7 +135,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     address user = msg.sender;
     uint256 _amount;
     address _token = _initData.sellTokenAddress;
-    _validateInvestment(_lpSlippage, user, _initData._offChainHandler);
+    _validateInvestment(_lpSlippage, user, _initData._offChainHandler, _token);
     uint256 balanceBefore = IndexSwapLibrary.checkBalance(_token, address(exchange), WETH);
     // Check if the investment is made with ETH
     if (msg.value > 0) {
@@ -167,12 +165,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     // Perform off-chain investment
     investedAmountAfterSlippage = exchange._swapTokenToTokensOffChain(
-      ExchangeData.InputData(
-        _initData.buyAmount,
-        _token,
-        _initData._offChainHandler,
-        _initData._buySwapData
-      ),
+      ExchangeData.InputData(_initData.buyAmount, _token, _initData._offChainHandler, _initData._buySwapData),
       index,
       _lpSlippage,
       getTokens(),
@@ -199,15 +192,6 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     // Mint investment tokens to the specified address And Set CoolDown Period
     index.mintTokenAndSetCooldown(user, tokenAmount);
 
-    // Refund any leftover ETH to the user
-    uint256 balanceAfter = address(this).balance;
-    if (balanceAfter > 0) {
-      (bool success, ) = payable(user).call{value: balanceAfter - balanceBefore}("");
-      if (!success) {
-        revert ErrorLibrary.ETHTransferFailed();
-      }
-    }
-
     // Emit an event for the off-chain investment
     emit InvestInFundOffChain(
       _amount,
@@ -215,7 +199,6 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
       getIndexTokenRate(),
       IIndexSwap(index).balanceOf(msg.sender),
       address(index),
-      block.timestamp,
       msg.sender
     );
   }
@@ -277,7 +260,13 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     userWithdrawData[msg.sender].userRedeemedTokens = abi.encode(_tokens);
     userWithdrawData[msg.sender].sellTokenLength = sellTokenLength;
 
-    emit UserTokenRedeemed(msg.sender, inputdata.tokenAmount, getIndexTokenRate(), index.balanceOf(msg.sender), address(index), block.timestamp);
+    emit UserTokenRedeemed(
+      msg.sender,
+      inputdata.tokenAmount,
+      getIndexTokenRate(),
+      index.balanceOf(msg.sender),
+      address(index)
+    );
   }
 
   /**
@@ -348,7 +337,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     _transferTokenToUser(withdrawToken, balanceAfter - balanceBefore);
 
     // Emit an event to indicate the successful withdrawal
-    emit WithdrawFund(user, userWithdrawData[user].tokenAmount, address(index), block.timestamp);
+    emit WithdrawFund(user, userWithdrawData[user].tokenAmount, address(index));
     // Delete the user's data to complete the withdrawal process
     delete userWithdrawData[user];
   }
@@ -436,7 +425,7 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     bool _status
   ) internal returns (uint256, uint256) {
     IndexSwapLibrary.beforeRedeemCheck(index, _tokenAmount, _token, _status);
-    index.checkCoolDownPeriod();
+    index.checkCoolDownPeriod(user);
     address assetManagerTreasury = iAssetManagerConfig.assetManagerTreasury();
     address velvetTreasury = tokenRegistry.velvetTreasury();
     if (!(user == assetManagerTreasury || user == velvetTreasury)) {
@@ -499,7 +488,12 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
    * @param _to Address of user
    * @param _offchainHandler Address of offchain handler used for swapping tokens
    */
-  function _validateInvestment(uint256[] calldata _lpSlippage, address _to,address _offchainHandler) internal {
+  function _validateInvestment(
+    uint256[] calldata _lpSlippage,
+    address _to,
+    address _offchainHandler,
+    address _token
+  ) internal {
     if (tokenRegistry.getProtocolState()) {
       revert ErrorLibrary.ProtocolIsPaused();
     }
@@ -514,6 +508,9 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     }
     if (!tokenRegistry.isExternalSwapHandler(_offchainHandler)) {
       revert ErrorLibrary.OffHandlerNotEnabled();
+    }
+    if (_token == address(0)) {
+      revert ErrorLibrary.InvalidToken();
     }
   }
 

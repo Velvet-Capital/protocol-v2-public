@@ -44,9 +44,9 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
   IPriceOracle internal oracle;
 
-  event UpdatedWeights(uint256 indexed time, uint96[] newDenorms);
-  event UpdatedTokens(uint256 indexed time, address[] newTokens, uint96[] newDenorms);
-  event SetPause(uint256 indexed time, bool indexed state);
+  event UpdatedWeights(uint96[] newDenorms);
+  event UpdatedTokens(address[] newTokens, uint96[] newDenorms);
+  event SetPause(bool indexed state);
 
   constructor() {
     _disableInitializers();
@@ -58,8 +58,8 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
   function init(address _index, address _accessController) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
-    address zeroAddress;
-    if (_index == zeroAddress || _accessController == zeroAddress) {
+    __ReentrancyGuard_init();
+    if (_index == address(0) || _accessController == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     index = IIndexSwap(_index);
@@ -103,7 +103,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
         _setPaused(_state);
       }
     }
-    emit SetPause(getTimeStamp(), _state);
+    emit SetPause(_state);
   }
 
   /**
@@ -237,7 +237,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     }
     index.updateRecords(tokens, denorms);
     rebalance(_slippage, _lpSlippage, _swapHandler);
-    emit UpdatedWeights(getTimeStamp(), denorms);
+    emit UpdatedWeights(denorms);
   }
 
   /**
@@ -292,7 +292,7 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     index.updateTokenListAndRecords(inputData.tokens, inputData.denorms);
     rebalance(inputData._slippageBuy, inputData._lpSlippageBuy, inputData._swapHandler);
 
-    emit UpdatedTokens(getTimeStamp(), inputData.tokens, inputData.denorms);
+    emit UpdatedTokens(inputData.tokens, inputData.denorms);
   }
 
   /**

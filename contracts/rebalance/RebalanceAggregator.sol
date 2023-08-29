@@ -41,7 +41,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
   IWETH public wETH;
 
   event MetaAggregatorSwap(
-    uint256 indexed time,
     address[] sellTokenAddress,
     address[] buyTokenAddress,
     uint256[] sellAmount,
@@ -50,7 +49,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
   );
 
   event swapPrimaryTokenSwap(
-    uint256 indexed time,
     address[] sellTokenAddress,
     address[] buyTokenAddress,
     uint256[] sellAmount,
@@ -58,10 +56,10 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     address[] newTokens
   );
 
-  event RebalanceAggregatorRedeem(uint256 indexed time, uint256 indexed swapAmounts, address indexed token);
-  event DirectSwap(uint256 indexed time, address[] sellTokenAddress, address[] buyTokenAddress, uint256[] sellAmount);
-  event RedeemReward(uint256 time, address token, uint amount);
-  event RevertRedeem();
+  event RebalanceAggregatorRedeem(uint256 indexed swapAmounts, address indexed token);
+  event DirectSwap(address[] sellTokenAddress, address[] buyTokenAddress, uint256[] sellAmount);
+  event RedeemReward(address token, uint amount);
+  event RevertRedeem(uint indexed time);
 
   constructor() {
     _disableInitializers();
@@ -80,14 +78,14 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
   ) external initializer {
     __Ownable_init();
     __UUPSUpgradeable_init();
-    address zeroAddress;
+    __ReentrancyGuard_init();
     if (
-      _index == zeroAddress ||
-      _accessController == zeroAddress ||
-      _tokenRegistry == zeroAddress ||
-      _exchange == zeroAddress ||
-      _assetManagerConfig == zeroAddress ||
-      _vault == zeroAddress
+      _index == address(0) ||
+      _accessController == address(0) ||
+      _tokenRegistry == address(0) ||
+      _exchange == address(0) ||
+      _assetManagerConfig == address(0) ||
+      _vault == address(0)
     ) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -135,7 +133,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
       revert ErrorLibrary.TokenNotIndexToken();
     }
     _swapAndDeposit(inputData);
-    emit RedeemReward(getTimeStamp(), sellToken, inputData.sellAmount[0]);
+    emit RedeemReward(sellToken, inputData.sellAmount[0]);
   }
 
   /**
@@ -177,7 +175,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
       redeemedAmounts[token].push(balanceAfter - balanceBefore[i]);
     }
     setRedeemed(true);
-    emit RebalanceAggregatorRedeem(getTimeStamp(), swapAmounts, token);
+    emit RebalanceAggregatorRedeem(swapAmounts, token);
   }
 
   /**
@@ -238,7 +236,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     RebalanceLibrary.setRecord(index, newTokens, _data.portfolioToken);
     delete redeemedAmounts[tokenRedeemed];
     emit MetaAggregatorSwap(
-      getTimeStamp(),
       _data.sellTokenAddress,
       _data.buyTokenAddress,
       _data.sellAmount,
@@ -278,7 +275,6 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     address[] memory newTokens = RebalanceLibrary.getNewTokens(tokens, inputData.portfolioToken);
     RebalanceLibrary.setRecord(index, newTokens, inputData.portfolioToken);
     emit swapPrimaryTokenSwap(
-      getTimeStamp(),
       inputData.sellTokenAddress,
       inputData.buyTokenAddress,
       inputData.sellAmount,
@@ -415,7 +411,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     }
 
     // Emit an event to indicate the successful direct swap
-    emit DirectSwap(getTimeStamp(), sellTokenAddress, buyTokenAddress, sellAmount);
+    emit DirectSwap(sellTokenAddress, buyTokenAddress, sellAmount);
   }
 
   /**
@@ -522,7 +518,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
     delete redeemedAmounts[tokenRedeemed];
     setRedeemed(false);
     setPaused(false);
-    emit RevertRedeem();
+    emit RevertRedeem(block.timestamp);
   }
 
   /**
@@ -531,7 +527,7 @@ contract RebalanceAggregator is Initializable, ReentrancyGuardUpgradeable, UUPSU
    */
   function revertSellByUser(uint256 _lpSlippage) external nonReentrant {
     uint256 _lastPaused = index.getLastPaused();
-    if (getTimeStamp() < (_lastPaused + 15 minutes)) {
+    if (getTimeStamp() < (_lastPaused + 15 minutes) || !index.paused()) {
       revert ErrorLibrary.FifteenMinutesNotExcedeed();
     }
     _revert(_lpSlippage);

@@ -114,10 +114,6 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               await pancakeswaplp.deployed();
               await pancakeswaplp.addOrUpdateProtocolSlippage("700");
 
-              // const biswapLP = await ethers.getContractFactory("BiSwapLPHandler");
-              // biswaplp = await biswapLP.deploy();
-              // await biswaplp.deployed();
-
               // if (tokenVariable == 3 || tokenVariable == 4) {
               handlerVariable = await deployHandler.deploy(pancakeswaplp.address, priceOracle.address);
               await handlerVariable.deployed();

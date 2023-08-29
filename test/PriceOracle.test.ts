@@ -7,7 +7,7 @@ import { BigNumber } from "ethers";
 import { Exchange, PancakeSwapHandler, PriceOracle, TokenRegistry, VelvetSafeModule } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
-import { indexSwapLibrary, tokenAddresses, IAddresses, RebalancingDeploy, priceOracle } from "./Deployments.test";
+import { indexSwapLibrary, tokenAddresses, IAddresses, priceOracle } from "./Deployments.test";
 
 var chai = require("chai");
 //use default BigNumber
@@ -81,18 +81,10 @@ describe.only("Tests for priceOracle", () => {
 
       iaddress = await tokenAddresses();
       await tokenRegistry.initialize(
-        "2500", // protocol fee
-        "30", // protocolFeeBottomConstraint
-        "1000", // max asset manager fee
-        "3000", // max performance fee
-        "500",
-        "500",
         "3000000000000000000",
         "120000000000000000000000",
         treasury.address,
-        addresses.WETH_Address,
-        "1",
-        15,
+        addresses.WETH_Address
       );
 
       const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");

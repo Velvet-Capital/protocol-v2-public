@@ -35,15 +35,8 @@ contract VenusHandler is IHandler {
 
   IPriceOracle internal _oracle;
 
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
-  event Redeem(
-    uint256 time,
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _priceOracle) {
     require(_priceOracle != address(0), "Oracle having zero address");
@@ -83,7 +76,7 @@ contract VenusHandler is IHandler {
       uint256 vBalance = vToken.balanceOf(address(this));
       TransferHelper.safeTransfer(_vAsset, _to, vBalance);
     }
-    emit Deposit(block.timestamp, msg.sender, _vAsset, _amount, _to);
+    emit Deposit(msg.sender, _vAsset, _amount, _to);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);
   }
 
@@ -113,7 +106,7 @@ contract VenusHandler is IHandler {
         TransferHelper.safeTransfer(address(underlyingToken), inputData._to, tokenAmount);
       }
     }
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**

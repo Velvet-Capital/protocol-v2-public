@@ -13,7 +13,7 @@ abstract contract SlippageControl is Ownable {
 
   uint256 public constant HUNDRED_PERCENT = 10_000;
 
-  event AddOrUpdateProtocolSlippage(uint256 time, uint256 _slippage);
+  event AddOrUpdateProtocolSlippage(uint256 _slippage);
 
   /**
    * @notice This function updates/adds max slippage allowed
@@ -23,7 +23,7 @@ abstract contract SlippageControl is Ownable {
       revert ErrorLibrary.IncorrectSlippageRange();
     }
     maxSlippage = _slippage;
-    emit AddOrUpdateProtocolSlippage(block.timestamp, _slippage);
+    emit AddOrUpdateProtocolSlippage(_slippage);
   }
 
   /**

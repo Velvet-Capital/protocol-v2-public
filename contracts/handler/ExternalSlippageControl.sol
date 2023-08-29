@@ -14,7 +14,7 @@ abstract contract ExternalSlippageControl is Ownable {
 
   uint256 public maxSlippage = MAX_SLIPPAGE;
 
-  event AddOrUpdateProtocolSlippage(uint256 time, uint256 _slippage);
+  event AddOrUpdateProtocolSlippage(uint256 _slippage);
 
   /**
    * @notice This function updates/adds max slippage allowed
@@ -22,7 +22,7 @@ abstract contract ExternalSlippageControl is Ownable {
   function addOrUpdateProtocolSlippage(uint256 _slippage) public onlyOwner {
     if (!(_slippage < HUNDRED_PERCENT && _slippage <= MAX_SLIPPAGE)) revert ErrorLibrary.IncorrectSlippageRange();
     maxSlippage = _slippage;
-    emit AddOrUpdateProtocolSlippage(block.timestamp, _slippage);
+    emit AddOrUpdateProtocolSlippage(_slippage);
   }
 
   /**

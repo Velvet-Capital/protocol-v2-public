@@ -41,9 +41,8 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   address internal immutable lpHandlerAddress;
   IPriceOracle internal _oracle;
 
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
-    uint256 time,
     address indexed user,
     address indexed token,
     uint256 amount,
@@ -117,7 +116,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
       uint256 assetBalance = IERC20Upgradeable(mooLpAsset).balanceOf(address(this));
       TransferHelper.safeTransfer(mooLpAsset, _to, assetBalance);
     }
-    emit Deposit(block.timestamp, msg.sender, mooLpAsset, _amount, _to);
+    emit Deposit(msg.sender, mooLpAsset, _amount, _to);
   }
 
   /**
@@ -145,7 +144,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
       )
     );
 
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**

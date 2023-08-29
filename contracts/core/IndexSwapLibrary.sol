@@ -130,7 +130,11 @@ library IndexSwapLibrary {
    * @param _WETH Weth (native) token address
    * @return currentBalance Returns the current token balance of the passed contract address
    */
-  function checkBalance(address _token, address _contract, address _WETH) external view returns(uint256 currentBalance){
+  function checkBalance(
+    address _token,
+    address _contract,
+    address _WETH
+  ) external view returns (uint256 currentBalance) {
     if (_token != _WETH) {
       currentBalance = IERC20Upgradeable(_token).balanceOf(_contract);
       // TransferHelper.safeApprove(_token, address(this), currentBalance);
@@ -229,7 +233,7 @@ library IndexSwapLibrary {
     if (_totalSupply > 0 && totalVaultBalance > 0) {
       return (totalVaultBalance * (10 ** 18)) / _totalSupply;
     }
-    return 10**18;
+    return 10 ** 18;
   }
 
   /**

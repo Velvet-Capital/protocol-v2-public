@@ -49,13 +49,19 @@ interface ITokenRegistry {
 
   function maxExitFee() external returns (uint256);
 
+  function exceptedRangeDecimal() external view returns(uint256);
+
   function MIN_VELVET_INVESTMENTAMOUNT() external returns (uint256);
+
+  function MAX_VELVET_INVESTMENTAMOUNT() external returns (uint256);
 
   function enablePermittedTokens(address[] calldata _newTokens) external;
 
   function setIndexCreationState(bool _state) external;
 
   function setProtocolPause(bool _state) external;
+
+  function setExceptedRangeDecimal(uint256 _newRange) external ;
 
   function getProtocolState() external returns (bool);
 

@@ -13,8 +13,7 @@ abstract contract DustHandler {
   function _returnDust(address _token, address _to) internal {
     if (_token == WETH) {
       (bool success, ) = payable(_to).call{value: address(this).balance}("");
-      if(!success)
-          revert ErrorLibrary.TransferFailed();
+      if (!success) revert ErrorLibrary.TransferFailed();
     } else {
       uint balance = IERC20Upgradeable(_token).balanceOf(address(this));
       TransferHelper.safeTransfer(_token, _to, balance);
