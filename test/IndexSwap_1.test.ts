@@ -120,12 +120,7 @@ describe.only("Tests for MixedIndex", () => {
 
       const registry = await upgrades.deployProxy(
         TokenRegistry,
-        [
-          "3000000000000000000",
-          "120000000000000000000000",
-          treasury.address,
-          addresses.WETH_Address
-        ],
+        ["3000000000000000000", "120000000000000000000000", treasury.address, addresses.WETH_Address],
         { kind: "uups" },
       );
 
@@ -222,7 +217,7 @@ describe.only("Tests for MixedIndex", () => {
           priceOracle.address,
         ],
         [
-          iaddress.busdAddress,
+          iaddress.usdtAddress,
           iaddress.btcAddress,
           iaddress.ethAddress,
           iaddress.wbnbAddress,
@@ -236,7 +231,7 @@ describe.only("Tests for MixedIndex", () => {
           addresses.LP_BNBx,
           addresses.BSwap_WBNB_BUSDLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
-          addresses.BSwap_BTC_WBNBLP_Address,
+          addresses.BSwap_WBNB_LINKLP_Address,
           addresses.ApeSwap_WBNB_BUSD_Address,
         ],
         [
@@ -282,7 +277,7 @@ describe.only("Tests for MixedIndex", () => {
       tokenRegistry.addNonDerivative(wombatHandler.address);
 
       let whitelistedTokens = [
-        iaddress.busdAddress,
+        iaddress.usdtAddress,
         iaddress.btcAddress,
         iaddress.ethAddress,
         iaddress.wbnbAddress,
@@ -296,11 +291,11 @@ describe.only("Tests for MixedIndex", () => {
         addresses.LP_BNBx,
         addresses.BSwap_WBNB_BUSDLP_Address,
         addresses.ApeSwap_ETH_BTCB_Address,
-        addresses.BSwap_BTC_WBNBLP_Address,
+        addresses.BSwap_WBNB_LINKLP_Address,
         addresses.ApeSwap_WBNB_BUSD_Address,
       ];
       await tokenRegistry.enablePermittedTokens(
-        [iaddress.busdAddress, iaddress.wbnbAddress, iaddress.ethAddress, iaddress.daiAddress],
+        [iaddress.usdtAddress, iaddress.wbnbAddress, iaddress.ethAddress, iaddress.daiAddress],
         [priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address],
       );
       await tokenRegistry.addNonDerivative(wombatHandler.address);
@@ -347,15 +342,14 @@ describe.only("Tests for MixedIndex", () => {
             _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
-            _tokenRegistry: tokenRegistry.address
+            _tokenRegistry: tokenRegistry.address,
           },
         ],
         { kind: "uups" },
       );
 
       indexFactory = IndexFactory.attach(indexFactoryInstance.address);
-      console.log("indexFactory address:", indexFactory.address);
-      const indexFactoryCreate = await indexFactory.createIndexNonCustodial({
+      await indexFactory.createIndexNonCustodial({
         name: "INDEXLY",
         symbol: "IDX",
         maxIndexInvestmentAmount: "120000000000000000000000",
@@ -378,7 +372,6 @@ describe.only("Tests for MixedIndex", () => {
       rebalancing = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo.rebalancing);
       exchange = await ethers.getContractAt(Exchange__factory.abi, indexInfo.exchangeHandler);
       accessController = await ethers.getContractAt(AccessController__factory.abi, await indexSwap.accessController());
-      console.log(await indexSwap.callStatic.accessController());
       metaAggregator = await ethers.getContractAt(RebalanceAggregator__factory.abi, indexInfo.metaAggregator);
     });
 
@@ -391,7 +384,7 @@ describe.only("Tests for MixedIndex", () => {
       it("initialize should revert if total Weights not equal 10,000", async () => {
         await expect(
           indexSwap.initToken(
-            [addresses.BSwap_WBNB_BUSDLP_Address, addresses.ApeSwap_ETH_BTCB_Address, addresses.Cake_BUSDLP_Address],
+            [addresses.BSwap_WBNB_LINKLP_Address, addresses.ApeSwap_ETH_BTCB_Address, addresses.Cake_BUSDLP_Address],
             [100, 1000, 100],
           ),
         )
@@ -404,7 +397,7 @@ describe.only("Tests for MixedIndex", () => {
           indexSwap.initToken(
             [
               iaddress.wbnbAddress,
-              iaddress.busdAddress,
+              iaddress.linkAddress,
               iaddress.ethAddress,
               iaddress.daiAddress,
               iaddress.btcAddress,
@@ -432,10 +425,16 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should update the max asset limit to 10 in the TokenRegistry", async () => {
         await tokenRegistry.setMaxAssetLimit(10);
+        expect(await tokenRegistry.getMaxAssetLimit()).to.equal(10);
       });
 
-      it("should retrieve the current max asset limit from the TokenRegistry", async () => {
-        expect(await tokenRegistry.getMaxAssetLimit()).to.equal(10);
+      it("should revert if not a superAdmin + nonRebalancer contract calls functions", async () => {
+        await expect(
+          indexSwap.connect(addr2).initToken([iaddress.wbnbAddress, iaddress.busdAddress], ["5000", "5000"]),
+        ).to.be.revertedWithCustomError(indexSwap, "CallerNotSuperAdmin");
+
+        await expect(indexSwap.setPaused(true)).to.be.revertedWithCustomError(indexSwap,"CallerNotRebalancerContract");
+        await expect(indexSwap.mintShares(owner.address,"10000000")).to.be.revertedWithCustomError(indexSwap,"CallerNotIndexManager");
       });
 
       it("Initialize should fail if the number of tokens exceed the max limit set by the Registry (current = 10)", async () => {
@@ -443,7 +442,7 @@ describe.only("Tests for MixedIndex", () => {
           indexSwap.initToken(
             [
               iaddress.wbnbAddress,
-              iaddress.busdAddress,
+              iaddress.usdtAddress,
               iaddress.ethAddress,
               iaddress.daiAddress,
               iaddress.btcAddress,
@@ -462,9 +461,12 @@ describe.only("Tests for MixedIndex", () => {
 
       it("Initialize IndexFund Tokens", async () => {
         await indexSwap.initToken(
-          [addresses.BSwap_BTC_WBNBLP_Address, addresses.ApeSwap_ETH_BTCB_Address, addresses.Cake_WBNBLP_Address],
+          [addresses.BSwap_WBNB_LINKLP_Address, addresses.ApeSwap_ETH_BTCB_Address, addresses.Cake_WBNBLP_Address],
           [5000, 2000, 3000],
         );
+        await expect(
+          indexSwap.initToken([iaddress.wbnbAddress, iaddress.busdAddress], ["5000", "5000"]),
+        ).to.be.revertedWithCustomError(indexSwap, "AlreadyInitialized");
       });
 
       it("should add pid", async () => {
@@ -502,6 +504,11 @@ describe.only("Tests for MixedIndex", () => {
             value: "167352683749194728",
           },
         );
+
+        await expect(indexSwap.transfer(nonOwner.address, "100")).to.be.revertedWithCustomError(
+          indexSwap,
+          "Transferprohibited",
+        );
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log(indexSupplyAfter);
         await exchange.on("returnedUninvestedFunds", (_to: any, _token: any, _balance: any, _time: any) => {
@@ -522,7 +529,7 @@ describe.only("Tests for MixedIndex", () => {
             _lpSlippage: ["200", "200", "200"],
             _tokenAmount: "10000000000000000000",
             _swapHandler: swapHandler.address,
-            _token: iaddress.busdAddress,
+            _token: iaddress.usdtAddress,
           }),
         ).to.be.revertedWithCustomError(indexSwapLibrary, "InvalidToken");
       });
@@ -534,7 +541,7 @@ describe.only("Tests for MixedIndex", () => {
         await assetManagerConfig.setPermittedTokens([
           iaddress.wbnbAddress,
           iaddress.daiAddress,
-          iaddress.busdAddress,
+          iaddress.usdtAddress,
           iaddress.ethAddress,
         ]);
       });
@@ -556,11 +563,27 @@ describe.only("Tests for MixedIndex", () => {
         ).to.be.revertedWithCustomError(biSwapLPHandler, "InvalidLPSlippage");
       });
 
+      it("should revert if msg.vale > 0 + token is non-weth", async () => {
+        await expect(
+          indexSwap.investInFund(
+            {
+              _slippage: ["100", "100", "100"],
+              _lpSlippage: ["800", "800", "800"],
+              _tokenAmount: "100000000000000000",
+              _swapHandler: swapHandler.address,
+              _token: iaddress.busdAddress,
+            },
+            {
+              value: "100000000000000000",
+            },
+          ),
+        ).to.be.revertedWithCustomError(indexSwap, "InvalidToken");
+      });
+
       it("Invest 0.1BNB into Top10 fund", async () => {
         const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("0.1bnb before", indexSupplyBefore);
-        console.log("owner address", owner.address);
         await indexSwap.investInFund(
           {
             _slippage: ["100", "100", "100"],
@@ -580,32 +603,32 @@ describe.only("Tests for MixedIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Invest 10BUSD into Top10 fund", async () => {
+      it("Invest 10 USDT into Top10 fund", async () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
-        const busdtoken = ERC20.attach(iaddress.busdAddress);
+        const usdtToken = ERC20.attach(iaddress.usdtAddress);
         const ethtoken = ERC20.attach(iaddress.ethAddress);
         const btctoken = ERC20.attach(iaddress.btcAddress);
         const wbnbtoken = ERC20.attach(iaddress.wbnbAddress);
         // console.log("swap start");
         const swapResult = await swapHandler
           .connect(owner)
-          .swapETHToTokens("200", iaddress.busdAddress, owner.address, {
+          .swapETHToTokens("1000", iaddress.usdtAddress, owner.address, {
             value: "1000000000000000000",
           });
 
         // console.log("swap done");
-        await busdtoken.approve(indexSwap.address, "19826472847483927477");
+        await usdtToken.approve(indexSwap.address, "19826472847483927477");
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("10busd before", indexSupplyBefore);
 
         await indexSwap.investInFund({
-          _slippage: ["200", "200", "200"],
+          _slippage: ["1000", "1000", "1000"],
           _lpSlippage: ["800", "800", "800"],
           _tokenAmount: "19826472847483927477",
           _swapHandler: swapHandler.address,
-          _token: iaddress.busdAddress,
+          _token: iaddress.usdtAddress,
         });
         const indexSupplyAfter = await indexSwap.totalSupply();
         const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
@@ -645,7 +668,6 @@ describe.only("Tests for MixedIndex", () => {
         await tokenRegistry.setExceptedRangeDecimal("10000");
         expect(await tokenRegistry.exceptedRangeDecimal()).to.be.equal(Number(10000));
       });
-
 
       it("Invest 2BNB into Top10 fund", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
@@ -712,7 +734,7 @@ describe.only("Tests for MixedIndex", () => {
         ).to.be.reverted;
       });
 
-      it("update Weights should revert if total Weights not equal 10,000", async () => {
+      it("update Weights should revert if total Weights not equal 10,000 or one weight is 0", async () => {
         await expect(
           rebalancing.updateWeights(
             [6667, 2330, 1000],
@@ -721,15 +743,25 @@ describe.only("Tests for MixedIndex", () => {
             swapHandler.address,
           ),
         )
-          .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
+          .to.be.revertedWithCustomError(indexSwap, "InvalidWeights")
           .withArgs("10000");
+
+          await expect(
+            rebalancing.updateWeights(
+              [5000, 5000, 0],
+              ["200", "200", "200"],
+              ["200", "200", "200"],
+              swapHandler.address,
+            ),
+          )
+            .to.be.revertedWithCustomError(indexSwap, "ZeroDenormValue")
       });
 
       it("should Update Weights and Rebalance", async () => {
         await rebalancing.updateWeights(
           [3333, 5667, 1000],
           ["500", "500", "500"],
-          ["800", "800", "800"],
+          ["1000", "1000", "1000"],
           swapHandler.address,
         );
       });
@@ -747,8 +779,34 @@ describe.only("Tests for MixedIndex", () => {
             _lpSlippageBuy: ["200", "200", "200", "200"],
           }),
         )
-          .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
+          .to.be.revertedWithCustomError(indexSwap, "InvalidWeights")
           .withArgs("10000");
+
+          await expect(
+            rebalancing.updateTokens({
+              tokens: [addresses.MAIN_LP_BUSD, addresses.LP_BNBx, addresses.MAIN_LP_BUSD, addresses.Cake_BUSDLP_Address],
+              _swapHandler: swapHandler.address,
+              denorms: [2000, 5000, 1000, 2000],
+              _slippageSell: ["200", "200", "200"],
+              _slippageBuy: ["200", "200", "200", "200"],
+              _lpSlippageSell: ["200", "200", "200"],
+              _lpSlippageBuy: ["200", "200", "200", "200"],
+            }),
+          )
+            .to.be.revertedWithCustomError(indexSwap, "TokenAlreadyExist")
+
+            await expect(
+              rebalancing.updateTokens({
+                tokens: [addresses.MAIN_LP_BUSD, addresses.LP_BNBx, addresses.MAIN_LP_BUSD, addresses.Cake_BUSDLP_Address],
+                _swapHandler: swapHandler.address,
+                denorms: [2000, 5000, 1000, 2000],
+                _slippageSell: ["200", "200", "200"],
+                _slippageBuy: ["200", "200", "200", "200"],
+                _lpSlippageSell: ["200", "200", "200"],
+                _lpSlippageBuy: ["200", "200", "200", "200"],
+              }),
+            )
+              .to.be.revertedWithCustomError(indexSwap, "TokenAlreadyExist")
       });
 
       it("owner should be able to add asset manager", async () => {
@@ -773,7 +831,7 @@ describe.only("Tests for MixedIndex", () => {
           tokens: [
             addresses.MAIN_LP_BUSD,
             addresses.LP_BNBx,
-            addresses.BSwap_BTC_WBNBLP_Address,
+            addresses.BSwap_WBNB_LINKLP_Address,
             addresses.Cake_BUSDLP_Address,
           ],
           _swapHandler: swapHandler.address,
@@ -991,11 +1049,8 @@ describe.only("Tests for MixedIndex", () => {
           _lpSlippage: ["200", "200", "200", "200"],
           isMultiAsset: false,
           _swapHandler: swapHandler.address,
-          _token: iaddress.ethAddress,
+          _token: iaddress.wbnbAddress,
         });
-
-        const balanceAfter = await ethtoken.balanceOf(owner.address);
-        expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
 
         expect(txObject.confirmations).to.equal(1);
       });

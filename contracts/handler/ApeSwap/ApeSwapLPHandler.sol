@@ -58,7 +58,9 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   );
 
   constructor(address _priceOracle) {
-    if ((_priceOracle) == address(0)) revert ErrorLibrary.InvalidAddress();
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
     _oracle = IPriceOracle(_priceOracle);
   }
 

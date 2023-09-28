@@ -133,6 +133,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     __ERC20_init(initData._name, initData._symbol);
     __UUPSUpgradeable_init();
     __Ownable_init();
+    __ReentrancyGuard_init();
     _vault = initData._vault;
     _module = initData._module;
     _accessController = IAccessController(initData._accessController);
@@ -270,10 +271,10 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     if (tokenAmount <= 0) {
       revert ErrorLibrary.ZeroTokenAmount();
     }
-    _mintInvest(msg.sender, tokenAmount);
-    lastWithdrawCooldown[msg.sender] = IndexSwapLibrary.calculateCooldown(
+    uint256 _mintedAmount = _mintInvest(msg.sender, tokenAmount);
+    lastWithdrawCooldown[msg.sender] = IndexSwapLibrary.calculateCooldownPeriod(
       balanceOf(msg.sender),
-      tokenAmount,
+      _mintedAmount,
       _tokenRegistry.COOLDOWN_PERIOD(),
       lastWithdrawCooldown[msg.sender],
       lastInvestmentTime[msg.sender]
@@ -283,7 +284,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     emit InvestInFund(
       msg.sender,
       _amount,
-      tokenAmount,
+      _mintedAmount,
       IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
       balanceOf(msg.sender),
       address(this)
@@ -409,7 +410,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
    * @param _to The address to which the minted index tokens are assigned.
    * @param _mintAmount The amount of index tokens to mint.
    */
-  function _mintInvest(address _to, uint256 _mintAmount) internal {
+  function _mintInvest(address _to, uint256 _mintAmount) internal returns (uint256) {
     uint256 entryFee = _iAssetManagerConfig.entryFee();
 
     // Check if the entry fee should be charged and deducted from the minted tokens
@@ -419,6 +420,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
 
     // Mint new index tokens and assign them to the specified address
     _mint(_to, _mintAmount);
+    return _mintAmount;
   }
 
   /**
@@ -452,11 +454,14 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
    * @param _to The address to which the index tokens are minted.
    * @param _mintAmount The amount of index tokens to mint.
    */
-  function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external onlyMinter {
-    _mintInvest(_to, _mintAmount);
-    lastWithdrawCooldown[_to] = IndexSwapLibrary.calculateCooldown(
+  function mintTokenAndSetCooldown(
+    address _to,
+    uint256 _mintAmount
+  ) external onlyMinter returns (uint256 _mintedAmount) {
+    _mintedAmount = _mintInvest(_to, _mintAmount);
+    lastWithdrawCooldown[_to] = IndexSwapLibrary.calculateCooldownPeriod(
       balanceOf(_to),
-      _mintAmount,
+      _mintedAmount,
       _tokenRegistry.COOLDOWN_PERIOD(),
       lastWithdrawCooldown[_to],
       lastInvestmentTime[_to]
@@ -765,13 +770,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
    */
   function chargeFees(uint256 vaultBalance) internal {
     _feeModule.chargeFeesFromIndex(vaultBalance);
-  }
-
-  /**
-   * @notice This function returns usd price in eth
-   */
-  function getUsdEthPrice(uint256 _amount) internal view returns (uint256) {
-    return _oracle.getUsdEthPrice(_amount);
   }
 
   /**

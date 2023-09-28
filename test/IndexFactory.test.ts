@@ -125,12 +125,7 @@ describe.only("Tests for IndexFactory", () => {
 
       const registry = await upgrades.deployProxy(
         TokenRegistry,
-        [
-          "3000000000000000000",
-          "120000000000000000000000",
-          treasury.address,
-          addresses.WETH_Address
-        ],
+        ["3000000000000000000", "120000000000000000000000", treasury.address, addresses.WETH_Address],
         { kind: "uups" },
       );
 
@@ -362,7 +357,7 @@ describe.only("Tests for IndexFactory", () => {
             _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
-            _tokenRegistry: tokenRegistry.address
+            _tokenRegistry: tokenRegistry.address,
           },
         ],
         { kind: "uups" },
@@ -1546,7 +1541,7 @@ describe.only("Tests for IndexFactory", () => {
 
       it("update Weights should revert if total Weights not equal 10,000", async () => {
         await expect(rebalancing.updateWeights([6667, 3330], ["100", "100"], ["200", "200"], swapHandler.address))
-          .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
+          .to.be.revertedWithCustomError(indexSwap, "InvalidWeights")
           .withArgs("10000");
       });
 
@@ -1592,7 +1587,7 @@ describe.only("Tests for IndexFactory", () => {
             _lpSlippageBuy: ["200", "200", "200"],
           }),
         )
-          .to.be.revertedWithCustomError(rebalancing, "InvalidWeights")
+          .to.be.revertedWithCustomError(indexSwap, "InvalidWeights")
           .withArgs("10000");
       });
 
@@ -1912,11 +1907,10 @@ describe.only("Tests for IndexFactory", () => {
           "Transferprohibited",
         );
 
-        await indexSwap.approve(addr1.address,"1000000000000000");
-        await expect(indexSwap.connect(addr1).transferFrom(owner.address,addr1.address ,amountIndexToken.div(2))).to.be.revertedWithCustomError(
-          indexSwap,
-          "Transferprohibited",
-        );
+        await indexSwap.approve(addr1.address, "1000000000000000");
+        await expect(
+          indexSwap.connect(addr1).transferFrom(owner.address, addr1.address, amountIndexToken.div(2)),
+        ).to.be.revertedWithCustomError(indexSwap, "Transferprohibited");
       });
 
       it("transfer idx from owner to non whitelisted account should fail", async () => {
@@ -2393,7 +2387,7 @@ describe.only("Tests for IndexFactory", () => {
             _transferableToPublic: false,
             _whitelistTokens: true,
           }),
-        ).to.be.revertedWithCustomError(newProxy, "indexCreationIsPause");
+        ).to.be.revertedWithCustomError(newProxy, "IndexCreationIsPause");
       });
 
       it("should unpause index creation and creat index", async () => {
@@ -2670,7 +2664,7 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
         await assetManagerConfig.connect(assetManager).proposeNewManagementFee("200");
-        expect (await assetManagerConfig.newManagementFee()).to.be.equal(200);
+        expect(await assetManagerConfig.newManagementFee()).to.be.equal(200);
       });
 
       it("Asset manager should not be able to update management fee before 28 days passed", async () => {
@@ -2698,7 +2692,7 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
         await assetManagerConfig.connect(assetManager).deleteProposedManagementFee();
-        expect (await assetManagerConfig.newManagementFee()).to.be.equal(0);
+        expect(await assetManagerConfig.newManagementFee()).to.be.equal(0);
       });
 
       it("Non asset manager should not be able to update management fee", async () => {
@@ -2737,7 +2731,7 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
         await assetManagerConfig.connect(assetManager).proposeNewPerformanceFee("200");
-        expect (await assetManagerConfig.newPerformanceFee()).to.be.equal(200);
+        expect(await assetManagerConfig.newPerformanceFee()).to.be.equal(200);
       });
 
       it("Asset manager should be able to update performance fee before 28 days passed", async () => {
@@ -2765,7 +2759,7 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
         await assetManagerConfig.connect(assetManager).deleteProposedPerformanceFee();
-        expect (await assetManagerConfig.newPerformanceFee()).to.be.equal(0);
+        expect(await assetManagerConfig.newPerformanceFee()).to.be.equal(0);
       });
 
       it("Non asset manager should not be able to update performance fee", async () => {
@@ -2795,17 +2789,35 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
         await expect(
-          assetManagerConfig.connect(nonOwner).proposeNewEntryAndExitFee("200","200"),
+          assetManagerConfig.connect(nonOwner).proposeNewEntryAndExitFee("200", "200"),
         ).to.be.revertedWithCustomError(assetManagerConfig, "CallerNotAssetManager");
+      });
+
+      it("asset manager should not be able to propose wrong entry and exit fee(entry)", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(
+          assetManagerConfig.proposeNewEntryAndExitFee("20000", "200"),
+        ).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
+      });
+
+      it("asset manager should not be able to propose wrong entry and exit fee(exit)", async () => {
+        const config = await indexSwap.iAssetManagerConfig();
+        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
+        const assetManagerConfig = AssetManagerConfig.attach(config);
+        await expect(
+          assetManagerConfig.proposeNewEntryAndExitFee("200", "20000"),
+        ).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
       });
 
       it("Asset manager should propose new entry and exit fee", async () => {
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
-        await assetManagerConfig.connect(assetManager).proposeNewEntryAndExitFee("200","200");
-        expect (await assetManagerConfig.newEntryFee()).to.be.equal(200);
-        expect (await assetManagerConfig.newExitFee()).to.be.equal(200);
+        await assetManagerConfig.connect(assetManager).proposeNewEntryAndExitFee("200", "200");
+        expect(await assetManagerConfig.newEntryFee()).to.be.equal(200);
+        expect(await assetManagerConfig.newExitFee()).to.be.equal(200);
       });
 
       it("Asset manager should be able to update entry and exit fee before 28 days passed", async () => {
@@ -2822,10 +2834,9 @@ describe.only("Tests for IndexFactory", () => {
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
-        await expect(assetManagerConfig.connect(nonOwner).deleteProposedEntryAndExitFee()).to.be.revertedWithCustomError(
-          assetManagerConfig,
-          "CallerNotAssetManager",
-        );
+        await expect(
+          assetManagerConfig.connect(nonOwner).deleteProposedEntryAndExitFee(),
+        ).to.be.revertedWithCustomError(assetManagerConfig, "CallerNotAssetManager");
       });
 
       it("Asset manager should be able to delete proposed new entry and exit fee", async () => {
@@ -2833,8 +2844,8 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
         await assetManagerConfig.connect(assetManager).deleteProposedEntryAndExitFee();
-        expect (await assetManagerConfig.newEntryFee()).to.be.equal(0);
-        expect (await assetManagerConfig.newExitFee()).to.be.equal(0);
+        expect(await assetManagerConfig.newEntryFee()).to.be.equal(0);
+        expect(await assetManagerConfig.newExitFee()).to.be.equal(0);
       });
 
       it("Non asset manager should not be able to update entry and exit fee", async () => {

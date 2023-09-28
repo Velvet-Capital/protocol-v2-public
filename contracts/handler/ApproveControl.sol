@@ -6,7 +6,7 @@ import {SafeERC20Upgradeable, IERC20Upgradeable} from "@openzeppelin/contracts-u
 abstract contract ApproveControl {
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
-  function setAllowance(address _token, address _spender, uint256 _sellAmount) public {
+  function setAllowance(address _token, address _spender, uint256 _sellAmount) internal {
     uint256 _currentAllowance = IERC20Upgradeable(_token).allowance(address(this), _spender);
     if (_currentAllowance != _sellAmount) {
       IERC20Upgradeable(_token).safeDecreaseAllowance(_spender, _currentAllowance);

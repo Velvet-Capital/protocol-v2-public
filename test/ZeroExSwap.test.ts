@@ -105,7 +105,7 @@ describe.only("Tests for ZeroExSwap", () => {
         "3000000000000000000",
         "120000000000000000000000",
         treasury.address,
-        addresses.WETH_Address
+        addresses.WETH_Address,
       );
 
       await tokenRegistry.setCoolDownPeriod("1");
@@ -396,7 +396,7 @@ describe.only("Tests for ZeroExSwap", () => {
       it("Initialize IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([iaddress.wbnbAddress, iaddress.ethAddress], [5000, 5000]);
+        await index.initToken([iaddress.btcAddress, iaddress.ethAddress], [5000, 5000]);
       });
 
       it("should add pid", async () => {
@@ -675,6 +675,10 @@ describe.only("Tests for ZeroExSwap", () => {
           },
           ["200"],
         );
+
+        await expect(
+          offChainRebalance1.connect(nonOwner)._externalSell(sellTokenSwapData, zeroExHandler.address),
+        ).to.be.revertedWithCustomError(offChainRebalance1, "InvalidExecution");
         var balanceAfterToken = [];
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
@@ -721,7 +725,7 @@ describe.only("Tests for ZeroExSwap", () => {
         }
       });
 
-      it("should _revert after enable Rebalance(1st Transaction)", async () => {
+      it("should revert if invalid slippage and _revert after enable Rebalance(1st Transaction)", async () => {
         await tokenRegistry.enableExternalSwapHandler(zeroExHandler.address);
 
         const _tokens = [addresses.vETH_Address, iaddress.wbnbAddress];
@@ -735,6 +739,11 @@ describe.only("Tests for ZeroExSwap", () => {
         for (let i = 0; i < tokens.length; i++) {
           balanceBefore[i] = await ERC20.attach(tokens[i]).balanceOf(v);
         }
+
+        //Expected  To Revert
+        await expect(
+          offChainRebalance1.connect(nonOwner).enableRebalanceAndUpdateRecord(_tokens, newWeights, ["200", "200"]),
+        ).to.be.revertedWithCustomError(offChainRebalance1, "InvalidSlippageLength");
 
         // 1. Enabling Token - Pulling from vault and redeeming the tokens
         const tx = await offChainRebalance1
@@ -754,7 +763,7 @@ describe.only("Tests for ZeroExSwap", () => {
         expect(Number(tokenLengthBefore)).to.be.equal(Number(tokenLengthAfter));
       });
 
-      it("should _revert after externalSell (2nd Transaction)", async () => {
+      it("should _revert after externalSell (2nd Transaction) + revertWithCustomError if InvalidExecution", async () => {
         var tokens = await indexSwap1.getTokens();
         const newTokens = [
           iaddress.busdAddress,
@@ -783,7 +792,13 @@ describe.only("Tests for ZeroExSwap", () => {
         //Enabling Rabalance and updating record - pull from vault,redeeming and updating token list and weight
         const tx1 = await offChainRebalance1
           .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]);
+          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["800", "800", "800"]);
+
+        await expect(
+          offChainRebalance1
+            .connect(nonOwner)
+            .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["800", "800", "800"]),
+        ).to.be.revertedWithCustomError(offChainRebalance1, "InvalidExecution");
 
         const abiCoder = ethers.utils.defaultAbiCoder;
 
@@ -1319,6 +1334,35 @@ describe.only("Tests for ZeroExSwap", () => {
         );
       });
 
+      it("print values before updating tokens to wbnb", async () => {
+        const vault = await indexSwap.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
+        }
+      });
+
       it("should update portfolio to new tokens", async () => {
         const newTokens = [iaddress.wbnbAddress];
         const newWeights = [10000];
@@ -1331,9 +1375,6 @@ describe.only("Tests for ZeroExSwap", () => {
         var tokenSellSwapData = [];
         var buyTokens = [];
         var buyWeights = [];
-        var buyTokenSwapData = [];
-        var buyUnderlyingTokensContract = [];
-        var buyTokenAmountContract = [];
         var sumWeight;
 
         const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
@@ -1430,6 +1471,35 @@ describe.only("Tests for ZeroExSwap", () => {
           const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
           balanceAfterToken.push(await token2.balanceOf(v));
           expect(Number(balanceAfterToken[i])).to.be.greaterThanOrEqual(Number(balanceBeforeToken[i]));
+        }
+      });
+
+      it("print values after updating tokens to wbnb", async () => {
+        const vault = await indexSwap.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
         }
       });
 
@@ -1574,6 +1644,190 @@ describe.only("Tests for ZeroExSwap", () => {
           balanceAfterToken.push(await token2.balanceOf(v));
           expect(Number(balanceAfterToken[i])).to.be.greaterThanOrEqual(Number(balanceBeforeToken[i]));
         }
+      });
+
+      it("should update tokens should fail if update token data is manipulated", async () => {
+        const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress];
+        // before: 30,10,60 (wbnb, btc, eth)
+        const newWeights = [9500, 500];
+        const newWeightsManipulated = [4000, 6000];
+
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        var tokenSell = [];
+        var sellTokens = [];
+        var sellAmount = [];
+        var swapAmount = [];
+        var tokenSellSwapData = [];
+        var buyTokens = [];
+        var buyWeights = [];
+        var buyTokenSwapData = [];
+        var buyUnderlyingTokensContract = [];
+        var buyTokenAmountContract = [];
+        var sumWeight;
+
+        /*
+          the tx will fail because we're supposed to sell 5 BTC according to the new weights BUT with the manipulated weights we're not
+          creating any calldata to sell 5 BTC so the tx will fail
+         */
+        const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
+          newTokens,
+          newWeightsManipulated,
+        );
+        tokenSell = data[0];
+        sellTokens = data[1];
+        sellAmount = data[2];
+        swapAmount = data[3];
+
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != wbnb) {
+              await delay(1000);
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: wbnb,
+                sellAmount: swapAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        for (let i = 0; i < tokenSell.length; i++) {
+          if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
+            if (tokenSell[i] != wbnb) {
+              await delay(1000);
+              const params = {
+                sellToken: tokenSell[i].toString(),
+                buyToken: wbnb,
+                sellAmount: sellAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        await expect(
+          offChainRebalance.enableAndUpdatePrimaryTokens(
+            newTokens,
+            newWeights,
+            [0, 0, 0, 0, 0, 0],
+            tokenSellSwapData,
+            zeroExHandler.address,
+          ),
+        ).to.be.revertedWithCustomError(zeroExHandler, "SwapFailed");
+      });
+
+      it("should update tokens should fail if update token data is manipulated", async () => {
+        const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress];
+        // before: 30,10,60 (wbnb, btc, eth)
+        const newWeights = [4000, 6000];
+        const newWeightsManipulated = [9500, 500];
+
+        // tokenSellRemove eth 60
+        // tokenSellUpdate: wbnb 0, btc 5
+        // tokenSellUpdateSupposed: wbnb 0, btc 0
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        var tokenSell = [];
+        var sellTokens = [];
+        var sellAmount = [];
+        var swapAmount = [];
+        var tokenSellSwapData = [];
+        var buyTokens = [];
+        var buyWeights = [];
+        var buyTokenSwapData = [];
+        var buyUnderlyingTokensContract = [];
+        var buyTokenAmountContract = [];
+        var sumWeight;
+
+        /* 
+          the tx will fail - we're creating calldata for btc but we're not using it BUT we're only increasing the index in 
+          OffChainRebalance._swap if address != 0 but since the new weights (non manipulated) don't result into selling BTC
+          the if statement won't be entered and the index won't be increased; we're passing the same array from the frontend 
+          for removing tokens and updating weights, that's why increasing the index is important (the wrong calldata for selling 
+          removed tokens is being used)
+        */
+        const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
+          newTokens,
+          newWeightsManipulated,
+        );
+        tokenSell = data[0];
+        sellTokens = data[1];
+        sellAmount = data[2];
+        swapAmount = data[3];
+
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != wbnb) {
+              await delay(1000);
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: wbnb,
+                sellAmount: swapAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        for (let i = 0; i < tokenSell.length; i++) {
+          if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
+            if (tokenSell[i] != wbnb) {
+              await delay(1000);
+              const params = {
+                sellToken: tokenSell[i].toString(),
+                buyToken: wbnb,
+                sellAmount: sellAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        await expect(
+          offChainRebalance.enableAndUpdatePrimaryTokens(
+            newTokens,
+            newWeights,
+            [0, 0, 0, 0, 0, 0],
+            tokenSellSwapData,
+            zeroExHandler.address,
+          ),
+        ).to.be.revertedWithCustomError(zeroExHandler, "SwapFailed");
       });
 
       it("Invest 1 BNB into Top10 fund", async () => {
@@ -2089,10 +2343,6 @@ describe.only("Tests for ZeroExSwap", () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
 
-        const tokens = await indexSwap1.getTokens();
-
-        const v = await indexSwap1.vault();
-
         await indexSwap1.investInFund(
           {
             _slippage: ["300", "300", "300"],
@@ -2157,7 +2407,7 @@ describe.only("Tests for ZeroExSwap", () => {
         //Enabling Rabalance and updating record - pull from vault,redeeming and updating token list and weight
         const tx1 = await offChainRebalance1
           .connect(nonOwner)
-          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200", "200", "200"]);
+          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["800", "800", "800"]);
 
         const abiCoder = ethers.utils.defaultAbiCoder;
 
@@ -2374,6 +2624,14 @@ describe.only("Tests for ZeroExSwap", () => {
           balanceBefore[i] = await ERC20.attach(tokens[i]).balanceOf(v);
         }
 
+        await expect(
+          offChainRebalance1.connect(nonOwner).revertEnableRebalancing(["200", "200", "200"]),
+        ).to.be.revertedWithCustomError(offChainRebalance1, "InvalidExecution");
+
+        await expect(
+          offChainRebalance1.connect(nonOwner).revertEnableRebalancingByUser(["200", "200", "200"]),
+        ).to.be.revertedWithCustomError(offChainRebalance1, "FifteenMinutesNotExcedeed");
+
         // 1. Enabling Token - Pulling from vault and redeeming the tokens
         const tx = await offChainRebalance1.connect(nonOwner).enableRebalance({
           _newWeights: newWeights,
@@ -2389,12 +2647,43 @@ describe.only("Tests for ZeroExSwap", () => {
           balanceAfter[i] = await ERC20.attach(tokens[i]).balanceOf(v);
           expect(Number(balanceBefore[i])).to.be.greaterThanOrEqual(Number(balanceAfter[i]));
         }
-        await offChainRebalance1.connect(nonOwner).revertEnableRebalancing(["200", "200", "200"]);
+
+        await ethers.provider.send("evm_increaseTime", [1000]);
+        await offChainRebalance1.connect(nonOwner).revertEnableRebalancingByUser(["200", "200", "200"]);
+      });
+
+      it("print values before reverting", async () => {
+        const vault = await indexSwap.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
+        }
       });
 
       it("non-assetManager should revert if 15minutes of Pause is passed", async () => {
-        const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress, iaddress.busdAddress];
-        const newWeights = [3000, 1000, 6000];
+        const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress];
+        const newWeights = [4000, 6000];
 
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         var tokenSell = [];
@@ -2402,7 +2691,6 @@ describe.only("Tests for ZeroExSwap", () => {
         var sellAmount = [];
         var swapAmount = [];
         var tokenSellSwapData = [];
-
         const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
           newTokens,
           newWeights,
@@ -2478,9 +2766,37 @@ describe.only("Tests for ZeroExSwap", () => {
         expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
       });
 
+      it("print values after reverting", async () => {
+        const vault = await indexSwap.vault();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const tokens = await indexSwap.getTokens();
+        let balancesInUsd = [];
+        let total = 0;
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const handlerAddress = tokenInfo[2];
+          const handler = await ethers.getContractAt("IHandler", handlerAddress);
+          const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
+
+          // TODO after price oracle merge we can get the lp price from the price oracle
+          if (getUnderlyingTokens.length > 0) {
+            balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
+          } else {
+            const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
+            balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+          }
+
+          total += Number(balancesInUsd[i]);
+        }
+
+        for (let i = 0; i < tokens.length; i++) {
+          console.log(`Percentage token ${i} : `, (Number(balancesInUsd[i]) / Number(total)).toString());
+        }
+      });
+
       it("non-assetManager should not be able revert if 15minutes of Pause is not passed", async () => {
-        const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress, iaddress.busdAddress];
-        const newWeights = [3000, 1000, 6000];
+        const newTokens = [iaddress.wbnbAddress, iaddress.btcAddress, iaddress.ethAddress];
+        const newWeights = [3000, 2000, 5000];
 
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         var tokenSell = [];
@@ -2498,7 +2814,6 @@ describe.only("Tests for ZeroExSwap", () => {
         sellAmount = data[2];
         swapAmount = data[3];
         const v = await indexSwap.vault();
-        const balanceBefore = await ERC20.attach(iaddress.wbnbAddress).balanceOf(v);
         for (let i = 0; i < sellTokens.length; i++) {
           if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
             if (sellTokens[i] != wbnb) {
@@ -2596,6 +2911,14 @@ describe.only("Tests for ZeroExSwap", () => {
         const v = await indexSwap1.vault();
 
         var j = 0;
+
+        //Should revert is length does not match
+        await expect(
+          offChainRebalance1
+            .connect(nonOwner)
+            .enableRebalanceAndUpdateRecord(newTokens, ["5000", "5000"], ["200", "200", "200"]),
+        ).to.be.revertedWithCustomError(offChainRebalance1, "LengthsDontMatch");
+
         //Enabling Rabalance and updating record - pull from vault,redeeming and updating token list and weight
         const tx1 = await offChainRebalance1
           .connect(nonOwner)
@@ -2826,6 +3149,8 @@ describe.only("Tests for ZeroExSwap", () => {
           zeroExHandler.address,
         );
 
+        await expect(metaAggregator.redeem("1", "200", iaddress.wbnbAddress)).to.be.revertedWithCustomError(metaAggregator,"AlreadyOngoingOperation");
+
         const abiCoder = ethers.utils.defaultAbiCoder;
         var stateData = abiCoder.decode(
           ["address[]", "address[]", "uint[]", "uint"],
@@ -2855,6 +3180,91 @@ describe.only("Tests for ZeroExSwap", () => {
             ["200", "200", "200"],
           ),
         ).to.be.revertedWithCustomError(offChainRebalance, "CallerNotAssetManager");
+
+        await offChainRebalance.revertSellTokens();
+      });
+
+      it("should revert if AlreadyOngoingOperation", async () => {
+        const tokens = await indexSwap.getTokens();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+        const sToken = tokens[0];
+        const bToken = addresses.vETH_Address;
+        const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap.vault());
+        const tx = await metaAggregator.redeem(sAmount, "200", sToken);
+
+        const newTokens = [iaddress.busdAddress];
+        const newWeights = [10000];
+        await expect(offChainRebalance
+          .enableRebalanceAndUpdateRecord(newTokens, newWeights, ["200"])).to.be.revertedWithCustomError(offChainRebalance,"AlreadyOngoingOperation");
+        var tokenSell = [];
+        var sellTokens = [];
+        var sellAmount = [];
+        var swapAmount = [];
+        var tokenSellSwapData = [];
+        var buyTokens = [];
+        var buyWeights = [];
+        var sumWeight;
+
+        const data: [string[], string[], string[], string[]] = await metaAggregator.callStatic.getUpdateTokenData(
+          newTokens,
+          newWeights,
+        );
+        tokenSell = data[0];
+        sellTokens = data[1];
+        sellAmount = data[2];
+        swapAmount = data[3];
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != wbnb) {
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: wbnb,
+                sellAmount: swapAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+
+        for (let i = 0; i < tokenSell.length; i++) {
+          if (tokenSell[i] != "0x0000000000000000000000000000000000000000") {
+            if (tokenSell[i] != wbnb) {
+              const params = {
+                sellToken: tokenSell[i].toString(),
+                buyToken: wbnb,
+                sellAmount: sellAmount[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              tokenSellSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        await expect(offChainRebalance.enableAndUpdatePrimaryTokens(
+          newTokens,
+          newWeights,
+          [0, 0, 0, 0, 0, 0],
+          tokenSellSwapData,
+          zeroExHandler.address,
+        )).to.be.revertedWithCustomError(offChainRebalance,"AlreadyOngoingOperation");
       });
     });
   });

@@ -451,41 +451,43 @@ library IndexSwapLibrary {
   }
 
   /// @notice Calculate lockup cooldown applied to the investor after pool deposit
-  /// @param currentBalance Investor's current pool tokens balance
-  /// @param liquidityMinted Liquidity to be minted to investor after pool deposit
-  /// @param newCooldown New cooldown lockup time
-  /// @param lastCooldown Last cooldown lockup time applied to investor
-  /// @param lastDepositTime Timestamp when last pool deposit happened
+  /// @param _currentUserBalance Investor's current pool tokens balance
+  /// @param _mintedLiquidity Liquidity to be minted to investor after pool deposit
+  /// @param _currentCooldownTime New cooldown lockup time
+  /// @param _oldCooldownTime Last cooldown lockup time applied to investor
+  /// @param _lastDepositTimestamp Timestamp when last pool deposit happened
   /// @return cooldown New lockup cooldown to be applied to investor address
-  function calculateCooldown(
-    uint256 currentBalance,
-    uint256 liquidityMinted,
-    uint256 newCooldown,
-    uint256 lastCooldown,
-    uint256 lastDepositTime
+  function calculateCooldownPeriod(
+    uint256 _currentUserBalance,
+    uint256 _mintedLiquidity,
+    uint256 _currentCooldownTime,
+    uint256 _oldCooldownTime,
+    uint256 _lastDepositTimestamp
   ) external view returns (uint256 cooldown) {
     // Get timestamp when current cooldown ends
-    uint256 cooldownEndsAt = lastDepositTime + lastCooldown;
+    uint256 prevCooldownEnd = _lastDepositTimestamp + _oldCooldownTime;
     // Current exit remaining cooldown
-    uint256 remainingCooldown = cooldownEndsAt < block.timestamp ? 0 : cooldownEndsAt - block.timestamp;
+    uint256 prevCooldownRemaining = prevCooldownEnd < block.timestamp ? 0 : prevCooldownEnd - block.timestamp;
     // If it's first deposit with zero liquidity, no cooldown should be applied
-    if (currentBalance == 0 && liquidityMinted == 0) {
+    if (_currentUserBalance == 0 && _mintedLiquidity == 0) {
       cooldown = 0;
       // If it's first deposit, new cooldown should be applied
-    } else if (currentBalance == 0) {
-      cooldown = newCooldown;
+    } else if (_currentUserBalance == 0) {
+      cooldown = _currentCooldownTime;
       // If zero liquidity or new cooldown reduces remaining cooldown, apply remaining
-    } else if (liquidityMinted == 0 || newCooldown < remainingCooldown) {
-      cooldown = remainingCooldown;
+    } else if (_mintedLiquidity == 0 || _currentCooldownTime < prevCooldownRemaining) {
+      cooldown = prevCooldownRemaining;
       // For the rest cases calculate cooldown based on current balance and liquidity minted
     } else {
       // If the user already owns liquidity, the additional lockup should be in proportion to their existing liquidity.
-      // Calculated as newCooldown * liquidityMinted / currentBalance
-      uint256 additionalCooldown = (newCooldown * liquidityMinted) / currentBalance;
       // Aggregate additional and remaining cooldowns
-      uint256 aggregatedCooldown = additionalCooldown + remainingCooldown;
+      uint256 balanceBeforeMint = _currentUserBalance - _mintedLiquidity;
+      uint256 averageCooldown = (_mintedLiquidity * _currentCooldownTime + balanceBeforeMint * prevCooldownRemaining) /
+        _currentUserBalance;
       // Resulting value is capped at new cooldown time (shouldn't be bigger) and falls back to one second in case of zero
-      cooldown = aggregatedCooldown > newCooldown ? newCooldown : aggregatedCooldown != 0 ? aggregatedCooldown : 1;
+      cooldown = averageCooldown > _currentCooldownTime ? _currentCooldownTime : averageCooldown != 0
+        ? averageCooldown
+        : 1;
     }
   }
 }

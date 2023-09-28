@@ -17,6 +17,8 @@ contract PriceOracle is Ownable {
     mapping(address => AggregatorV2V3Interface) aggregatorInterfaces;
   }
 
+  address public WETH;
+
   mapping(address => AggregatorInfo) internal aggregatorAddresses;
 
   uint256 public oracleExpirationThreshold;
@@ -25,7 +27,8 @@ contract PriceOracle is Ownable {
   event addFeed(address[] base, address[] quote, AggregatorV2V3Interface[] aggregator);
   event updateFeed(address base, address quote, address aggregator);
 
-  constructor() {
+  constructor(address _WETH) {
+    WETH = _WETH;
     oracleExpirationThreshold = 90000; // 25 hours
   }
 

@@ -39,7 +39,9 @@ contract VenusHandler is IHandler {
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _priceOracle) {
-    require(_priceOracle != address(0), "Oracle having zero address");
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -62,19 +64,22 @@ contract VenusHandler is IHandler {
     }
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_vAsset)[0]);
     VBep20Interface vToken = VBep20Interface(_vAsset);
-
+    uint256 balanceBefore = vToken.balanceOf(address(this));
     if (msg.value == 0) {
       TransferHelper.safeApprove(address(underlyingToken), address(vToken), 0);
       TransferHelper.safeApprove(address(underlyingToken), address(vToken), _amount[0]);
-      vToken.mint(_amount[0]);
+      assert(vToken.mint(_amount[0]) == 0);
     } else {
-      if (msg.value < _amount[0]) revert ErrorLibrary.WrongNativeValuePassed();
+      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
+      if (msg.value != _amount[0]) revert ErrorLibrary.WrongNativeValuePassed();
       vToken.mint{value: _amount[0]}();
     }
-
+    uint256 balanceAfter = vToken.balanceOf(address(this));
+    if (balanceAfter - balanceBefore == 0) {
+      revert ErrorLibrary.ZeroBalanceAmount();
+    }
     if (_to != address(this)) {
-      uint256 vBalance = vToken.balanceOf(address(this));
-      TransferHelper.safeTransfer(_vAsset, _to, vBalance);
+      TransferHelper.safeTransfer(_vAsset, _to, balanceAfter - balanceBefore);
     }
     emit Deposit(msg.sender, _vAsset, _amount, _to);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);

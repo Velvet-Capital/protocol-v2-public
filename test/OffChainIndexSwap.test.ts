@@ -19,9 +19,6 @@ import {
 import {
   IndexSwap,
   IndexSwap__factory,
-  PriceOracle,
-  IERC20Upgradeable__factory,
-  IndexSwapLibrary,
   Exchange,
   TokenRegistry,
   Rebalancing__factory,
@@ -30,12 +27,9 @@ import {
   ZeroExHandler,
   PancakeSwapLPHandler,
   OffChainRebalance__factory,
-  ERC20Upgradeable,
   OffChainIndexSwap,
-  IIndexSwap,
-  IERC20Upgradeable,
   VelvetSafeModule,
-  Exchange__factory
+  Exchange__factory,
 } from "../typechain";
 
 import { chainIdToAddresses } from "../scripts/networkVariables";
@@ -50,6 +44,9 @@ describe.only("Tests for OffChainIndex", () => {
   let accounts;
   let indexSwap: any;
   let indexSwap1: any;
+  let offChainIndex: any;
+  let offChainIndex1: any;
+  let offChainIndex2: any;
   let iaddress: IAddresses;
   let indexSwapContract: IndexSwap;
   let offChainIndexSwap: OffChainIndexSwap;
@@ -58,7 +55,7 @@ describe.only("Tests for OffChainIndex", () => {
   let swapHandler1: PancakeSwapHandler;
   let lpHandler: PancakeSwapLPHandler;
   let exchange: any;
-  let exchange1 : Exchange;
+  let exchange1: Exchange;
   let zeroExHandler: ZeroExHandler;
   let rebalancing: any;
   let rebalancing1: any;
@@ -66,7 +63,6 @@ describe.only("Tests for OffChainIndex", () => {
   let offChainRebalance: any;
   let offChainRebalance1: any;
   let tokenRegistry: TokenRegistry;
-  let txObject;
   let owner: SignerWithAddress;
   let treasury: SignerWithAddress;
   let nonOwner: SignerWithAddress;
@@ -106,7 +102,7 @@ describe.only("Tests for OffChainIndex", () => {
         "3000000000000000000",
         "120000000000000000000000",
         nonOwner.address,
-        addresses.WETH_Address
+        addresses.WETH_Address,
       );
 
       await tokenRegistry.setCoolDownPeriod("1");
@@ -290,21 +286,21 @@ describe.only("Tests for OffChainIndex", () => {
 
       let whitelistedTokens = [
         iaddress.busdAddress,
-          iaddress.btcAddress,
-          iaddress.ethAddress,
-          iaddress.wbnbAddress,
-          iaddress.dogeAddress,
-          iaddress.daiAddress,
-          addresses.vBTC_Address,
-          addresses.vETH_Address,
-          addresses.vBNB_Address,
-          addresses.vDOGE_Address,
-          addresses.vDAI_Address,
-          addresses.Cake_BUSDLP_Address,
-          addresses.Cake_WBNBLP_Address,
-          addresses.MAIN_LP_BUSD,
-          addresses.mooValasBUSD,
-          addresses.MAIN_LP_DAI,
+        iaddress.btcAddress,
+        iaddress.ethAddress,
+        iaddress.wbnbAddress,
+        iaddress.dogeAddress,
+        iaddress.daiAddress,
+        addresses.vBTC_Address,
+        addresses.vETH_Address,
+        addresses.vBNB_Address,
+        addresses.vDOGE_Address,
+        addresses.vDAI_Address,
+        addresses.Cake_BUSDLP_Address,
+        addresses.Cake_WBNBLP_Address,
+        addresses.MAIN_LP_BUSD,
+        addresses.mooValasBUSD,
+        addresses.MAIN_LP_DAI,
       ];
 
       let whitelist = [owner.address];
@@ -343,7 +339,7 @@ describe.only("Tests for OffChainIndex", () => {
             _gnosisMultisendLibrary: addresses.gnosisMultisendLibrary,
             _gnosisSafeProxyFactory: addresses.gnosisSafeProxyFactory,
             _priceOracle: priceOracle.address,
-            _tokenRegistry: tokenRegistry.address
+            _tokenRegistry: tokenRegistry.address,
           },
         ],
         { kind: "uups" },
@@ -389,25 +385,56 @@ describe.only("Tests for OffChainIndex", () => {
         _transferableToPublic: false,
         _whitelistTokens: true,
       });
+
+      const indexFactoryCreate3 = await indexFactory.createIndexNonCustodial({
+        name: "INDEXLY",
+        symbol: "IDX",
+        maxIndexInvestmentAmount: "120000000000000000000000",
+        minIndexInvestmentAmount: "3000000000000000000",
+        _managementFee: "200",
+        _performanceFee: "2500",
+        _entryFee: "0",
+        _exitFee: "0",
+        _assetManagerTreasury: owner.address,
+        _whitelistedTokens: whitelistedTokens,
+        _public: false,
+        _transferable: false,
+        _transferableToPublic: false,
+        _whitelistTokens: true,
+      });
+
       const indexAddress = await indexFactory.getIndexList(0);
       const indexInfo = await indexFactory.IndexSwapInfolList(0);
 
       const indexAddress1 = await indexFactory.getIndexList(1);
       const indexInfo1 = await indexFactory.IndexSwapInfolList(1);
 
+      const indexAddress2 = await indexFactory.getIndexList(2);
+      const indexInfo2 = await indexFactory.IndexSwapInfolList(2);
+
+      let assetManagerConfig2 = (await indexFactory.IndexSwapInfolList(2)).assetManagerConfig;
+      const config = assetManagerConfig.attach(assetManagerConfig2);
+      await config.addWhitelistedUser([nonOwner.address]);
+
       indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
 
       indexSwap1 = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress1);
+
       rebalancing = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo.rebalancing);
 
       rebalancing1 = await ethers.getContractAt(Rebalancing__factory.abi, indexInfo1.rebalancing);
 
-      offChainRebalance = await ethers.getContractAt(OffChainRebalance__factory.abi, indexInfo.offChainRebalancing);
+      let offChainIndexAddress = indexInfo.offChainIndexSwap;
+      offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
 
-      offChainRebalance1 = await ethers.getContractAt(OffChainRebalance__factory.abi, indexInfo1.offChainRebalancing);
+      let offChainIndexAddress1 = indexInfo1.offChainIndexSwap;
+      offChainIndex1 = offChainIndexSwap.attach(offChainIndexAddress1);
+
+      let offChainIndexAddress2 = indexInfo2.offChainIndexSwap;
+      offChainIndex2 = offChainIndexSwap.attach(offChainIndexAddress2);
 
       exchange = await ethers.getContractAt(Exchange__factory.abi, indexInfo.exchangeHandler);
-      tokenRegistry.enableSwapHandlers([swapHandler.address]);
+      await tokenRegistry.enableSwapHandlers([swapHandler.address]);
       await tokenRegistry.enablePermittedTokens(
         [iaddress.wbnbAddress, iaddress.busdAddress, iaddress.ethAddress, iaddress.btcAddress, iaddress.dogeAddress],
         [priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address, priceOracle.address],
@@ -420,12 +447,43 @@ describe.only("Tests for OffChainIndex", () => {
       );
 
       console.log("indexSwap deployed to:", indexSwap.address);
-
-      console.log("rebalancing:", rebalancing1.address);
     });
 
     describe("IndexFactory Contract", function () {
       const wbnb = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+
+      it("investment should fail for non whitelisted user in non-public porfolio", async () => {
+        await expect(
+          offChainIndex2.investInFundOffChain(
+            {
+              sellTokenAddress: iaddress.wbnbAddress,
+              _buyToken: [iaddress.wbnbAddress],
+              buyAmount: ["10000"],
+              _buySwapData: ["0x"],
+              _offChainHandler: zeroExHandler.address,
+            },
+            "51827592727492928772",
+            ["200", "200", "200"],
+          ),
+        ).to.be.revertedWithCustomError(offChainIndex2, "UserNotAllowedToInvest");
+      });
+
+      it("investmetn should fail if token is not initialized", async () => {
+        await expect(
+          offChainIndex.connect(nonOwner).investInFundOffChain(
+            {
+              sellTokenAddress: iaddress.wbnbAddress,
+              _buyToken: [iaddress.wbnbAddress],
+              buyAmount: ["10000"],
+              _buySwapData: ["0x"],
+              _offChainHandler: zeroExHandler.address,
+            },
+            "51827592727492928772",
+            ["200", "200", "200"],
+          ),
+        ).to.be.revertedWithCustomError(offChainIndex, "NotInitialized");
+      });
+
       it("Initialize IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
@@ -480,15 +538,15 @@ describe.only("Tests for OffChainIndex", () => {
       it("non-admin should not be able to call the access control setupRole function", async () => {
         await expect(
           accessController
-            .connect(nonOwner) 
+            .connect(nonOwner)
             .setupRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", owner.address),
         ).to.be.revertedWithCustomError(accessController, "CallerNotAdmin");
       });
 
       it("admin should be able to call the access control setupRole function", async () => {
         await accessController
-            .connect(owner)
-            .setupRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", owner.address)
+          .connect(owner)
+          .setupRole("0xb1fadd3142ab2ad7f1337ea4d97112bcc8337fc11ce5b20cb04ad038adf99819", owner.address);
       });
 
       it("Invest 1 BNB into 1st fund ", async () => {
@@ -581,8 +639,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(
           indexAddress,
@@ -626,6 +682,37 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
+
+        await tokenRegistry.setProtocolPause(true);
+        await expect(
+          offChainIndex.connect(nonOwner).investInFundOffChain(
+            {
+              sellTokenAddress: sellTokenAddress,
+              _buyToken: buyUnderlyingTokensContract,
+              buyAmount: buyTokenAmountContract,
+              _buySwapData: buyTokenSwapData,
+              _offChainHandler: zeroExHandler.address,
+            },
+            "51827592727492928772",
+            ["200", "200", "200"],
+          ),
+        ).to.be.revertedWithCustomError(offChainIndex, "ProtocolIsPaused");
+        await tokenRegistry.setProtocolPause(false);
+
+        await expect(
+          offChainIndex.connect(nonOwner).investInFundOffChain(
+            {
+              sellTokenAddress: sellTokenAddress,
+              _buyToken: buyUnderlyingTokensContract,
+              buyAmount: buyTokenAmountContract,
+              _buySwapData: buyTokenSwapData,
+              _offChainHandler: zeroExHandler.address,
+            },
+            "51827592727492928772",
+            [],
+          ),
+        ).to.be.revertedWithCustomError(offChainIndex, "InvalidSlippageLength");
+
         await offChainIndex.connect(nonOwner).investInFundOffChain(
           {
             sellTokenAddress: sellTokenAddress,
@@ -658,9 +745,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000");
         const busdtoken = ERC20.attach(iaddress.busdAddress);
@@ -730,16 +814,12 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "5000000000");
         const dogeToken = ERC20.attach(iaddress.dogeAddress);
-        await swapHandler
-          .connect(owner)
-          .swapETHToTokens("200", iaddress.dogeAddress, owner.address, {
-            value: "1000000000000000000",
-          });
+        await swapHandler.connect(owner).swapETHToTokens("200", iaddress.dogeAddress, owner.address, {
+          value: "1000000000000000000",
+        });
         await dogeToken.approve(offChainIndex.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap.iAssetManagerConfig();
@@ -799,7 +879,6 @@ describe.only("Tests for OffChainIndex", () => {
 
       it("Invest 50 DOGE in 2nd Index fund", async () => {
         var tokens = await indexSwap1.getTokens();
-        var sellAmount;
 
         var buyUnderlyingTokensContract = [];
         var buyTokenAmountContract = [];
@@ -810,17 +889,13 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(1);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "5000000000");
+        const result = await offChainIndex1.callStatic.calculateSwapAmountsOffChain(indexAddress, "5000000000");
         const dogeToken = ERC20.attach(iaddress.dogeAddress);
-        await swapHandler
-          .connect(owner)
-          .swapETHToTokens("200", iaddress.dogeAddress, owner.address, {
-            value: "1000000000000000000",
-          });
-        await dogeToken.approve(offChainIndex.address, "10000000000000000000");
+        await swapHandler.connect(owner).swapETHToTokens("200", iaddress.dogeAddress, owner.address, {
+          value: "1000000000000000000",
+        });
+        await dogeToken.approve(offChainIndex1.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
@@ -853,7 +928,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        const fund = await offChainIndex.investInFundOffChain(
+        const fund = await offChainIndex1.investInFundOffChain(
           {
             sellTokenAddress: sellTokenAddress,
             _buyToken: buyUnderlyingTokensContract,
@@ -884,12 +959,10 @@ describe.only("Tests for OffChainIndex", () => {
         var sellTokenAddress = iaddress.dogeAddress;
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const indexAddress = await indexFactory.getIndexList(1);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "5000000000");
+        const result = await offChainIndex1.callStatic.calculateSwapAmountsOffChain(indexAddress, "5000000000");
         const dogeToken = ERC20.attach(iaddress.dogeAddress);
-        await dogeToken.approve(offChainIndex.address, "10000000000000000000");
+        await dogeToken.approve(offChainIndex1.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
@@ -929,7 +1002,7 @@ describe.only("Tests for OffChainIndex", () => {
           }
         }
         await expect(
-          offChainIndex.investInFundOffChain(
+          offChainIndex1.investInFundOffChain(
             {
               sellTokenAddress: sellTokenAddress,
               _buyToken: buyUnderlyingTokensContract,
@@ -954,16 +1027,17 @@ describe.only("Tests for OffChainIndex", () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         const indexAddress = await indexFactory.getIndexList(1);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
+        const result = await offChainIndex1.callStatic.calculateSwapAmountsOffChain(
+          indexAddress,
+          "1000000000000000000",
+        );
         const ethToken = ERC20.attach(iaddress.ethAddress);
         // console.log("ethAddreess",iaddress.ethAddress);
         const swapResult = await swapHandler.connect(owner).swapETHToTokens("200", iaddress.ethAddress, owner.address, {
           value: "10000000000000000000",
         });
-        await ethToken.approve(offChainIndex.address, "10000000000000000000");
+        await ethToken.approve(offChainIndex1.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
@@ -1000,7 +1074,7 @@ describe.only("Tests for OffChainIndex", () => {
           }
         }
         await expect(
-          offChainIndex.investInFundOffChain(
+          offChainIndex1.investInFundOffChain(
             {
               sellTokenAddress: sellTokenAddress,
               _buyToken: buyUnderlyingTokensContract,
@@ -1025,12 +1099,13 @@ describe.only("Tests for OffChainIndex", () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         const indexAddress = await indexFactory.getIndexList(1);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
+        const result = await offChainIndex1.callStatic.calculateSwapAmountsOffChain(
+          indexAddress,
+          "1000000000000000000",
+        );
         const ethToken = ERC20.attach(iaddress.ethAddress);
-        await ethToken.approve(offChainIndex.address, "10000000000000000000");
+        await ethToken.approve(offChainIndex1.address, "10000000000000000000");
         // I have - amount to buy, BuyTokenAddress, SellTokenAddress ,need to calculate swapData
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
@@ -1073,7 +1148,7 @@ describe.only("Tests for OffChainIndex", () => {
           }
         }
         await expect(
-          offChainIndex.investInFundOffChain(
+          offChainIndex1.investInFundOffChain(
             {
               sellTokenAddress: sellTokenAddress,
               _buyToken: buyUnderlyingTokensContract,
@@ -1100,8 +1175,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
         const ethToken = ERC20.attach(iaddress.ethAddress);
@@ -1173,8 +1246,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "1000000000000000000");
         for (let i = 0; i < tokens.length; i++) {
@@ -1241,9 +1312,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000000");
         const btcToken = ERC20.attach(iaddress.btcAddress);
@@ -1344,16 +1412,8 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex
-          .connect(nonOwner)
-          .calculateSwapAmountsOffChain(indexAddress, "10000000000000000000");
-        await sellAmount.wait();
         //Static call for return
-        const result = await offChainIndex
+        const result = await offChainIndex1
           .connect(nonOwner)
           .callStatic.calculateSwapAmountsOffChain(indexAddress, "10000000000000000000");
         const busdtoken = ERC20.attach(iaddress.busdAddress);
@@ -1362,7 +1422,7 @@ describe.only("Tests for OffChainIndex", () => {
           .swapETHToTokens("200", iaddress.busdAddress, nonOwner.address, {
             value: "1000000000000000000",
           });
-        await busdtoken.connect(nonOwner).approve(offChainIndex.address, "10000000000000000000");
+        await busdtoken.connect(nonOwner).approve(offChainIndex1.address, "10000000000000000000");
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -1395,7 +1455,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        const fund = await offChainIndex.connect(nonOwner).investInFundOffChain(
+        const fund = await offChainIndex1.connect(nonOwner).investInFundOffChain(
           {
             sellTokenAddress: sellTokenAddress,
             _buyToken: buyUnderlyingTokensContract,
@@ -1426,16 +1486,9 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
         // console.log("2 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-        //Mining the tx
-        sellAmount = await offChainIndex
-          .connect(nonOwner)
-          .calculateSwapAmountsOffChain(indexAddress, "100000000000000000");
-        await sellAmount.wait();
+
         //Static call for return
-        const result = await offChainIndex
+        const result = await offChainIndex1
           .connect(nonOwner)
           .callStatic.calculateSwapAmountsOffChain(indexAddress, "100000000000000000");
         for (let i = 0; i < tokens.length; i++) {
@@ -1470,7 +1523,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        const fund = await offChainIndex.connect(nonOwner).investInFundOffChain(
+        const fund = await offChainIndex1.connect(nonOwner).investInFundOffChain(
           {
             sellTokenAddress: wbnb,
             _buyToken: buyUnderlyingTokensContract,
@@ -1535,9 +1588,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         const ownerBalanceBefore = await owner.getBalance();
         //Mining the tx
         await expect(
@@ -1563,9 +1613,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         const ownerBalanceBefore = await owner.getBalance();
         //Mining the tx
         sellAmount = await offChainIndex.redeemTokens({
@@ -1696,9 +1743,6 @@ describe.only("Tests for OffChainIndex", () => {
 
         const indexSupplyBefore = await indexSwap.totalSupply();
         console.log("1 bnb before", indexSupplyBefore);
-        const indexAddress = await indexFactory.getIndexList(0);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex.redeemTokens({
           tokenAmount: AMOUNT,
@@ -1761,6 +1805,12 @@ describe.only("Tests for OffChainIndex", () => {
           }),
         ).to.be.revertedWithCustomError(offChainIndex, "InvalidLength");
 
+        await tokenRegistry.setProtocolPause(true);
+        await expect(offChainIndex.triggerMultipleTokenWithdrawal()).to.be.revertedWithCustomError(
+          offChainIndex,
+          "ProtocolIsPaused",
+        );
+        await tokenRegistry.setProtocolPause(false);
         await offChainIndex.triggerMultipleTokenWithdrawal();
         for (let j = 0; j < sellTokensContract.length; j++) {
           expect(Number(await offChainIndex.userUnderlyingAmounts(owner.address, sellTokensContract[j]))).to.be.equal(
@@ -1815,11 +1865,11 @@ describe.only("Tests for OffChainIndex", () => {
 
         const indexSupplyBefore = await indexSwap1.totalSupply();
         const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        const result = await offChainIndex1.callStatic.calculateSwapAmountsOffChain(
+          indexAddress,
+          "2000000000000000000",
+        );
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -1852,7 +1902,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        const fund = await offChainIndex.connect(nonOwner).investInFundOffChain(
+        const fund = await offChainIndex1.connect(nonOwner).investInFundOffChain(
           {
             sellTokenAddress: wbnb,
             _buyToken: buyUnderlyingTokensContract,
@@ -1887,9 +1937,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex
           .connect(addr2)
@@ -1964,9 +2011,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex
           .connect(addr2)
@@ -2024,7 +2068,7 @@ describe.only("Tests for OffChainIndex", () => {
             {
               value: "1000000000000000000",
             },
-          )
+          ),
         ).to.be.revertedWithCustomError(zeroExHandler, "SwapFailed");
       });
 
@@ -2041,9 +2085,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex
           .connect(addr2)
@@ -2102,7 +2143,7 @@ describe.only("Tests for OffChainIndex", () => {
             {
               value: "1000000000000000000",
             },
-          )
+          ),
         ).to.be.revertedWithCustomError(zeroExHandler, "InvalidAmount");
       });
 
@@ -2119,9 +2160,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex
           .connect(addr2)
@@ -2160,7 +2198,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        
+
         await expect(
           offChainIndex.connect(addr2).investInFundOffChain(
             {
@@ -2175,7 +2213,7 @@ describe.only("Tests for OffChainIndex", () => {
             {
               value: "1000000000000000000",
             },
-          )
+          ),
         ).to.be.revertedWithCustomError(offChainIndex, "InvalidToken");
       });
 
@@ -2192,9 +2230,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex
           .connect(addr2)
@@ -2238,7 +2273,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        
+
         await expect(
           offChainIndex.connect(addr2).investInFundOffChain(
             {
@@ -2253,7 +2288,7 @@ describe.only("Tests for OffChainIndex", () => {
             {
               value: "1000000000000000000",
             },
-          )
+          ),
         ).to.be.revertedWithCustomError(offChainIndex, "InvalidToken");
       });
 
@@ -2270,9 +2305,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex
           .connect(addr2)
@@ -2316,7 +2348,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        
+
         buyTokenAmountContract[0] = BigNumber.from(buyTokenAmountContract[0]).add("3000000000000000000").toString();
         await expect(
           offChainIndex.connect(addr2).investInFundOffChain(
@@ -2332,7 +2364,7 @@ describe.only("Tests for OffChainIndex", () => {
             {
               value: "1000000000000000000",
             },
-          )
+          ),
         ).to.be.revertedWithCustomError(exchange, "InvalidBuyValues");
       });
 
@@ -2347,11 +2379,11 @@ describe.only("Tests for OffChainIndex", () => {
 
         const indexSupplyBefore = await indexSwap1.totalSupply();
         const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
-        const result = await offChainIndex.callStatic.calculateSwapAmountsOffChain(indexAddress, "2000000000000000000");
+        const result = await offChainIndex1.callStatic.calculateSwapAmountsOffChain(
+          indexAddress,
+          "2000000000000000000",
+        );
         for (let i = 0; i < tokens.length; i++) {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const handlerAddress = tokenInfo[2];
@@ -2385,7 +2417,7 @@ describe.only("Tests for OffChainIndex", () => {
           }
         }
         await expect(
-          offChainIndex.connect(nonOwner).investInFundOffChain(
+          offChainIndex1.connect(nonOwner).investInFundOffChain(
             {
               sellTokenAddress: wbnb,
               _buyToken: buyUnderlyingTokensContract,
@@ -2415,9 +2447,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex
           .connect(addr2)
@@ -2483,9 +2512,6 @@ describe.only("Tests for OffChainIndex", () => {
         var sellTokenSwapData = [];
 
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
 
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
@@ -2519,9 +2545,6 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
 
         const user2BNBBalanceBefore = await nonOwner.getBalance();
@@ -2654,6 +2677,7 @@ describe.only("Tests for OffChainIndex", () => {
             sellTokenAmountContract2.push(m[key].toString());
           }
         }
+
         const fund2 = await offChainIndex.connect(owner).withdrawOffChain({
           sellTokenAddress: sellTokensContract2,
           sellAmount: sellTokenAmountContract2,
@@ -2683,9 +2707,6 @@ describe.only("Tests for OffChainIndex", () => {
 
         const indexSupplyBefore = await indexSwap1.totalSupply();
         const indexAddress = await indexFactory.getIndexList(1);
-        const index = indexSwap1.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Mining the tx
         sellAmount = await offChainIndex
           .connect(addr2)
@@ -2727,7 +2748,7 @@ describe.only("Tests for OffChainIndex", () => {
             }
           }
         }
-        const fund = await offChainIndex.connect(addr2).investInFundOffChain(
+        const fund = await offChainIndex1.connect(addr2).investInFundOffChain(
           {
             sellTokenAddress: wbnb,
             _buyToken: buyUnderlyingTokensContract,
@@ -2756,8 +2777,6 @@ describe.only("Tests for OffChainIndex", () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         const indexSupplyBefore = await indexSwap1.totalSupply();
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(1)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
 
         let balanceBefore = [];
         type Map = {
@@ -2775,24 +2794,24 @@ describe.only("Tests for OffChainIndex", () => {
           }
         }
         let i = 0;
-        for(let key in m){
+        for (let key in m) {
           balanceBefore[i] = await ERC20.attach(key).balanceOf(addr2.address);
           i++;
         }
-        sellAmount = await offChainIndex.connect(addr2).redeemTokens({
+        sellAmount = await offChainIndex1.connect(addr2).redeemTokens({
           tokenAmount: AMOUNT,
           _lpSlippage: ["200", "200", "200", "200", "200"],
           token: wbnb,
         });
         await sellAmount.wait();
 
-        await offChainIndex.connect(addr2).triggerMultipleTokenWithdrawal();
+        await offChainIndex1.connect(addr2).triggerMultipleTokenWithdrawal();
         const indexSupplyAfter = await indexSwap1.totalSupply();
         let k = 0;
-        for(let key in m){
+        for (let key in m) {
           let balanceAfter = await ERC20.attach(key).balanceOf(addr2.address);
           expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore[k]));
-          expect(await ERC20.attach(key).balanceOf(offChainIndex.address)).to.be.equal(0);
+          expect(await ERC20.attach(key).balanceOf(offChainIndex1.address)).to.be.equal(0);
           k++;
         }
         expect(Number(indexSupplyBefore)).to.be.greaterThan(Number(indexSupplyAfter));
@@ -2809,9 +2828,6 @@ describe.only("Tests for OffChainIndex", () => {
 
         const indexSupplyBefore = await indexSwap.totalSupply();
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         //Static call for return
         const result = await offChainIndex
           .connect(owner)
@@ -2877,8 +2893,6 @@ describe.only("Tests for OffChainIndex", () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         const indexSupplyBefore = await indexSwap.totalSupply();
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
 
         let balanceBefore = [];
         type Map = {
@@ -2896,7 +2910,7 @@ describe.only("Tests for OffChainIndex", () => {
           }
         }
         let i = 0;
-        for(let key in m){
+        for (let key in m) {
           balanceBefore[i] = await ERC20.attach(key).balanceOf(addr2.address);
           i++;
         }
@@ -2917,7 +2931,7 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyAfter = await indexSwap.totalSupply();
         let balanceAfter = [];
         let k = 0;
-        for(let key in m){
+        for (let key in m) {
           let balanceAfter = await ERC20.attach(key).balanceOf(addr2.address);
           expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore[k]));
           expect(await ERC20.attach(key).balanceOf(offChainIndex.address)).to.be.equal(0);
@@ -2928,9 +2942,6 @@ describe.only("Tests for OffChainIndex", () => {
       });
 
       it("Non owner should not triggerMultiple TokenWithdrawal withdraw", async () => {
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
-
         await expect(offChainIndex.connect(addr3).triggerMultipleTokenWithdrawal()).to.be.revertedWithCustomError(
           offChainIndex,
           "TokensNotRedeemed",
@@ -2975,14 +2986,11 @@ describe.only("Tests for OffChainIndex", () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
         console.log("1 bnb before", indexSupplyBefore);
         const indexAddress = await indexFactory.getIndexList(0);
-        const index = indexSwap.attach(indexAddress);
-        let offChainIndexAddress = (await indexFactory.IndexSwapInfolList(0)).offChainIndexSwap;
-        const offChainIndex = offChainIndexSwap.attach(offChainIndexAddress);
         const ownerBalanceBefore = await owner.getBalance();
         //Mining the tx
         sellAmount = await offChainIndex.redeemTokens({
           tokenAmount: AMOUNT,
-          _lpSlippage: ["800", "800", "800", "800", "800"],
+          _lpSlippage: ["800", "800", "800"],
           token: wbnb,
         });
         await sellAmount.wait();
@@ -3008,7 +3016,6 @@ describe.only("Tests for OffChainIndex", () => {
         //Static call for return
         const config = await indexSwap1.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig = AssetManagerConfig.attach(config);
 
         for (let key in m) {
           if (key != wbnb) {
@@ -3035,10 +3042,20 @@ describe.only("Tests for OffChainIndex", () => {
             sellTokenAmountContract.push(m[key].toString());
           }
         }
+        console.log("length", sellTokensContract.length);
+        await expect(
+          offChainIndex.withdrawOffChain({
+            sellTokenAddress: sellTokensContract,
+            sellAmount: ["1000", "1000", "1000"],
+            buySwapData: sellTokenSwapData,
+            offChainHandler: zeroExHandler.address,
+          }),
+        ).to.be.revertedWithCustomError(offChainIndex, "InvalidSellAmount");
 
         await tokenRegistry.setProtocolPause(true);
 
         console.log("--------Withdrawing----------");
+
         await expect(
           offChainIndex.withdrawOffChain({
             sellTokenAddress: sellTokensContract,

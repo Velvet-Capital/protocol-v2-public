@@ -19,6 +19,7 @@
 pragma solidity 0.8.16;
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
 import {LPInterface} from "./interfaces/LPInterface.sol";
@@ -42,16 +43,10 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   IPriceOracle internal _oracle;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
-  event Redeem(
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _lpHandlerAddress, address _priceOracle) {
-    if (_lpHandlerAddress == address(0) && _priceOracle == address(0)) {
+     if(_priceOracle == address(0) || _lpHandlerAddress == address(0)){
       revert ErrorLibrary.InvalidAddress();
     }
     lpHandlerAddress = _lpHandlerAddress;
@@ -126,11 +121,13 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
     if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    address underlyingLpToken = address(IStrategy(address(IVaultBeefy(inputData._yieldAsset).strategy())).want());
-    if (inputData._amount > IVaultBeefy(inputData._yieldAsset).balanceOf(address(this))) {
+
+    IVaultBeefy asset = IVaultBeefy(inputData._yieldAsset);
+    address underlyingLpToken = address(IStrategy(address(asset.strategy())).want());
+    if (inputData._amount > asset.balanceOf(address(this))) {
       revert ErrorLibrary.NotEnoughBalanceInBeefy();
     }
-    IVaultBeefy(inputData._yieldAsset).withdraw(inputData._amount);
+    asset.withdraw(inputData._amount);
     uint256 LPTokens = IERC20Upgradeable(underlyingLpToken).balanceOf(address(this));
     TransferHelper.safeTransfer(underlyingLpToken, lpHandlerAddress, LPTokens);
 
@@ -187,8 +184,11 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    address underlyingLpToken = address(IStrategy(address(IVaultBeefy(t).strategy())).want());
-    return _calculatePriceForBalance(underlyingLpToken, address(_oracle), _getTokenBalance(_tokenHolder, t));
+    IVaultBeefy asset = IVaultBeefy(t);
+
+    address underlyingLpToken = address(IStrategy(address(asset.strategy())).want());
+    uint256 underlyingBalance = (getTokenBalance(_tokenHolder, t) * (asset.getPricePerFullShare()))/10 ** IERC20MetadataUpgradeable(t).decimals();
+    return _calculatePriceForBalance(underlyingLpToken, address(_oracle), underlyingBalance);
   }
 
   function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {}

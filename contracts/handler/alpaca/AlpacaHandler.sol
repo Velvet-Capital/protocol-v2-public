@@ -34,7 +34,9 @@ contract AlpacaHandler is IHandler {
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _priceOracle) {
-    require(_priceOracle != address(0), "Oracle having zero address");
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -57,21 +59,25 @@ contract AlpacaHandler is IHandler {
     }
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_yieldAsset)[0]);
     IVaultAlpaca yieldToken = IVaultAlpaca(_yieldAsset);
-
+    uint256 balanceBefore = yieldToken.balanceOf(address(this));
     if (msg.value == 0) {
       TransferHelper.safeApprove(address(underlyingToken), address(yieldToken), 0);
       TransferHelper.safeApprove(address(underlyingToken), address(yieldToken), _amount[0]);
       yieldToken.deposit(_amount[0]);
     } else {
-      if (msg.value < _amount[0]) {
+      if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
+      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
       yieldToken.deposit{value: _amount[0]}(_amount[0]);
     }
 
+    uint256 balanceAfter = yieldToken.balanceOf(address(this));
+    if (balanceAfter - balanceBefore == 0) {
+      revert ErrorLibrary.ZeroBalanceAmount();
+    }
     if (_to != address(this)) {
-      uint256 yBalance = yieldToken.balanceOf(address(this));
-      TransferHelper.safeTransfer(_yieldAsset, _to, yBalance);
+      TransferHelper.safeTransfer(_yieldAsset, _to, balanceAfter - balanceBefore);
     }
     emit Deposit(msg.sender, _yieldAsset, _amount[0], _to);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);

@@ -32,7 +32,6 @@ contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl
       revert ErrorLibrary.InsufficientFunds(tokenBalance, sellAmount);
     }
     setAllowance(sellTokenAddress, swapTarget, sellAmount);
-
     uint256 tokensBefore = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
     (bool success, ) = swapTarget.call(callData);
     if (!success) {
@@ -41,7 +40,6 @@ contract ZeroExHandler is Initializable, ApproveControl, ExternalSlippageControl
     uint256 tokensSwapped;
 
     uint buyTokenBalance = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
-
     tokensSwapped = buyTokenBalance - tokensBefore;
     if (tokensSwapped == 0) {
       revert ErrorLibrary.ZeroTokensSwapped();

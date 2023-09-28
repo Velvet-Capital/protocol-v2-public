@@ -99,6 +99,8 @@ export const BSCMainNet: ChainAddresses = {
   BSwap_ETH_BTCLP_Address: "0x6216E04cd40DB2c6FBEd64f1B5830A98D3A91740",
   BSwap_BTC_WBNBLP_Address: "0xC7e9d76ba11099AF3F330ff829c5F442d571e057",
   BSwap_DOGE_WBNBLPAddress: "0x1ef315fa08e0e1b116d97e3dfe0af292ed8b7f02",
+  BSwap_WBNB_XVSLP_Address: "0x753C734Dfe05aF28A732C033e26Ea6D369e07662",
+  BSwap_WBNB_LINKLP_Address: "0x16fe21c91c426e603977b1c6ecd59fc510a518c2",
 
   // ApeSwapLP Pool
   ApeSwap_WBNB_BUSD_Address: "0x51e6D27FA57373d8d4C256231241053a70Cb1d93",
@@ -156,9 +158,9 @@ export const BSCMainNet: ChainAddresses = {
 
   //External Swap URL
   zeroExUrl: "https://bsc.api.0x.org/swap/v1/quote?",
-  oneInchUrl : "https://api-velvet.1inch.io/v5.0/56/swap?",
-  paraswapPricesUrl : "https://apiv5.paraswap.io/prices?",
-  paraswapTransactionUrl : "https://apiv5.paraswap.io/transactions/56?",
+  oneInchUrl: "https://api-velvet.1inch.io/v5.0/56/swap?",
+  paraswapPricesUrl: "https://apiv5.paraswap.io/prices?",
+  paraswapTransactionUrl: "https://apiv5.paraswap.io/transactions/56?",
 };
 
 export const MaticMainNet: ChainAddresses = {

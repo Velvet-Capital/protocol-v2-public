@@ -682,7 +682,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
         //Checks if sellToken == underlying(buyToken) and buyToken should not be equal to eth (buyToken != eth)
         if (inputdata.inputData.sellTokenAddress == _underlying && _underlying != WETH) {
           swapResult[j] = _amount;
-          getBalanceAndTransfer(_amount, _underlying, address(handler), false);
+          withdrawOrTransfer(_amount, _underlying, address(handler), false);
         }
         //Checks if sellToken == eth(buyToken) and buyToken == ETH
         else if (_isweth && inputdata.inputData.sellTokenAddress == WETH) {
@@ -725,7 +725,7 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
 
       //If sellToken == buyToken
       if (inputdata.inputData.sellTokenAddress == inputdata._token) {
-        getBalanceAndTransfer(_amount, inputdata._token, vault, false);
+        withdrawOrTransfer(_amount, inputdata._token, vault, false);
         _mintedAmount = getPriceTokenUSD18Decimals(inputdata._token, _amount);
       }
       //If above conditon does not satifies or (buyToken != sellToken)
@@ -847,17 +847,17 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
     if (swapRes <= 0) {
       revert ErrorLibrary.InvalidAmount();
     }
-    getBalanceAndTransfer(swapRes, _token, _to, isETH);
+    withdrawOrTransfer(swapRes, _token, _to, isETH);
   }
 
   /**
-   * @notice This internal function returns balanceInusd and transfer token to "_to" address
-   * @param _amount Amount of the token whose balance in USD is required
+   * @notice This internal function either withdraws wETH or transfers _token
+   * @param _amount Amount of the token to be transferred
    * @param _token Address of the token
    * @param _to Address to which the token is to be transferred
    * @param isETH Boolean parameter for if the token is ETH (native) or not
    */
-  function getBalanceAndTransfer(uint256 _amount, address _token, address _to, bool isETH) internal virtual {
+  function withdrawOrTransfer(uint256 _amount, address _token, address _to, bool isETH) internal virtual {
     if (isETH) {
       IWETH(_token).withdraw(_amount);
     } else {

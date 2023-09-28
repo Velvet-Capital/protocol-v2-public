@@ -433,6 +433,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (Steps.None != step) {
       revert ErrorLibrary.InvalidExecution();
     }
+    if (getRedeemed()) {
+      revert ErrorLibrary.AlreadyOngoingOperation();
+    }
     address[] memory tokens = getTokens();
     setPaused(true);
     validatePrimaryAndHandler(tokens, offChainHandler);
@@ -464,6 +467,9 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   ) external virtual nonReentrant onlyAssetManager {
     if (Steps.None != step) {
       revert ErrorLibrary.InvalidExecution();
+    }
+    if (getRedeemed()) {
+      revert ErrorLibrary.AlreadyOngoingOperation();
     }
     setPaused(true);
     validatePrimaryAndHandler(getTokens(), offChainHandler);

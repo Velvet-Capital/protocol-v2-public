@@ -30,13 +30,6 @@ import {
   SlippageControl,
   RebalanceLibrary,
 } from "../typechain";
-import { deploy } from "@openzeppelin/hardhat-upgrades/dist/utils";
-
-import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@gnosis.pm/safe-core-sdk";
-import EthersAdapter from "@gnosis.pm/safe-ethers-lib";
-import { SafeTransactionDataPartial, GnosisSafeContract, SafeVersion } from "@gnosis.pm/safe-core-sdk-types";
-
-import { getSafeContract } from "@gnosis.pm/safe-core-sdk/dist/src/contracts/safeDeploymentContracts";
 
 let tokenRegistry: TokenRegistry;
 let indexSwapLibrary: IndexSwapLibrary;
@@ -83,7 +76,7 @@ export type IAddresses = {
   linkAddress: string;
   cakeAddress: string;
   usdtAddress: string;
-  usdcAddress:string;
+  usdcAddress: string;
 };
 
 export async function tokenAddresses(): Promise<IAddresses> {
@@ -161,7 +154,7 @@ export async function tokenAddresses(): Promise<IAddresses> {
     linkAddress,
     cakeAddress,
     usdtAddress,
-    usdcAddress
+    usdcAddress,
   };
 
   return Iaddress;
@@ -174,7 +167,7 @@ before(async () => {
   const provider = ethers.getDefaultProvider();
 
   const PriceOracle = await ethers.getContractFactory("PriceOracle");
-  priceOracle = await PriceOracle.deploy();
+  priceOracle = await PriceOracle.deploy("0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c");
   await priceOracle.deployed();
 
   const IndexSwapLibrary = await ethers.getContractFactory("IndexSwapLibrary");
@@ -270,7 +263,9 @@ before(async () => {
       addresses.ApeSwap_ETH_BTCB_Address,
       addresses.ApeSwap_ETH_WBNB_Address,
       addresses.ApeSwap_USDT_WBNB_Address,
-      addresses.ApeSwap_DOGE_WBNB_Address
+      addresses.ApeSwap_DOGE_WBNB_Address,
+      addresses.BSwap_WBNB_XVSLP_Address,
+      addresses.BSwap_WBNB_LINKLP_Address,
     ],
     [
       "0x0000000000000000000000000000000000000348",
@@ -282,6 +277,8 @@ before(async () => {
       addresses.WBNB,
       addresses.ETH_Address,
       addresses.WBNB,
+      "0x0000000000000000000000000000000000000348",
+      "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
@@ -350,120 +347,170 @@ before(async () => {
       aggregator.apeswap_eth_btcb_aggregator.address,
       aggregator.apeswap_eth_wbnb_aggregator.address,
       aggregator.apeswap_usdt_wbnb_aggregator.address,
-      aggregator.apeswap_doge_wbnb_aggregator.address
+      aggregator.apeswap_doge_wbnb_aggregator.address,
+      aggregator.bswap_wbnb_xvs_aggregator.address,
+      aggregator.bswap_wbnb_link_aggregator.address,
     ],
   );
 });
 
 export type Aggregators = {
-  wbnb_busd_aggregator:any;
-  cake_busd_aggregator:any;
-  cake_wbnb_aggregator:any;
-  ada_wbnb_aggregator:any;
-  band_wbnb_aggregator:any;
-  dot_wbnb_aggregator:any;
-  doge_wbnb_aggregator:any;
-  busd_btc_aggregator:any;
-  btc_wbnb_aggregator:any;
-  bswap_wbnb_busd_aggregator:any;
-  bswap_busdt_busd_aggregator:any;
-  bswap_busdt_wbnb_aggregator:any;
-  bswap_eth_btc_aggregator:any;
-  bswap_btc_wbnb_aggregator:any;
-  bswap_doge_wbnb_aggregator:any;
-  apeswap_wbnb_busd_aggregator:any;
-  apeswap_eth_btcb_aggregator:any;
-  apeswap_eth_wbnb_aggregator:any
-  apeswap_usdt_wbnb_aggregator:any;
-  apeswap_doge_wbnb_aggregator:any;
-}
+  wbnb_busd_aggregator: any;
+  cake_busd_aggregator: any;
+  cake_wbnb_aggregator: any;
+  ada_wbnb_aggregator: any;
+  band_wbnb_aggregator: any;
+  dot_wbnb_aggregator: any;
+  doge_wbnb_aggregator: any;
+  busd_btc_aggregator: any;
+  btc_wbnb_aggregator: any;
+  bswap_wbnb_busd_aggregator: any;
+  bswap_busdt_busd_aggregator: any;
+  bswap_busdt_wbnb_aggregator: any;
+  bswap_eth_btc_aggregator: any;
+  bswap_btc_wbnb_aggregator: any;
+  bswap_doge_wbnb_aggregator: any;
+  bswap_wbnb_xvs_aggregator: any;
+  apeswap_wbnb_busd_aggregator: any;
+  apeswap_eth_btcb_aggregator: any;
+  apeswap_eth_wbnb_aggregator: any;
+  apeswap_usdt_wbnb_aggregator: any;
+  apeswap_doge_wbnb_aggregator: any;
+  bswap_wbnb_link_aggregator: any;
+};
 
-async function deployLPAggregators(): Promise<Aggregators>{
-  
+async function deployLPAggregators(): Promise<Aggregators> {
   let aggregator: Aggregators;
   // PANCAKE LP POOL AGGREGATOR
   const WBNB_BUSD_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const wbnb_busd_aggregator = await WBNB_BUSD_Aggregator.deploy(addresses.WBNB_BUSDLP_Address,priceOracle.address);
+  const wbnb_busd_aggregator = await WBNB_BUSD_Aggregator.deploy(addresses.WBNB_BUSDLP_Address, priceOracle.address);
   await wbnb_busd_aggregator.deployed();
 
   const Cake_BUSD_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const cake_busd_aggregator = await Cake_BUSD_Aggregator.deploy(addresses.Cake_BUSDLP_Address,priceOracle.address);
+  const cake_busd_aggregator = await Cake_BUSD_Aggregator.deploy(addresses.Cake_BUSDLP_Address, priceOracle.address);
   await cake_busd_aggregator.deployed();
 
   const Cake_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const cake_wbnb_aggregator = await Cake_WBNB_Aggregator.deploy(addresses.Cake_WBNBLP_Address,priceOracle.address);
+  const cake_wbnb_aggregator = await Cake_WBNB_Aggregator.deploy(addresses.Cake_WBNBLP_Address, priceOracle.address);
   await cake_wbnb_aggregator.deployed();
 
   const ADA_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const ada_wbnb_aggregator = await ADA_WBNB_Aggregator.deploy(addresses.ADA_WBNBLP_Address,priceOracle.address);
+  const ada_wbnb_aggregator = await ADA_WBNB_Aggregator.deploy(addresses.ADA_WBNBLP_Address, priceOracle.address);
   await ada_wbnb_aggregator.deployed();
 
   const BAND_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const band_wbnb_aggregator = await BAND_WBNB_Aggregator.deploy(addresses.BAND_WBNBLP_Address,priceOracle.address);
+  const band_wbnb_aggregator = await BAND_WBNB_Aggregator.deploy(addresses.BAND_WBNBLP_Address, priceOracle.address);
   await band_wbnb_aggregator.deployed();
 
   const DOT_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const dot_wbnb_aggregator = await DOT_WBNB_Aggregator.deploy(addresses.DOT_WBNBLP_Address,priceOracle.address);
+  const dot_wbnb_aggregator = await DOT_WBNB_Aggregator.deploy(addresses.DOT_WBNBLP_Address, priceOracle.address);
   await dot_wbnb_aggregator.deployed();
 
   const DOGE_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const doge_wbnb_aggregator = await DOGE_WBNB_Aggregator.deploy(addresses.DOGE_WBNBLP_Address,priceOracle.address);
+  const doge_wbnb_aggregator = await DOGE_WBNB_Aggregator.deploy(addresses.DOGE_WBNBLP_Address, priceOracle.address);
   await doge_wbnb_aggregator.deployed();
 
   const BUSD_BTC_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const busd_btc_aggregator = await BUSD_BTC_Aggregator.deploy(addresses.BUSD_BTCLP_Address,priceOracle.address);
+  const busd_btc_aggregator = await BUSD_BTC_Aggregator.deploy(addresses.BUSD_BTCLP_Address, priceOracle.address);
   await busd_btc_aggregator.deployed();
 
   const BTC_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const btc_wbnb_aggregator = await BTC_WBNB_Aggregator.deploy(addresses.BTC_WBNBLP_Address,priceOracle.address);
+  const btc_wbnb_aggregator = await BTC_WBNB_Aggregator.deploy(addresses.BTC_WBNBLP_Address, priceOracle.address);
   await btc_wbnb_aggregator.deployed();
 
   //BISWAP LP POOL
 
   const BSwap_WBNB_BUSDAggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const bswap_wbnb_busd_aggregator = await BSwap_WBNB_BUSDAggregator.deploy(addresses.BSwap_WBNB_BUSDLP_Address,priceOracle.address);
+  const bswap_wbnb_busd_aggregator = await BSwap_WBNB_BUSDAggregator.deploy(
+    addresses.BSwap_WBNB_BUSDLP_Address,
+    priceOracle.address,
+  );
   await bswap_wbnb_busd_aggregator.deployed();
 
   const BSwap_BUSDT_BUSD_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const bswap_busdt_busd_aggregator = await BSwap_BUSDT_BUSD_Aggregator.deploy(addresses.BSwap_BUSDT_BUSDLP_Address,priceOracle.address);
+  const bswap_busdt_busd_aggregator = await BSwap_BUSDT_BUSD_Aggregator.deploy(
+    addresses.BSwap_BUSDT_BUSDLP_Address,
+    priceOracle.address,
+  );
   await bswap_busdt_busd_aggregator.deployed();
 
   const BSwap_BUSDT_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const bswap_busdt_wbnb_aggregator = await BSwap_BUSDT_WBNB_Aggregator.deploy(addresses.BSwap_BUSDT_WBNBLP_Address,priceOracle.address);
+  const bswap_busdt_wbnb_aggregator = await BSwap_BUSDT_WBNB_Aggregator.deploy(
+    addresses.BSwap_BUSDT_WBNBLP_Address,
+    priceOracle.address,
+  );
   await bswap_busdt_wbnb_aggregator.deployed();
 
   const BSwap_ETH_BTC_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const bswap_eth_btc_aggregator = await BSwap_ETH_BTC_Aggregator.deploy(addresses.BSwap_ETH_BTCLP_Address,priceOracle.address);
+  const bswap_eth_btc_aggregator = await BSwap_ETH_BTC_Aggregator.deploy(
+    addresses.BSwap_ETH_BTCLP_Address,
+    priceOracle.address,
+  );
   await bswap_eth_btc_aggregator.deployed();
 
   const BSwap_BTC_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const bswap_btc_wbnb_aggregator = await BSwap_BTC_WBNB_Aggregator.deploy(addresses.BSwap_BTC_WBNBLP_Address,priceOracle.address);
+  const bswap_btc_wbnb_aggregator = await BSwap_BTC_WBNB_Aggregator.deploy(
+    addresses.BSwap_BTC_WBNBLP_Address,
+    priceOracle.address,
+  );
   await bswap_btc_wbnb_aggregator.deployed();
 
   const BSwap_DOGE_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const bswap_doge_wbnb_aggregator = await BSwap_DOGE_WBNB_Aggregator.deploy(addresses.BSwap_DOGE_WBNBLPAddress,priceOracle.address);
+  const bswap_doge_wbnb_aggregator = await BSwap_DOGE_WBNB_Aggregator.deploy(
+    addresses.BSwap_DOGE_WBNBLPAddress,
+    priceOracle.address,
+  );
   await bswap_doge_wbnb_aggregator.deployed();
+
+  const BSwap_WBNB_XVSLP_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
+  const bswap_wbnb_xvs_aggregator = await BSwap_WBNB_XVSLP_Aggregator.deploy(
+    addresses.BSwap_WBNB_XVSLP_Address,
+    priceOracle.address,
+  );
+  await bswap_wbnb_xvs_aggregator.deployed();
+
+  const BSwap_WBNB_LINK_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
+  const bswap_wbnb_link_aggregator = await BSwap_WBNB_LINK_Aggregator.deploy(
+    addresses.BSwap_WBNB_LINKLP_Address,
+    priceOracle.address,
+  );
+  await bswap_wbnb_link_aggregator.deployed();
 
   //APESWAP LP POOL AGGREGATOR
 
   const ApeSwap_WBNB_BUSD_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const apeswap_wbnb_busd_aggregator = await ApeSwap_WBNB_BUSD_Aggregator.deploy(addresses.ApeSwap_WBNB_BUSD_Address,priceOracle.address);
+  const apeswap_wbnb_busd_aggregator = await ApeSwap_WBNB_BUSD_Aggregator.deploy(
+    addresses.ApeSwap_WBNB_BUSD_Address,
+    priceOracle.address,
+  );
   await apeswap_wbnb_busd_aggregator.deployed();
 
   const ApeSwap_ETH_BTCB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const apeswap_eth_btcb_aggregator = await ApeSwap_ETH_BTCB_Aggregator.deploy(addresses.ApeSwap_ETH_BTCB_Address,priceOracle.address);
+  const apeswap_eth_btcb_aggregator = await ApeSwap_ETH_BTCB_Aggregator.deploy(
+    addresses.ApeSwap_ETH_BTCB_Address,
+    priceOracle.address,
+  );
   await apeswap_eth_btcb_aggregator.deployed();
 
   const ApeSwap_ETH_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const apeswap_eth_wbnb_aggregator = await ApeSwap_ETH_WBNB_Aggregator.deploy(addresses.ApeSwap_ETH_WBNB_Address,priceOracle.address);
+  const apeswap_eth_wbnb_aggregator = await ApeSwap_ETH_WBNB_Aggregator.deploy(
+    addresses.ApeSwap_ETH_WBNB_Address,
+    priceOracle.address,
+  );
   await apeswap_eth_wbnb_aggregator.deployed();
 
   const ApeSwap_USDT_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const apeswap_usdt_wbnb_aggregator = await ApeSwap_USDT_WBNB_Aggregator.deploy(addresses.ApeSwap_USDT_WBNB_Address,priceOracle.address);
+  const apeswap_usdt_wbnb_aggregator = await ApeSwap_USDT_WBNB_Aggregator.deploy(
+    addresses.ApeSwap_USDT_WBNB_Address,
+    priceOracle.address,
+  );
   await apeswap_usdt_wbnb_aggregator.deployed();
 
   const ApeSwap_DOGE_WBNB_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
-  const apeswap_doge_wbnb_aggregator = await ApeSwap_DOGE_WBNB_Aggregator.deploy(addresses.ApeSwap_DOGE_WBNB_Address,priceOracle.address);
+  const apeswap_doge_wbnb_aggregator = await ApeSwap_DOGE_WBNB_Aggregator.deploy(
+    addresses.ApeSwap_DOGE_WBNB_Address,
+    priceOracle.address,
+  );
   await apeswap_doge_wbnb_aggregator.deployed();
 
   aggregator = {
@@ -482,14 +529,16 @@ async function deployLPAggregators(): Promise<Aggregators>{
     bswap_eth_btc_aggregator,
     bswap_btc_wbnb_aggregator,
     bswap_doge_wbnb_aggregator,
+    bswap_wbnb_xvs_aggregator,
     apeswap_wbnb_busd_aggregator,
     apeswap_eth_btcb_aggregator,
     apeswap_eth_wbnb_aggregator,
     apeswap_usdt_wbnb_aggregator,
     apeswap_doge_wbnb_aggregator,
-  } 
+    bswap_wbnb_link_aggregator,
+  };
 
-return aggregator;
+  return aggregator;
 }
 
 export {
@@ -508,5 +557,5 @@ export {
   wombatHandler,
   slippageController,
   rebalanceLibrary,
-  priceOracle
+  priceOracle,
 };

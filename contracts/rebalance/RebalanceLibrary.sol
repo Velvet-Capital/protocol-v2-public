@@ -139,7 +139,8 @@ library RebalanceLibrary {
     uint256[] memory sellAmount = new uint256[](newTokens.length);
     uint256 vaultBalance;
     uint256[] memory tokenBalanceInUSD = new uint256[](newTokens.length);
-    (tokenBalanceInUSD, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, newTokens);
+    (, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(index, index.getTokens());
+    (tokenBalanceInUSD, ) = IndexSwapLibrary.getTokenAndVaultBalance(index, newTokens);  
     for (uint256 i = 0; i < newTokens.length; i++) {
       uint256 oldWeight = (vaultBalance == 0)
         ? vaultBalance

@@ -247,7 +247,6 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
   function updateTokens(
     FunctionParameters.UpdateTokens calldata inputData
   ) external virtual nonReentrant onlyAssetManager {
-    uint256 totalWeight;
     address[] memory _tokens = getTokens();
     validateUpdate(inputData._swapHandler);
     if (
@@ -260,12 +259,6 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     }
     for (uint256 i = 0; i < inputData.tokens.length; i++) {
       RebalanceLibrary.updateTokensCheck(address(tokenRegistry), address(assetManagerConfig), inputData.tokens[i]);
-
-      totalWeight = totalWeight + inputData.denorms[i];
-    }
-    uint256 weight = index.TOTAL_WEIGHT();
-    if (totalWeight != weight) {
-      revert ErrorLibrary.InvalidWeights({totalWeight: weight});
     }
 
     uint256[] memory newDenorms = RebalanceLibrary.evaluateNewDenorms(index, inputData.tokens, inputData.denorms);
