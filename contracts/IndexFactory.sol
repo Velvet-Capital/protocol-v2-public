@@ -43,8 +43,6 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
 
   uint256 public indexId;
 
-  mapping(address => uint256) internal indexSwapToId;
-
   struct IndexSwaplInfo {
     address indexSwap;
     address rebalancing;
@@ -173,7 +171,7 @@ contract IndexFactory is Initializable, OwnableUpgradeable, ReentrancyGuardUpgra
       revert ErrorLibrary.InvalidMaxInvestmentAmount();
     }
     if (indexCreationPause) {
-      revert ErrorLibrary.indexCreationIsPause();
+      revert ErrorLibrary.IndexCreationIsPause();
     }
     if (initData._assetManagerTreasury == address(0)) {
       revert ErrorLibrary.InvalidAddress();

@@ -4,6 +4,8 @@ pragma solidity 0.8.16;
 import {AggregatorV2V3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 
 interface IPriceOracle {
+  function WETH() external returns(address);
+
   function _addFeed(address base, address quote, AggregatorV2V3Interface aggregator) external;
 
   function decimals(address base, address quote) external view returns (uint8);

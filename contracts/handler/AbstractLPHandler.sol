@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {RouterInterface} from "./interfaces/RouterInterface.sol";
 import {SlippageControl} from "./SlippageControl.sol";
@@ -12,27 +11,22 @@ import {Babylonian} from "@uniswap/lib/contracts/libraries/Babylonian.sol";
 import {FactoryInterface} from "./interfaces/FactoryInterface.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
-
 pragma solidity 0.8.16;
 
 abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
   event VELVET_ADDED_LIQUIDITY(uint256[] amountProvided, uint256 minAmountA, uint256 minAmountB, uint256 liquidity);
   event VELVET_REMOVE_LIQUIDITY(uint256 liquidityProvided, uint256 amountA, uint256 amountB);
-  uint256 public amountA;
-  uint256 public amountB;
-  uint256 public liquidity;
 
   function _approveAndDeposit(
     address[] memory underlying,
     address _router,
     uint256[] memory _amount,
     address _to
-  ) internal {
+  ) internal returns (uint256 amountA, uint256 amountB, uint256 liquidity) {
     TransferHelper.safeApprove(address(underlying[0]), _router, 0);
     TransferHelper.safeApprove(address(underlying[0]), _router, _amount[0]);
     TransferHelper.safeApprove(address(underlying[1]), _router, 0);
     TransferHelper.safeApprove(address(underlying[1]), _router, _amount[1]);
-
     (amountA, amountB, liquidity) = RouterInterface(_router).addLiquidity(
       address(underlying[0]),
       address(underlying[1]),
@@ -50,7 +44,7 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
     address _router,
     uint256[] memory _amount,
     address _to
-  ) internal {
+  ) internal returns (uint256 amountA, uint256 amountB, uint256 liquidity) {
     RouterInterface router = RouterInterface(_router);
     uint256 i = underlying[0] == router.WETH() ? 1 : 0;
     TransferHelper.safeApprove(address(underlying[i]), _router, 0);
@@ -63,6 +57,7 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
       _to,
       block.timestamp
     );
+    (amountA, amountB) = sortReturnAmounts(i, amountA, amountB);
   }
 
   /**
@@ -88,13 +83,16 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
       revert ErrorLibrary.InvalidAddress();
     }
     address[] memory underlying = _getUnderlyingTokens(_lpAsset);
+    uint256 amountA;
+    uint256 amountB;
+    uint256 liquidity;
     if (msg.value == 0) {
-      _approveAndDeposit(underlying, routerAddress, _amount, _to);
+      (amountA, amountB, liquidity) = _approveAndDeposit(underlying, routerAddress, _amount, _to);
     } else {
-      _approveAndDepositETH(underlying, routerAddress, _amount, _to);
+      (amountA, amountB, liquidity) = _approveAndDepositETH(underlying, routerAddress, _amount, _to);
     }
-    validateLPSlippage(underlying, amountA, amountB, priceA, priceB, _lpSlippage);
-
+    uint256 lpSlippage = _lpSlippage;
+    validateLPSlippage(underlying, amountA, amountB, priceA, priceB, lpSlippage);
     _returnDust(
       underlying[0],
       user // we need to pass user from exchange
@@ -104,8 +102,40 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
       user // we need to pass user from exchange
     );
     emit VELVET_ADDED_LIQUIDITY(_amount, amountA, amountB, liquidity);
-
     _mintedAmount = _calculatePriceForBalance(_lpAsset, _oracle, liquidity);
+  }
+
+  function _redeemETH(
+    FunctionParameters.RedeemData calldata inputData,
+    address[] memory _underlying,
+    LPInterface _token,
+    RouterInterface _router
+  ) internal returns (uint256 amountA, uint256 amountB) {
+    uint256 indexi = 0;
+    uint256 indexj = 1;
+    if (_underlying[0] == _router.WETH()) {
+      indexi = 1;
+      indexj = 0;
+    }
+    TransferHelper.safeApprove(address(_token), address(_router), 0);
+    TransferHelper.safeApprove(address(_token), address(_router), inputData._amount);
+    (amountA, amountB) = _router.removeLiquidityETH(
+      _underlying[indexi],
+      inputData._amount,
+      1,
+      1,
+      inputData._to,
+      block.timestamp
+    );
+    (amountA, amountB) = sortReturnAmounts(indexi, amountA, amountB);
+  }
+
+  function sortReturnAmounts(
+    uint256 _nonETHTokenPosition,
+    uint256 amountATemp,
+    uint256 amountBTemp
+  ) internal pure returns (uint256 amountA, uint256 amountB) {
+    (amountA, amountB) = _nonETHTokenPosition == 0 ? (amountATemp, amountBTemp) : (amountBTemp, amountATemp);
   }
 
   /**
@@ -126,23 +156,10 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
     }
     address[] memory underlying = _getUnderlyingTokens(inputData._yieldAsset);
     RouterInterface router = RouterInterface(routerAddress);
+    uint256 amountA;
+    uint256 amountB;
     if (inputData.isWETH) {
-      uint256 indexi = 0;
-      uint256 indexj = 1;
-      if (underlying[0] == router.WETH()) {
-        indexi = 1;
-        indexj = 0;
-      }
-      TransferHelper.safeApprove(address(token), address(router), 0);
-      TransferHelper.safeApprove(address(token), address(router), inputData._amount);
-      (amountA, amountB) = router.removeLiquidityETH(
-        underlying[indexi],
-        inputData._amount,
-        1,
-        1,
-        inputData._to,
-        block.timestamp
-      );
+      (amountA, amountB) = _redeemETH(inputData, underlying, token, router);
     } else {
       TransferHelper.safeApprove(address(token), address(router), 0);
       TransferHelper.safeApprove(address(token), address(router), inputData._amount);
@@ -169,7 +186,6 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
       revert ErrorLibrary.InvalidAddress();
     }
     uint fairLPPrice = IPriceOracle(_oracle).getPriceForOneTokenInUSD(_token);
-
     uint256 _tokenDecimal = IERC20Metadata(_token).decimals();
     finalLPPrice = (fairLPPrice * _balance) / (10 ** _tokenDecimal);
   }
@@ -212,7 +228,6 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
    * @param _priceB Price of token B from the oracle
    * @param _lpSlippage LP slippage sent by the user
    */
-
   function validateLPSlippage(
     address[] memory _underlying,
     uint _amountA,

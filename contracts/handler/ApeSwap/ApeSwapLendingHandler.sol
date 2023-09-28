@@ -45,7 +45,9 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
   mapping(address => uint256) internal pid;
 
   constructor(address _priceOracle) {
-    require(_priceOracle != address(0), "Oracle having zero address");
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -69,6 +71,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_cAsset)[0]);
     IcToken cToken = IcToken(_cAsset);
 
+    uint256 balanceBefore = cToken.balanceOf(address(this));
     if (msg.value == 0) {
       TransferHelper.safeApprove(address(underlyingToken), address(cToken), 0);
       TransferHelper.safeApprove(address(underlyingToken), address(cToken), _amount[0]);
@@ -76,15 +79,18 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
         revert ErrorLibrary.MintProcessFailed();
       }
     } else {
-      if (msg.value < _amount[0]) {
+      if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
+      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
       cToken.mint{value: _amount[0]}();
     }
-
+    uint256 balanceAfter = cToken.balanceOf(address(this));
+    if (balanceAfter - balanceBefore == 0) {
+      revert ErrorLibrary.ZeroBalanceAmount();
+    }
     if (_to != address(this)) {
-      uint256 cBalance = cToken.balanceOf(address(this));
-      TransferHelper.safeTransfer(_cAsset, _to, cBalance);
+      TransferHelper.safeTransfer(_cAsset, _to, balanceAfter - balanceBefore);
     }
 
     emit Velvet_ApeSwap_Mint(_cAsset, _amount[0], _to);

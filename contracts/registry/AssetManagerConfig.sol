@@ -189,11 +189,6 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
       if (!(tokenRegistry.isPermitted(_newToken))) {
         revert ErrorLibrary.TokenNotPermitted();
       }
-
-      if (_newToken == address(0)) {
-        revert ErrorLibrary.InvalidTokenAddress();
-      }
-
       if (_permittedTokens[_newToken]) {
         revert ErrorLibrary.AddressAlreadyApproved();
       }
@@ -354,7 +349,7 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
    * @param _newExitFee The new proposed exit fee (integral) value - has to be in the range of min and max fee values
    */
   function proposeNewEntryAndExitFee(uint256 _newEntryFee, uint256 _newExitFee) public virtual onlyAssetManager {
-    if (_newEntryFee > tokenRegistry.maxEntryFee() && _newExitFee > tokenRegistry.maxExitFee()) {
+    if (_newEntryFee > tokenRegistry.maxEntryFee() || _newExitFee > tokenRegistry.maxExitFee()) {
       revert ErrorLibrary.InvalidFee();
     }
     newEntryFee = _newEntryFee;

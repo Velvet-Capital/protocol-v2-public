@@ -32,12 +32,15 @@ contract BeefyHandler is IHandler {
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   IPriceOracle internal _oracle;
-  address internal constant WETH = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
+  address internal immutable WETH;
   address internal constant MOO_VENUS_BNB = address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71);
 
   constructor(address _priceOracle) {
-    require(_priceOracle != address(0), "Oracle having zero address");
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
     _oracle = IPriceOracle(_priceOracle);
+    WETH = _oracle.WETH();
   }
 
   /**
@@ -59,24 +62,26 @@ contract BeefyHandler is IHandler {
     }
     IVaultBeefy asset = IVaultBeefy(_mooAsset);
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_mooAsset)[0]);
+    uint256 balanceBefore = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
     if (msg.value == 0) {
       TransferHelper.safeApprove(address(underlyingToken), address(_mooAsset), 0);
       TransferHelper.safeApprove(address(underlyingToken), address(_mooAsset), _amount[0]);
       asset.deposit(_amount[0]);
-      if (_to != address(this)) {
-        uint256 assetBalance = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
-        TransferHelper.safeTransfer(_mooAsset, _to, assetBalance);
-      }
     } else {
       if (_mooAsset != MOO_VENUS_BNB) {
         revert ErrorLibrary.PleaseDepositUnderlyingToken();
       }
-
-      asset.depositBNB{value: msg.value}();
-      if (_to != address(this)) {
-        uint256 assetBalance = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
-        TransferHelper.safeTransfer(_mooAsset, _to, assetBalance);
+      if (msg.value != _amount[0]) {
+        revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
+      asset.depositBNB{value: msg.value}();
+    }
+    uint256 balanceAfter = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
+    if (balanceAfter - balanceBefore == 0) {
+      revert ErrorLibrary.ZeroBalanceAmount();
+    }
+    if (_to != address(this)) {
+      TransferHelper.safeTransfer(_mooAsset, _to, balanceAfter - balanceBefore);
     }
     emit Deposit(msg.sender, _mooAsset, _amount, _to);
     _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);

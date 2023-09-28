@@ -50,7 +50,9 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
   );
 
   constructor(address _priceOracle) {
-    require(_priceOracle != address(0), "Oracle having zero address");
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -76,8 +78,8 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
     IPool _pool = IPool(asset.pool());
 
     if (msg.value == 0) {
-      TransferHelper.safeApprove(address(underlyingToken), address(IPool(asset.pool())), 0);
-      TransferHelper.safeApprove(address(underlyingToken), address(IPool(asset.pool())), _amount[0]);
+      TransferHelper.safeApprove(address(underlyingToken), address(_pool), 0);
+      TransferHelper.safeApprove(address(underlyingToken), address(_pool), _amount[0]);
       _mintedAmount = _pool.deposit(
         address(underlyingToken),
         _amount[0],
@@ -90,7 +92,7 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
       if (msg.value < _amount[0]) {
         revert ErrorLibrary.MintAmountNotEqualToPassedValue();
       }
-
+      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
       _mintedAmount = IWombatRouter(WOMBAT_ROUTER).addLiquidityNative{value: _amount[0]}(
         _pool,
         getInternalSlippage(_amount[0], _lpAsset, _lpSlippage, true),
@@ -120,12 +122,12 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
     if (inputData._amount > token.balanceOf(address(this))) {
       revert ErrorLibrary.NotEnoughBalanceInWombatProtocol();
     }
-
+    IPool _pool = IPool(token.pool());
     if (!inputData.isWETH) {
-      TransferHelper.safeApprove(address(token), address(IPool(token.pool())), 0);
-      TransferHelper.safeApprove(address(token), address(IPool(token.pool())), inputData._amount);
+      TransferHelper.safeApprove(address(token), address(_pool), 0);
+      TransferHelper.safeApprove(address(token), address(_pool), inputData._amount);
 
-      IPool(token.pool()).withdraw(
+      _pool.withdraw(
         address(underlyingToken),
         inputData._amount,
         getInternalSlippage(inputData._amount, inputData._yieldAsset, inputData._lpSlippage, false),
@@ -137,7 +139,7 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
       TransferHelper.safeApprove(address(token), address(WOMBAT_ROUTER), inputData._amount);
 
       IWombatRouter(WOMBAT_ROUTER).removeLiquidityNative(
-        IPool(token.pool()),
+        _pool,
         inputData._amount,
         getInternalSlippage(inputData._amount, inputData._yieldAsset, inputData._lpSlippage, false),
         inputData._to,

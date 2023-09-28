@@ -47,13 +47,7 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   address internal constant MASTER_CHEF = 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
-  event Redeem(
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _priceOracle) {
     if ((_priceOracle) == address(0)) revert ErrorLibrary.InvalidAddress();
@@ -75,8 +69,8 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address user
   ) public payable override returns (uint256 _mintedAmount) {
     address[] memory t = getUnderlying(_lpAsset);
-    uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
-    uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
+    uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]); // wbnb
+    uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]); // token
     _mintedAmount = _deposit(_lpAsset, _amount, _lpSlippage, _to, address(router), user, address(_oracle), p1, p2);
     emit Deposit(msg.sender, _lpAsset, _amount, _to);
   }
@@ -120,7 +114,7 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    return _calculatePriceForBalance(t, address(_oracle),_getTokenBalance(_tokenHolder, t));
+    return _calculatePriceForBalance(t, address(_oracle), _getTokenBalance(_tokenHolder, t));
   }
 
   function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {}

@@ -533,7 +533,8 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
           it("should get the token price in USD", async () => {
             const token = await ethers.getContractAt("VBep20Interface", dataArray[tokenVariable]);
             const tokenBalance = await handlerVariable.callStatic.getTokenBalanceUSD(owner.address, token.address);
-
+            const tokenBalanceString = tokenBalance.toString();
+            expect(Number(tokenBalanceString.length)).to.be.lessThanOrEqual(23);
             expect(Number(tokenBalance)).to.be.greaterThan(0);
           });
         });

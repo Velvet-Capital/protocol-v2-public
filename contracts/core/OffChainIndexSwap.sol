@@ -190,12 +190,12 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     if (tokenAmount == 0) revert ErrorLibrary.ZeroTokenAmount();
 
     // Mint investment tokens to the specified address And Set CoolDown Period
-    index.mintTokenAndSetCooldown(user, tokenAmount);
+    uint256 _mintedAmount = index.mintTokenAndSetCooldown(user, tokenAmount);
 
     // Emit an event for the off-chain investment
     emit InvestInFundOffChain(
       _amount,
-      tokenAmount,
+      _mintedAmount,
       getIndexTokenRate(),
       IIndexSwap(index).balanceOf(msg.sender),
       address(index),
@@ -512,13 +512,6 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     if (_token == address(0)) {
       revert ErrorLibrary.InvalidToken();
     }
-  }
-
-  /**
-   * @notice This function returns usd price in eth
-   */
-  function getUsdEthPrice(uint256 _amount) internal view returns (uint256) {
-    return oracle.getUsdEthPrice(_amount);
   }
 
   /**

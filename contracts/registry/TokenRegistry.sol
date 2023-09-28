@@ -173,12 +173,12 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _baseHandler Address of base handler of the token
    */
   function addRewardToken(address[] memory _token, address _baseHandler) external onlyOwner {
+    if (_baseHandler == address(0)) {
+        revert ErrorLibrary.InvalidHandlerAddress();
+    }
     for (uint i = 0; i < _token.length; i++) {
       if (_token[i] == address(0)) {
         revert ErrorLibrary.InvalidTokenAddress();
-      }
-      if (_baseHandler == address(0)) {
-        revert ErrorLibrary.InvalidHandlerAddress();
       }
       address[] memory zeroAddress = new address[](1);
       zeroAddress[0] = address(0);
@@ -366,7 +366,7 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
    * @param _oracle Array of the corresponding price oracle addresses for the tokens
    */
   function enablePermittedTokens(address[] calldata _newTokens, address[] calldata _oracle) external virtual onlyOwner {
-    if (_newTokens.length == 0) {
+    if (_newTokens.length == 0 || _oracle.length != _newTokens.length) {
       revert ErrorLibrary.InvalidLength();
     }
 
@@ -417,10 +417,6 @@ contract TokenRegistry is Initializable, OwnableUpgradeable, UUPSUpgradeable {
       if (!(_permittedToken[_token])) {
         revert ErrorLibrary.AddressNotApproved();
       }
-      if (_token == address(0)) {
-        revert ErrorLibrary.InvalidAddress();
-      }
-
       delete _permittedToken[_token];
     }
     emit DisablePermittedTokens(_tokens);

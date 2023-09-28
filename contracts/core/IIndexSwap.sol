@@ -201,7 +201,7 @@ interface IIndexSwap {
 
   function checkCoolDownPeriod(address _user) external view;
 
-  function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external;
+  function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external returns (uint256);
 
   function burnWithdraw(address _to, uint256 _mintAmount) external returns (uint256 exitFee);
 

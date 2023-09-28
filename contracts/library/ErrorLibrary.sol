@@ -211,7 +211,7 @@ library ErrorLibrary {
   /// @notice Thrown when token is not enabled
   error TokenNotEnabled();
   /// @notice Thrown when index creation is paused
-  error indexCreationIsPause();
+  error IndexCreationIsPause();
   /// @notice Thrown denorm value sent is zero
   error ZeroDenormValue();
   /// @notice Thrown when asset manager is trying to input token which already exist
@@ -288,4 +288,6 @@ library ErrorLibrary {
   error ReentrancyGuardReentrantCall();
   /// @notice Throws when user calls updateFees function before proposing a new fee
   error NoNewFeeSet();
+  /// @notice Throws when token is not ETH
+  error TokenNotETH();
 }
