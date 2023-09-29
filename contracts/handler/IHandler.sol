@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // lend token
-// redeen token
+// redeem token
 // claim token
 // get token balance
 // get underlying balance

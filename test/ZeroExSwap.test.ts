@@ -1034,7 +1034,7 @@ describe.only("Tests for ZeroExSwap", () => {
         const newTokens = [
           "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
           "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
-          addresses.ibBTCB_Address,
+          addresses.BSwap_WBNB_LINKLP_Address,
         ];
         const newWeights = [3000, 1000, 6000];
         await expect(

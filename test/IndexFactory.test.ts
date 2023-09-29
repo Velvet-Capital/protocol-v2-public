@@ -1617,7 +1617,7 @@ describe.only("Tests for IndexFactory", () => {
       it("updateTokens should revert if token is not enabled", async () => {
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.ibBTCB_Address, iaddress.daiAddress, iaddress.wbnbAddress],
+            tokens: [addresses.BSwap_WBNB_LINKLP_Address, iaddress.daiAddress, iaddress.wbnbAddress],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["300", "300"],

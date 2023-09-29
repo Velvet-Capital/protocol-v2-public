@@ -109,11 +109,6 @@ export const BSCMainNet: ChainAddresses = {
   ApeSwap_USDT_WBNB_Address: "0x83C5b5b309EE8E232Fe9dB217d394e262a71bCC0",
   ApeSwap_DOGE_WBNB_Address: "0xfd1ef328a17a8e8eeaf7e4ea1ed8a108e1f2d096",
 
-  // Alpaca
-  ibBNB_Address: "0xd7d069493685a581d27824fc46eda46b7efc0063",
-  ibBUSD_Address: "0x7C9e73d4C71dae564d41F78d56439bB4ba87592f",
-  ibBTCB_Address: "0x08FC9Ba2cAc74742177e0afC3dC8Aed6961c24e7",
-
   // Wombat
   MAIN_LP_BUSD: "0xF319947eCe3823b790dd87b0A509396fE325745a",
   MAIN_LP_DAI: "0x9D0a463D5dcB82008e86bF506eb048708a15dd84",

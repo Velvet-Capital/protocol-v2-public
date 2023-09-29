@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-
+// SPDX-License-Identifier: BUSL-1.1
 /**
  * @title AccessController for the Index
  * @author Velvet.Capital

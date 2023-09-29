@@ -11,7 +11,6 @@ import {
   indexSwapLibrary,
   venusHandler,
   apeSwapLendingHandler,
-  alpacaHandler,
   wombatHandler,
   accessController,
   baseHandler,
@@ -276,7 +275,6 @@ describe.only("Tests for MetaAggregator", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-          priceOracle.address,
         ],
         [
           iaddress.busdAddress,
@@ -290,7 +288,6 @@ describe.only("Tests for MetaAggregator", () => {
           addresses.Cake_WBNBLP_Address,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
-          addresses.ibBUSD_Address,
           addresses.MAIN_LP_BUSD,
           addresses.oBNB,
           addresses.vETH_Address,
@@ -307,7 +304,6 @@ describe.only("Tests for MetaAggregator", () => {
           pancakeLpHandler.address,
           biSwapLPHandler.address,
           apeSwapLPHandler.address,
-          alpacaHandler.address,
           wombatHandler.address,
           apeSwapLendingHandler.address,
           venusHandler.address,
@@ -324,12 +320,11 @@ describe.only("Tests for MetaAggregator", () => {
           [addresses.cake_RewardToken],
           [addresses.biswap_RewardToken],
           [addresses.apeSwap_RewardToken],
-          [addresses.base_RewardToken],
           [addresses.wombat_RewardToken],
           [addresses.apeSwap_RewardToken],
           [addresses.venus_RewardToken],
         ],
-        [true, true, true, true, true, true, false, false, false, false, false, false, false, false, false],
+        [true, true, true, true, true, true, false, false, false, false, false, false, false, false],
       );
       registry.wait();
 
@@ -352,7 +347,6 @@ describe.only("Tests for MetaAggregator", () => {
           addresses.Cake_WBNBLP_Address,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
-          addresses.ibBUSD_Address,
           addresses.MAIN_LP_BUSD,
           addresses.oBNB,
           addresses.vETH_Address,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // Venus Official Docs: https://docs.venus.io/docs/getstarted#guides
 // Venus GitHub: https://github.com/VenusProtocol
