@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // Beefy Official Docs: https://docs.beefy.finance/
 // Beefy GitHub: https://github.com/beefyfinance

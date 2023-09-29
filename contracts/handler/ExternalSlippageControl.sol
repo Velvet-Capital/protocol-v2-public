@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.16;
 
 import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";

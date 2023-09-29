@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // BiSwap Official Docs: https://docs.biswap.org/biswap/
 // BiSwap GitHub: https://github.com/biswap-org

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // ApeSwap Official Docs: https://apeswap.gitbook.io/apeswap-finance/welcome/master
 // ApeSwap GitHub: https://github.com/ApeSwapFinance/

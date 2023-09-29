@@ -27,7 +27,6 @@ The contracts are divided into multiple sections:
 - Performance Fee: This fee is based upon the performance of a particular portfolio.
 
 **4. Handler** : This folder contains the handlers for various protocols that are supported in our v2 launch. They can be listed as follows:
-- [Alpaca](https://www.alpacafinance.org/): It is a lending protocol on the BNB chain and helps lenders earn safe and stable yields.
 - [ApeSwap](https://apeswap.finance/): It provides lending as well as (pair) Liquidity options where the users can invest and get interest bearing tokens in return.
 - [Beefy](https://beefy.com/): It provides lending as well as Liquidity options. After providing liquidity to a chosen protocol (e.g. PancakeSwap) the LP token can be deposited into Beefy and their protocol stakes the LP token which will in turn bring additional rewards (e.g. on PancakeSwap we get CAKE tokens).
 - [BiSwap](https://biswap.org/): It allows for Liquidity option where the user gets interest bearing LP token in return that brings additional rewards.

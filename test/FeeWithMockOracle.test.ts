@@ -105,7 +105,7 @@ describe.only("Tests for Mock Fee", () => {
       await mockPriceOracle.deployed();
 
       const PriceOracle2 = await ethers.getContractFactory("PriceOracle");
-      priceOracle = await PriceOracle2.deploy();
+      priceOracle = await PriceOracle2.deploy("0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c");
       await priceOracle.deployed();
 
       accounts = await ethers.getSigners();

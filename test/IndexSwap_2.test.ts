@@ -9,7 +9,6 @@ import {
   baseHandler,
   venusHandler,
   wombatHandler,
-  alpacaHandler,
   beefyHandler,
   apeSwapLendingHandler,
   pancakeLpHandler,
@@ -236,8 +235,6 @@ describe.only("Tests for MixedIndex", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-          priceOracle.address,
-          priceOracle.address,
         ],
         [
           addresses.vBTC_Address,
@@ -260,8 +257,6 @@ describe.only("Tests for MixedIndex", () => {
           addresses.oBNB,
           addresses.BSwap_WBNB_BUSDLP_Address,
           addresses.mooBTCBUSDLP,
-          addresses.ibBNB_Address,
-          addresses.ibBNB_Address,
           addresses.vBNB_Address,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.DOGE_WBNBLP_Address,
@@ -290,8 +285,6 @@ describe.only("Tests for MixedIndex", () => {
           apeSwapLendingHandler.address,
           biSwapLPHandler.address,
           beefyLPHandler.address,
-          alpacaHandler.address,
-          alpacaHandler.address,
           venusHandler.address,
           biSwapLPHandler.address,
           pancakeLpHandler.address,
@@ -320,8 +313,6 @@ describe.only("Tests for MixedIndex", () => {
           [addresses.apeSwap_RewardToken],
           [addresses.biswap_RewardToken],
           [addresses.base_RewardToken],
-          [addresses.base_RewardToken],
-          [addresses.base_RewardToken],
           [addresses.venus_RewardToken],
           [addresses.biswap_RewardToken],
           [addresses.cake_RewardToken],
@@ -342,8 +333,6 @@ describe.only("Tests for MixedIndex", () => {
           true,
           true,
           true,
-          false,
-          false,
           false,
           false,
           false,
@@ -390,8 +379,6 @@ describe.only("Tests for MixedIndex", () => {
         addresses.oBNB,
         addresses.BSwap_WBNB_BUSDLP_Address,
         addresses.mooBTCBUSDLP,
-        addresses.ibBNB_Address,
-        addresses.ibBNB_Address,
         addresses.vBNB_Address,
         addresses.BSwap_BTC_WBNBLP_Address,
         addresses.DOGE_WBNBLP_Address,
@@ -529,7 +516,7 @@ describe.only("Tests for MixedIndex", () => {
       it("initialize should revert if a non-approved token is being used for init", async () => {
         await expect(
           indexSwap.initToken(
-            [addresses.ibBTCB_Address, addresses.BSwap_WBNB_BUSDLP_Address, addresses.mooBTCBUSDLP],
+            [addresses.BSwap_WBNB_LINKLP_Address, addresses.BSwap_WBNB_BUSDLP_Address, addresses.mooBTCBUSDLP],
             [100, 1000, 10],
           ),
         ).to.be.revertedWithCustomError(indexSwapLibrary, "TokenNotApproved");
@@ -982,33 +969,6 @@ describe.only("Tests for MixedIndex", () => {
         ).to.be.revertedWithCustomError(wombatHandler, "InvalidAddress");
       });
 
-      it("should not be able to get token balance of a zero address Alpaca token", async () => {
-        await expect(alpacaHandler.getTokenBalance(zeroAddress, owner.address)).to.be.revertedWithCustomError(
-          alpacaHandler,
-          "InvalidAddress",
-        );
-      });
-
-      it("should not be able to get underlying token of a zero address Alpaca token", async () => {
-        await expect(alpacaHandler.getUnderlying(zeroAddress)).to.be.revertedWithCustomError(
-          alpacaHandler,
-          "InvalidAddress",
-        );
-      });
-
-      it("should not be able to get underlying balance of a zero address Alpaca token holder", async () => {
-        await expect(
-          alpacaHandler.getUnderlyingBalance(zeroAddress, addresses.ibBNB_Address),
-        ).to.be.revertedWithCustomError(alpacaHandler, "InvalidAddress");
-      });
-
-      it("should not be able to get underlying balance of a zero address Alpaca token", async () => {
-        await expect(alpacaHandler.getUnderlyingBalance(owner.address, zeroAddress)).to.be.revertedWithCustomError(
-          alpacaHandler,
-          "InvalidAddress",
-        );
-      });
-
       it("should not be able to get underlying token of a zero address Beefy token", async () => {
         await expect(beefyHandler.getUnderlying(zeroAddress)).to.be.reverted;
       });
@@ -1279,7 +1239,7 @@ describe.only("Tests for MixedIndex", () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 1000],
             _slippageSell: ["200", "200", "200"],
@@ -1327,7 +1287,7 @@ describe.only("Tests for MixedIndex", () => {
         await tokenRegistry.enableSwapHandlers([swapHandler.address]);
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1343,7 +1303,7 @@ describe.only("Tests for MixedIndex", () => {
         await tokenRegistry.disableSwapHandlers([swapHandler.address]);
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.ibBNB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1358,7 +1318,7 @@ describe.only("Tests for MixedIndex", () => {
         tokenRegistry.enableSwapHandlers([swapHandler.address]);
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.ibBTCB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.BSwap_WBNB_LINKLP_Address, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1374,7 +1334,7 @@ describe.only("Tests for MixedIndex", () => {
       it("update tokens should not work if the function caller is not an asset manager", async () => {
         await expect(
           rebalancing.connect(addr3).updateTokens({
-            tokens: [addresses.ibBTCB_Address, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1393,7 +1353,7 @@ describe.only("Tests for MixedIndex", () => {
         await tokenRegistry.enableSwapHandlers([swapHandler.address]);
 
         await rebalancing.connect(nonOwner).updateTokens({
-          tokens: [addresses.ibBNB_Address, iaddress.wbnbAddress, addresses.vBNB_Address],
+          tokens: [addresses.vETH_Address, iaddress.wbnbAddress, addresses.vBNB_Address],
           _swapHandler: swapHandler.address,
           denorms: [2000, 6000, 2000],
           _slippageSell: ["800", "800", "800"],
@@ -1751,7 +1711,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should introduce a token not having the standard 18 decimals", async () => {
         await rebalancing.connect(nonOwner).updateTokens({
-          tokens: [addresses.USDT, addresses.ibBNB_Address, iaddress.dogeAddress],
+          tokens: [addresses.USDT, addresses.vBNB_Address, iaddress.dogeAddress],
           _swapHandler: swapHandler.address,
           denorms: [1000, 4000, 5000],
           _slippageSell: ["200", "200", "200"],

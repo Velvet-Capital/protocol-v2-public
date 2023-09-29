@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.16;
 import {AccessController} from "./access/AccessController.sol";
 import {IIndexSwap} from "./core/IIndexSwap.sol";

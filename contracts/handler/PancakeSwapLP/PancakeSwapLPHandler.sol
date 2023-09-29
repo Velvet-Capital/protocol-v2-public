@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // PancakeSwap Official Docs: https://docs.pancakeswap.finance/
 // PancakeSwap GitHub: https://github.com/pancakeswap

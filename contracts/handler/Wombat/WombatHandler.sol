@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License-Identifier: BUSL-1.1
 
 // Wombat Official Docs: https://docs.wombat.exchange/docs/
 // Wombat GitHub: https://github.com/wombat-exchange
