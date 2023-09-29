@@ -24,7 +24,6 @@ import {
   BeefyLPHandler,
   ApeSwapLPHandler,
   BiSwapLPHandler,
-  AlpacaHandler,
   ApeSwapLendingHandler,
   BeefyHandler,
   SlippageControl,
@@ -39,7 +38,6 @@ let pancakeLpHandler: PancakeSwapLPHandler;
 let biSwapLPHandler: BiSwapLPHandler;
 let apeSwapLPHandler: ApeSwapLPHandler;
 let apeSwapLendingHandler: ApeSwapLendingHandler;
-let alpacaHandler: AlpacaHandler;
 let wombatHandler: WombatHandler;
 let beefyLPHandler: BeefyLPHandler;
 let beefyHandler: BeefyHandler;
@@ -185,10 +183,6 @@ before(async () => {
   const VenusHandler = await ethers.getContractFactory("VenusHandler");
   venusHandler = await VenusHandler.deploy(priceOracle.address);
   await venusHandler.deployed();
-
-  const AlpacaHandler = await ethers.getContractFactory("AlpacaHandler");
-  alpacaHandler = await AlpacaHandler.deploy(priceOracle.address);
-  await alpacaHandler.deployed();
 
   const BeefyHandler = await ethers.getContractFactory("BeefyHandler");
   beefyHandler = await BeefyHandler.deploy(priceOracle.address);
@@ -551,7 +545,6 @@ export {
   biSwapLPHandler,
   apeSwapLPHandler,
   apeSwapLendingHandler,
-  alpacaHandler,
   beefyLPHandler,
   beefyHandler,
   wombatHandler,
