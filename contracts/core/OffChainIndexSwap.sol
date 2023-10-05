@@ -431,7 +431,9 @@ contract OffChainIndexSwap is Initializable, OwnableUpgradeable, UUPSUpgradeable
     if (!(user == assetManagerTreasury || user == velvetTreasury)) {
       chargeFees();
     }
-    return (totalSupply(), index.burnWithdraw(user, _tokenAmount));
+    uint256 _totalSupply = totalSupply();
+    uint256 _exitFee = index.burnWithdraw(user, _tokenAmount);
+    return (_totalSupply,_exitFee);
   }
 
   /**
