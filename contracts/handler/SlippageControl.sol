@@ -62,15 +62,15 @@ abstract contract SlippageControl is Ownable {
      *  amountA and amountB wont be equal to 0 and that becomes our lpSlippage
      */
 
-    uint amountDivision = (_amountA * (10 ** 18)) / (_amountB);
-    uint priceDivision = (_priceB * (10 ** 18)) / (_priceA);
+    uint amountDivision = (_amountA * (10 ** 18)) / (_amountB); // 18 decimals 
+    uint priceDivision = (_priceB * (10 ** 18)) / (_priceA); // 18 decimals
     uint absoluteValue = 0;
     if (amountDivision > priceDivision) {
-      absoluteValue = amountDivision - priceDivision;
+      absoluteValue = amountDivision - priceDivision; // 18 decimals
     } else {
-      absoluteValue = priceDivision - amountDivision;
+      absoluteValue = priceDivision - amountDivision; // 18 decimals
     }
-    if (absoluteValue * (10 ** 2) > (_lpSlippage * (10 ** 18))) {
+    if (absoluteValue * (10 ** 2) > (_lpSlippage * (10 ** 18))) { // absoluteValue = 18 decimals; _lpSlippage: 1% = 100(BIPS)
       revert ErrorLibrary.InvalidAmount();
     }
   }
