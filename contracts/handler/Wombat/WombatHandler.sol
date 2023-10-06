@@ -246,13 +246,19 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
   ) internal returns (uint slippageAmount) {
     IAsset asset = IAsset(_token);
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_token)[0]);
+    address pool = asset.pool();
+    //Formula By Wombat For Slippage
+    /**
+     minAmount = liquidity * (1/1+slippage)
+     */
+    //Here 1 is 100%(For Velvet) as slippage denoted by wombat is 0.01 for 1%
+    uint expectedAmount;
     if (_deposit) {
-      (uint liquidity, ) = IPool(asset.pool()).quotePotentialDeposit(address(underlyingToken), _amount);
-      slippageAmount = (liquidity * ((HUNDRED_PERCENT * 100) / (HUNDRED_PERCENT + _slippage))) / (HUNDRED_PERCENT);
+      (expectedAmount, ) = IPool(pool).quotePotentialDeposit(address(underlyingToken), _amount);
     } else {
-      (uint returnAmount, ) = IPool(asset.pool()).quotePotentialWithdraw(address(underlyingToken), _amount);
-      slippageAmount = (returnAmount * ((HUNDRED_PERCENT * 100) / (HUNDRED_PERCENT + _slippage))) / (HUNDRED_PERCENT);
+      (expectedAmount, ) = IPool(pool).quotePotentialWithdraw(address(underlyingToken), _amount);
     }
+    slippageAmount = (expectedAmount * HUNDRED_PERCENT ) / (HUNDRED_PERCENT + _slippage);
   }
 
   receive() external payable {}
