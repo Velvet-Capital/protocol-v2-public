@@ -5,7 +5,8 @@
   "main": "index.js",
   "repository": "https://github.com/Velvet-Capital/",
   "author": "velvet.capital Team",
-  "license": "MIT",
+  "homepage": "https://www.velvet.capital/",
+  "license": "BUSL-1.1",
   "scripts": {
     "build": "yarn clean && yarn compile",
     "clean": "npx hardhat clean",
