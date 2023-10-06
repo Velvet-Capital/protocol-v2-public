@@ -292,7 +292,7 @@ describe.only("Tests for MixedIndex", () => {
         addresses.BSwap_WBNB_BUSDLP_Address,
         addresses.ApeSwap_ETH_BTCB_Address,
         addresses.BSwap_WBNB_LINKLP_Address,
-        addresses.ApeSwap_WBNB_BUSD_Address,
+        addresses.ApeSwap_ETH_WBNB_Address
       ];
       await tokenRegistry.enablePermittedTokens(
         [iaddress.usdtAddress, iaddress.wbnbAddress, iaddress.ethAddress, iaddress.daiAddress],
