@@ -60,7 +60,6 @@ contract UniswapV2LPAggregator is AggregatorV3Interface {
     // referenced from
     // https://github.com/AlphaFinanceLab/homora-v2/blob/master/contracts/oracle/UniswapV2Oracle.sol
 
-    // uint256 price = _calculatePrice();
     (uint256 price0, uint256 price1) = _getTokenPrices();
     uint256 totalSupply = LPInterface(pair).totalSupply();
     (uint256 reserve0, uint256 reserve1, ) = LPInterface(pair).getReserves();

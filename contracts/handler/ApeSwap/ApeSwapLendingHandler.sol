@@ -16,6 +16,7 @@
  *      5. Get underlying asset balance
  */
 
+//Handler Just For BSC
 pragma solidity 0.8.16;
 
 import {IHandler} from "../IHandler.sol";
@@ -33,9 +34,9 @@ import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract ApeSwapLendingHandler is IHandler, Ownable {
-  address internal constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
-  address internal constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-  address internal constant RAIN_MAKER = 0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa;
+  address internal oBNB;
+  address internal RAIN_MAKER;
+  address internal WETH;
 
   IPriceOracle internal _oracle;
 
@@ -44,11 +45,19 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
 
   mapping(address => uint256) internal pid;
 
-  constructor(address _priceOracle) {
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _oBNB address of apeswap bnb token
+   * @param _rain_maker address of apeswap protocol handler used for deposit and withdraw ETH
+   */
+  constructor(address _priceOracle, address _oBNB, address _rain_maker) {
     if(_priceOracle == address(0)){
       revert ErrorLibrary.InvalidAddress();
     }
+    oBNB = _oBNB;
+    RAIN_MAKER = _rain_maker;
     _oracle = IPriceOracle(_priceOracle);
+    WETH = _oracle.WETH();
   }
 
   /**
@@ -139,7 +148,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     address[] memory underlying = new address[](1);
 
     if (_apeToken == oBNB) {
-      underlying[0] = WBNB;
+      underlying[0] = WETH;
       return underlying;
     }
 
@@ -198,7 +207,13 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address _token, address _holder) public pure returns (bytes memory, address) {
+  /**
+   * @notice This function returns encoded data, for withdrawal
+   * @param _token address of token
+   * @param _holder address of holder
+   * @return bytes endoded data for claim
+   */
+  function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
     return (abi.encodeWithSelector(IRainMaker.claimComp.selector, _holder), RAIN_MAKER);
   }
 

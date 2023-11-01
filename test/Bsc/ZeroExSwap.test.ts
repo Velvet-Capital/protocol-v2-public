@@ -28,7 +28,7 @@ import {
   Rebalancing,
   OffChainRebalance,
   IndexFactory,
-  PancakeSwapHandler,
+  UniswapV2Handler,
   ZeroExHandler,
   OffChainIndexSwap,
   PancakeSwapLPHandler,
@@ -36,9 +36,9 @@ import {
   RebalanceAggregator__factory,
   ERC20Upgradeable,
   VelvetSafeModule,
-} from "../typechain";
+} from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 
 var chai = require("chai");
 const axios = require("axios");
@@ -56,8 +56,8 @@ describe.only("Tests for ZeroExSwap", () => {
   let metaAggregator: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
-  let swapHandler: PancakeSwapHandler;
-  let swapHandler1: PancakeSwapHandler;
+  let swapHandler: UniswapV2Handler;
+  let swapHandler1: UniswapV2Handler;
   let offChainIndexSwap: OffChainIndexSwap;
   let exchange: Exchange;
   let zeroExHandler: ZeroExHandler;
@@ -171,13 +171,13 @@ describe.only("Tests for ZeroExSwap", () => {
       });
       indexSwapContract = await IndexSwap.deploy();
       await indexSwapContract.deployed();
-      const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
-      swapHandler = await PancakeSwapHandler.deploy();
+      const UniswapV2Handler = await ethers.getContractFactory("UniswapV2Handler");
+      swapHandler = await UniswapV2Handler.deploy();
       await swapHandler.deployed();
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
 
-      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      const PancakeSwapHandler1 = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler1 = await PancakeSwapHandler1.deploy();
       await swapHandler1.deployed();
 

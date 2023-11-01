@@ -45,6 +45,10 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _lpHandlerAddress address of lp handler used in beefy protocol
+   */
   constructor(address _lpHandlerAddress, address _priceOracle) {
      if(_priceOracle == address(0) || _lpHandlerAddress == address(0)){
       revert ErrorLibrary.InvalidAddress();
@@ -92,7 +96,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
       );
     } else {
       uint256 amountBNB = address(this).balance;
-      uint256 index = underlying[0] == WETH ? 1 : 0;
+      uint256 index = underlying[0] == _oracle.WETH() ? 1 : 0;
       uint256 tokbal = IERC20Upgradeable(underlying[index]).balanceOf(address(this));
       TransferHelper.safeTransfer(address(underlying[index]), lpHandlerAddress, tokbal);
       _mintedAmount = IHandler(lpHandlerAddress).deposit{value: amountBNB}(
@@ -104,9 +108,9 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
       );
     }
 
-    uint256 LPTokens = IERC20Upgradeable(underlyingLpToken).balanceOf(address(this));
-    TransferHelper.safeApprove(address(underlyingLpToken), address(mooLpAsset), LPTokens);
-    IVaultBeefy(mooLpAsset).deposit(LPTokens);
+    uint256 lpTokensAmount = IERC20Upgradeable(underlyingLpToken).balanceOf(address(this));
+    TransferHelper.safeApprove(address(underlyingLpToken), mooLpAsset, lpTokensAmount);
+    IVaultBeefy(mooLpAsset).deposit(lpTokensAmount);
     if (_to != address(this)) {
       uint256 assetBalance = IERC20Upgradeable(mooLpAsset).balanceOf(address(this));
       TransferHelper.safeTransfer(mooLpAsset, _to, assetBalance);

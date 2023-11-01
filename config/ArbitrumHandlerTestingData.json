@@ -1,0 +1,35 @@
+[
+    {
+        "protocolName" : "Aave",
+        "handlerName": "AaveV3Handler",
+        "interfaceName": "IaToken",
+        "aArbLINK": "0x191c10Aa4AF7C30e871E70C95dB0E4eb77237530",
+        "aArbUSDC": "0x625E7708f30cA75bfd92586e17077590C60eb4cD",
+        "handlerInit": "true",
+        "isLPHAndler": "false",
+        "no_of_inits": "3",
+        "init_Array" : ["0x794a61358D6845594F94dc1DB02A252b5b4814aD","0xB5Ee21786D28c5Ba61661550879475976B707099","0x929EC64c34a17401F460460D4B9390518E5B473e"]
+    },
+    {
+        "protocolName" : "ApeSwap-lp",
+        "handlerName" : "ApeSwapLPHandler",
+        "interfaceName": "LPInterface",
+        "ApeSwap_WETH_USDT": "0xBEb125e43B46F757ece0428cdE20cce336aF962E",
+        "ApeSwap_WBTC_USDCe": "0x58C00CD537b7f86E0B6D0F3fD4D88C6f14622C1A",
+        "handlerInit": "true",
+        "isLPHAndler": "true",
+        "no_of_inits": "1",
+        "init_Array" : ["0x7d13268144adcdbEBDf94F654085CC15502849Ff"]
+    },
+    {
+        "protocolName" : "Hop",
+        "handlerName": "HopHandler",
+        "interfaceName": "IHLP",
+        "HOP_ETH_LP" : "0x59745774Ed5EfF903e615F5A2282Cae03484985a",
+        "HOP_DAI_LP" : "0x68f5d998F00bB2460511021741D098c05721d8fF",
+        "handlerInit": "false",
+        "isLPHAndler": "false",
+        "no_of_inits": "0",
+        "init_Array" : []
+    }
+]

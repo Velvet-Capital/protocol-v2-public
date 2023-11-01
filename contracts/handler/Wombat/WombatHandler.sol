@@ -33,10 +33,10 @@ import {FunctionParameters} from "contracts/FunctionParameters.sol";
 import {DustHandler} from "../DustHandler.sol";
 
 contract WombatHandler is IHandler, SlippageControl, DustHandler {
-  address internal constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
-  IWombat internal MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
+  address public WOMBAT_OPTIMIZED_PROXY;
+  IWombat public MasterWombat;
 
-  address internal constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
+  address public WOMBAT_ROUTER;
 
   IPriceOracle internal _oracle;
 
@@ -49,10 +49,19 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
     bool isWETH
   );
 
-  constructor(address _priceOracle) {
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _wombat_optimized_proxy address of wombat router proxy address
+   * @param _wombat_router address of wombat protocol router used for deposit and withdraw
+   */
+  constructor(address _priceOracle, address _wombat_optimized_proxy,address _wombat_router) {
     if(_priceOracle == address(0)){
       revert ErrorLibrary.InvalidAddress();
     }
+    WOMBAT_OPTIMIZED_PROXY = _wombat_optimized_proxy;
+    MasterWombat = IWombat(_wombat_optimized_proxy);
+
+    WOMBAT_ROUTER = _wombat_router;
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -216,15 +225,28 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
     return balanceUSD;
   }
 
+
+  /**
+   * @notice This function returns encoded data, for withdrawal
+   * @param t address of token
+   * @param _amount amount of token to withdraw
+   * @return bytes endoded data for withdrawal
+   */
   function encodeData(address t, uint256 _amount) public view returns (bytes memory) {
     IAsset asset = IAsset(t);
     return abi.encodeWithSelector(IWombat.withdraw.selector, MasterWombat.getAssetPid(address(asset)), _amount);
   }
 
-  function getRouterAddress() public pure returns (address) {
+  function getRouterAddress() public view returns (address) {
     return WOMBAT_OPTIMIZED_PROXY;
   }
 
+  /**
+   * @notice This function returns encoded data, for withdrawal
+   * @param _token address of token
+   * @param _holder address of holder
+   * @return bytes endoded data for claim
+   */
   function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
     uint256 pid = MasterWombat.getAssetPid(address(_token));
     return (abi.encodeWithSelector(IWombat.deposit.selector, pid, 0), address(MasterWombat));

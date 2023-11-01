@@ -39,19 +39,21 @@ import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
 contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   IPriceOracle internal _oracle;
 
-  address internal constant routerAddress = 0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8;
-  RouterInterface internal router = RouterInterface(routerAddress);
+  RouterInterface internal router;
   uint256 internal constant DIVISOR_INT = 10_000;
-
-  address internal constant SWAP_FEE_REWARD = 0x04eFD76283A70334C72BB4015e90D034B9F3d245;
-  address internal constant MASTER_CHEF = 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
-  constructor(address _priceOracle) {
-    if ((_priceOracle) == address(0)) revert ErrorLibrary.InvalidAddress();
+
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _routerAddress address of biswapLp protocol router used for deposit and withdraw
+   */
+  constructor(address _priceOracle, address _routerAddress) {
+    if (_priceOracle == address(0) || _routerAddress == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
+    router = RouterInterface(_routerAddress);
   }
 
   /**
@@ -82,7 +84,7 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address[] memory t = getUnderlying(inputData._yieldAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
-    _redeem(inputData, routerAddress, p1, p2);
+    _redeem(inputData, address(router), p1, p2);
     emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 

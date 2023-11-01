@@ -6,7 +6,9 @@
         "vBNB": "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
         "vETH": "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8",
         "handlerInit": "false",
-        "isLPHAndler": "false"
+        "isLPHAndler": "false",
+        "no_of_inits": "1",
+        "init_Array" : ["0xfD36E2c2a6789Db23113685031d7F16329158384"]
     },
     {
         "protocolName" : "BiSwap",
@@ -15,7 +17,9 @@
         "BUSDT-WBNB_LP": "0x8840C6252e2e86e545deFb6da98B2a0E26d8C1BA",
         "BTCB-WBNB_LP": "0xC7e9d76ba11099AF3F330ff829c5F442d571e057",
         "handlerInit": "true",
-        "isLPHAndler": "true"
+        "isLPHAndler": "true",
+        "no_of_inits": "1",
+        "init_Array" : ["0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8"]
     },
     {
         "protocolName" : "ApeSwap-lending",
@@ -24,7 +28,9 @@
         "oBNB": "0x34878F6a484005AA90E7188a546Ea9E52b538F6f",
         "oETH": "0xaA1b1E1f251610aE10E4D553b05C662e60992EEd",
         "handlerInit": "false",
-        "isLPHAndler": "false"
+        "isLPHAndler": "false",
+        "no_of_inits": "2",
+        "init_Array" : ["0x34878F6a484005AA90E7188a546Ea9E52b538F6f","0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa"]
     },
     {
         "protocolName" : "ApeSwap-lp",
@@ -33,31 +39,19 @@
         "USDT-WBNB_LP": "0x83C5b5b309EE8E232Fe9dB217d394e262a71bCC0",
         "ETH-WBNB_LP": "0xA0C3Ef24414ED9C9B456740128d8E63D016A9e11",
         "handlerInit": "true",
-        "isLPHAndler": "true"
+        "isLPHAndler": "true",
+        "no_of_inits": "1",
+        "init_Array" : ["0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7"]
     },
     {
-        "protocolName": "BeefyFinance",
-        "handlerName": "BeefyHandler",
+        "protocolName": "BeefyYieldHandler",
+        "handlerName": "BeefyYieldHandler",
         "interfaceName": "IVaultBeefy",
         "mooValasUSDC": "0x517493d1Fb90aB0a3cE3a5084065B706e33e0fEA",
         "mooVenusBNB": "0x6BE4741AB0aD233e4315a10bc783a7B923386b71",
         "handlerInit": "false",
-        "isLPHAndler": "false"
-    },
-    {
-        "protocolName": "BeefyFinanceLP",
-        "handlerName": "BeefyLPHandler",
-        "interfaceName": "ISolidlyRouter",
-        "BTCB-BNB_CakeLP": "0xafE4f29578FbfE7Be32B836CBEb81daB6574cC70",
-        "handlerInit": "false",
-        "isLPHAndler": "true"
-    },
-    {
-        "protocolName" : "Liqee",
-        "handlerName" : "LiqeeHandler",
-        "interfaceName": "IiToken",
-        "qBNB": "0x5aF1b6cA84693Cc8E733C8273Ba260095B3D05CA",
-        "qETH": "0x88131dd9f6A78d3d23aBcF4960D91913d2dC2307",
-        "handlerInit": "false"
+        "isLPHAndler": "false",
+        "no_of_inits": "1",
+        "init_Array" : ["0x6BE4741AB0aD233e4315a10bc783a7B923386b71"]
     }
 ]

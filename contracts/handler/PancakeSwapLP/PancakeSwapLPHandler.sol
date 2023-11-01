@@ -40,12 +40,8 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
 
   mapping(address => uint256) internal pid;
 
-  address internal constant routerAddress = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
-  address internal constant masterChefAddress = 0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652;
-  RouterInterface internal router = RouterInterface(routerAddress);
-  IMasterChef internal chefRouter = IMasterChef(masterChefAddress);
+  RouterInterface internal router;
   uint256 internal constant divisor_int = 10_000;
-  address internal constant MAIN_STAKING = 0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
@@ -56,9 +52,14 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     bool isWETH
   );
 
-  constructor(address _priceOracle) {
-    if ((_priceOracle) == address(0)) revert ErrorLibrary.InvalidAddress();
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _routerAddress address of biswapLp protocol router used for deposit and withdraw
+   */
+  constructor(address _priceOracle, address _routerAddress) {
+    if (_priceOracle == address(0) || _routerAddress == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
+    router = RouterInterface(_routerAddress);
   }
 
   /**
@@ -89,7 +90,7 @@ contract PancakeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address[] memory t = getUnderlying(inputData._yieldAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
-    _redeem(inputData, routerAddress, p1, p2);
+    _redeem(inputData, address(router), p1, p2);
     emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 

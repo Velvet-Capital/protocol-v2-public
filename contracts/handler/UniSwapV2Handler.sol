@@ -26,8 +26,8 @@ import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
 
 import {ExternalSlippageControl} from "./ExternalSlippageControl.sol";
 
-contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
-  IUniswapV2Router02 internal pancakeSwapRouter;
+contract UniswapV2Handler is Initializable, Ownable, ExternalSlippageControl {
+  IUniswapV2Router02 internal uniSwapRouter;
   IPriceOracle internal oracle;
 
   uint256 public constant DIVISOR_INT = 10_000;
@@ -35,16 +35,16 @@ contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
   constructor() {}
 
   function init(address _router, address _oracle) external initializer {
-    pancakeSwapRouter = IUniswapV2Router02(_router);
+    uniSwapRouter = IUniswapV2Router02(_router);
     oracle = IPriceOracle(_oracle);
   }
 
   function getETH() public view returns (address) {
-    return pancakeSwapRouter.WETH();
+    return uniSwapRouter.WETH();
   }
 
   function getSwapAddress() public view returns (address) {
-    return address(pancakeSwapRouter);
+    return address(uniSwapRouter);
   }
 
   function swapTokensToETH(
@@ -54,9 +54,9 @@ contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
     address _to,
     bool isEnabled
   ) public returns (uint256 swapResult) {
-    TransferHelper.safeApprove(_t, address(pancakeSwapRouter), _swapAmount);
+    TransferHelper.safeApprove(_t, address(uniSwapRouter), _swapAmount);
     uint256 internalSlippage = isEnabled ? getSlippage(_swapAmount, _slippage, getPathForToken(_t)) : 1;
-    swapResult = pancakeSwapRouter.swapExactTokensForETH(
+    swapResult = uniSwapRouter.swapExactTokensForETH(
       _swapAmount,
       internalSlippage,
       getPathForToken(_t),
@@ -73,9 +73,9 @@ contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
     address _to,
     bool isEnabled
   ) public returns (uint256 swapResult) {
-    TransferHelper.safeApprove(_tokenIn, address(pancakeSwapRouter), _swapAmount);
+    TransferHelper.safeApprove(_tokenIn, address(uniSwapRouter), _swapAmount);
     if (isEnabled) {
-      swapResult = pancakeSwapRouter.swapExactTokensForTokens(
+      swapResult = uniSwapRouter.swapExactTokensForTokens(
         _swapAmount,
         getSlippage(_swapAmount, _slippage, getPathForMultiToken(_tokenIn, _tokenOut)),
         getPathForMultiToken(_tokenIn, _tokenOut),
@@ -83,7 +83,7 @@ contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
         block.timestamp
       )[1];
     } else {
-      swapResult = pancakeSwapRouter.swapExactTokensForTokens(
+      swapResult = uniSwapRouter.swapExactTokensForTokens(
         _swapAmount,
         1,
         getPathForRewardToken(_tokenIn, _tokenOut),
@@ -94,7 +94,7 @@ contract PancakeSwapHandler is Initializable, Ownable, ExternalSlippageControl {
   }
 
   function swapETHToTokens(uint256 _slippage, address _t, address _to) public payable returns (uint256 swapResult) {
-    swapResult = pancakeSwapRouter.swapExactETHForTokens{value: msg.value}(
+    swapResult = uniSwapRouter.swapExactETHForTokens{value: msg.value}(
       getSlippage(msg.value, _slippage, getPathForETH(_t)),
       getPathForETH(_t),
       _to,
