@@ -1,4 +1,4 @@
-# Velvet.Capital
+### Velvet.Capital
 
 This repository includes the smart contracts and scripts developed for the upcoming v2 relase of [Velvet Capital](https://velvet.capital/).
 The contracts are divided into multiple sections:
