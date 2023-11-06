@@ -90,6 +90,13 @@ To deploy the smart contracts we use the command:
 ```
 $ npm run deployBscNew
 
+```
+
+To initialise the individual contracts we need to call different tasks:
+
+```
+```
+
 
 ## Audit
 ### V2
@@ -102,10 +109,3 @@ $ npm run deployBscNew
 - Twitter: [@velvet_capital](https://twitter.com/velvet_capital)
 - Email: [info@velvet.capital](mailto:info@velvet.capital)
 - Discord: [velvet](https://discord.com/invite/GkEwgezVMR)
-
-```
-
-To initialise the individual contracts we need to call different tasks:
-
-```
-```
