@@ -39,7 +39,6 @@ The directory also contains _BaseHandler.sol_ which is used to take care of base
 Besides this, the v2 of our protocol also gives the flexibility to use multiple swap handlers, whose working is also handled by contracts in this directory. Those are as follows:
 - PancakeSwap
 - OneInch
-- OpenOcean
 - ParaSwap
 - ZeroEx
 
