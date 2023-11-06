@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.8.16;
 
 /**
  * @title ErrorLibrary
  * @author Velvet.Capital
- * @notice This is a library contract including errors
+ * @notice This is a library contract including custom defined errors
  */
 
 library ErrorLibrary {
@@ -118,8 +118,6 @@ library ErrorLibrary {
   error MintAmountNotEqualToPassedValue();
   /// @notice Thrown when slippage value passed is greater than 100
   error SlippageCannotBeGreaterThan100();
-  /// @notice Thrown when no time has passed since last fee charged
-  error NoTimePassedSinceLastCharge();
   /// @notice Thrown when tokens are already staked
   error TokensStaked();
   /// @notice Thrown when contract is not paused
@@ -150,8 +148,8 @@ library ErrorLibrary {
   error OnlyAssetManagerCanCallUnpause();
   /// @notice Thrown when trying to redeem token that is not staked
   error TokensNotStaked();
-  /// @notice Thrown when account other than asset manager is pausing
-  error TenMinutesPassOrRebalancingHasToBeCalled();
+  /// @notice Thrown when account other than asset manager is trying to revert or unpause
+  error FifteenMinutesNotExcedeed();
   /// @notice Thrown when swapping weight is zero
   error WeightNotGreaterThan0();
   /// @notice Thrown when dividing by zero
@@ -166,8 +164,6 @@ library ErrorLibrary {
   error InvalidFee();
   /// @notice Thrown when zero address is passed for treasury
   error ZeroAddressTreasury();
-  /// @notice Thrown when velvetTreasury address passed is zero
-  error ZeroAddresstreasury();
   /// @notice Thrown when assetManagerFee or performaceFee is set zero
   error ZeroFee();
   /// @notice Thrown when trying to enable an already enabled handler
@@ -215,7 +211,7 @@ library ErrorLibrary {
   /// @notice Thrown when token is not enabled
   error TokenNotEnabled();
   /// @notice Thrown when index creation is paused
-  error indexCreationIsPause();
+  error IndexCreationIsPause();
   /// @notice Thrown denorm value sent is zero
   error ZeroDenormValue();
   /// @notice Thrown when asset manager is trying to input token which already exist
@@ -236,4 +232,62 @@ library ErrorLibrary {
   error InvalidThresholdLength();
   /// @notice Throws when no owner address is passed while fund creation
   error NoOwnerPassed();
+  /// @notice Throws when length of underlying token is greater than 1
+  error InvalidTokenLength();
+  /// @notice Throws when already an operation is taking place and another operation is called
+  error AlreadyOngoingOperation();
+  /// @notice Throws when wrong function is executed for revert offchain fund
+  error InvalidExecution();
+  /// @notice Throws when Final value after investment is zero
+  error ZeroFinalInvestmentValue();
+  /// @notice Throws when token amount after swap / token amount to be minted comes out as zero
+  error ZeroTokenAmount();
+  /// @notice Throws eth transfer failed
+  error ETHTransferFailed();
+  /// @notice Thorws when the caller does not have a default admin role
+  error CallerNotAdmin();
+  /// @notice Throws when buyAmount is not correct in offchainIndexSwap
+  error InvalidBuyValues();
+  /// @notice Throws when token is not primary
+  error TokenNotPrimary();
+  /// @notice Throws when tokenOut during withdraw is not permitted in the asset manager config
+  error _tokenOutNotPermitted();
+  /// @notice Throws when token balance is too small to be included in index
+  error BalanceTooSmall();
+  /// @notice Throws when a public fund is tried to made transferable only to whitelisted addresses
+  error PublicFundToWhitelistedNotAllowed();
+  /// @notice Throws when list input by user is invalid (meta aggregator)
+  error InvalidInputTokenList();
+  /// @notice Generic call failed error
+  error CallFailed();
+  /// @notice Generic transfer failed error
+  error TransferFailed();
+  /// @notice Throws when incorrect token amount is encountered during offchain/onchain investment
+  error IncorrectInvestmentTokenAmount();
+  /// @notice Throws when final invested amount after slippage is 0
+  error ZeroInvestedAmountAfterSlippage();
+  /// @notice Throws when the slippage trying to be set is in incorrect range
+  error IncorrectSlippageRange();
+  /// @notice Throws when invalid LP slippage is passed
+  error InvalidLPSlippage();
+  /// @notice Throws when invalid slippage for swapping is passed
+  error InvalidSlippage();
+  /// @notice Throws when msg.value is less than the amount passed into the handler
+  error WrongNativeValuePassed();
+  /// @notice Throws when there is an overflow during muldiv full math operation
+  error FULLDIV_OVERFLOW();
+  /// @notice Throws when the oracle price is not updated under set timeout
+  error PriceOracleExpired();
+  /// @notice Throws when the oracle price is returned 0
+  error PriceOracleInvalid();
+  /// @notice Throws when the initToken or updateTokenList function of IndexSwap is having more tokens than set by the Registry
+  error TokenCountOutOfLimit(uint256 limit);
+  /// @notice Throws when the array lenghts don't match for adding price feed or enabling tokens
+  error IncorrectArrayLength();
+  /// @notice Common Reentrancy error for IndexSwap and IndexSwapOffChain
+  error ReentrancyGuardReentrantCall();
+  /// @notice Throws when user calls updateFees function before proposing a new fee
+  error NoNewFeeSet();
+  /// @notice Throws when token is not ETH
+  error TokenNotETH();
 }

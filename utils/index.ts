@@ -11,31 +11,17 @@ export async function advanceBlock() {
 
 export const ADDRESS_ZERO = "0x0000000000000000000000000000000000000000";
 
-export const deployContractFromName = async (
-  contractName: string,
-  factoryType: any,
-  args: Array<any> = []
-) => {
-  const factory = (await ethers.getContractFactory(
-    contractName
-  )) as typeof factoryType;
+export const deployContractFromName = async (contractName: string, factoryType: any, args: Array<any> = []) => {
+  const factory = (await ethers.getContractFactory(contractName)) as typeof factoryType;
   return factory.deploy(...args);
 };
 
-export const getContractFromAddress = async (
-  contractName: string,
-  factoryType: any,
-  address: string
-) => {
-  const factory = (await ethers.getContractFactory(
-    contractName
-  )) as typeof factoryType;
+export const getContractFromAddress = async (contractName: string, factoryType: any, address: string) => {
+  const factory = (await ethers.getContractFactory(contractName)) as typeof factoryType;
   return factory.attach(address);
 };
 
 export const getERC20ContractFromAddress = async (address: string) => {
-  const factory = (await ethers.getContractFactory(
-    "ERC20Mock"
-  )) as ERC20Mock__factory;
+  const factory = (await ethers.getContractFactory("ERC20Mock")) as ERC20Mock__factory;
   return factory.attach(address);
 };

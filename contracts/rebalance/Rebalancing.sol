@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 /**
  * @title Rebalancing for a particular Index
@@ -12,55 +12,53 @@
 
 pragma solidity 0.8.16;
 
-import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable, Initializable } from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
-import { IndexSwapLibrary } from "../core/IndexSwapLibrary.sol";
-import { IExchange } from "../core/IExchange.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
+import {IndexSwapLibrary} from "../core/IndexSwapLibrary.sol";
+import {IExchange} from "../core/IExchange.sol";
 
-import { IWETH } from "../interfaces/IWETH.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
 
-import { IIndexSwap } from "../core/IIndexSwap.sol";
-import { AccessController } from "../access/AccessController.sol";
+import {IIndexSwap} from "../core/IIndexSwap.sol";
+import {AccessController} from "../access/AccessController.sol";
 
-import { IPriceOracle } from "../oracle/IPriceOracle.sol";
+import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 
-import { ITokenRegistry } from "../registry/ITokenRegistry.sol";
-import { IAssetManagerConfig } from "../registry/IAssetManagerConfig.sol";
+import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
+import {IAssetManagerConfig} from "../registry/IAssetManagerConfig.sol";
 
-import { IExternalSwapHandler } from "../handler/IExternalSwapHandler.sol";
-import { ExchangeData } from "../handler/ExternalSwapHandler/Helper/ExchangeData.sol";
-
-import { RebalanceLibrary } from "./RebalanceLibrary.sol";
-import { ErrorLibrary } from "../library/ErrorLibrary.sol";
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {RebalanceLibrary} from "./RebalanceLibrary.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
+import {IHandler} from "../handler/IHandler.sol";
 
 contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
-  IIndexSwap public index;
-  AccessController public accessController;
-  ITokenRegistry public tokenRegistry;
-  IAssetManagerConfig public assetManagerConfig;
-  IExchange public exchange;
+  IIndexSwap internal index;
+  AccessController internal accessController;
+  ITokenRegistry internal tokenRegistry;
+  IAssetManagerConfig internal assetManagerConfig;
+  IExchange internal exchange;
+  address internal _vault;
 
-  using SafeMathUpgradeable for uint256;
+  IPriceOracle internal oracle;
 
-  IPriceOracle public oracle;
+  event UpdatedWeights(uint96[] newDenorms);
+  event UpdatedTokens(address[] newTokens, uint96[] newDenorms);
+  event SetPause(bool indexed state);
 
-  uint256 internal lastRebalanced;
+  constructor() {
+    _disableInitializers();
+  }
 
-  uint256 public lastPaused;
-
-  event UpdatedWeights(uint256 time, uint96[] indexed newDenorms);
-  event UpdatedTokens(uint256 time, address[] indexed newTokens, uint96[] indexed newDenorms);
-  event SetPause(uint256 indexed time, bool indexed state);
-
-  constructor() {}
-
+  /**
+   * @notice This function is used to initialise the Rebalance module while deployment
+   */
   function init(address _index, address _accessController) external initializer {
     __UUPSUpgradeable_init();
     __Ownable_init();
+    __ReentrancyGuard_init();
     if (_index == address(0) || _accessController == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
@@ -70,10 +68,11 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     exchange = IExchange(index.exchange());
     oracle = IPriceOracle(index.oracle());
     assetManagerConfig = IAssetManagerConfig(index.iAssetManagerConfig());
+    _vault = index.vault();
   }
 
   modifier onlyAssetManager() {
-    if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
+    if (!(_checkRole("ASSET_MANAGER_ROLE", msg.sender))) {
       revert ErrorLibrary.CallerIsNotAssetManager();
     }
     _;
@@ -83,33 +82,36 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     @notice The function will pause the InvestInFund() and Withdrawal().
     @param _state The state is bool value which needs to input by the Index Manager.
     */
-  function setPause(bool _state) public virtual {
+  function setPause(bool _state) external virtual nonReentrant {
+    address user = msg.sender;
     if (_state) {
-      if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
+      if (!(_checkRole("ASSET_MANAGER_ROLE", user))) {
         revert ErrorLibrary.OnlyAssetManagerCanCallUnpause();
       }
-      index.setPaused(_state);
-      lastPaused = block.timestamp;
+      _setPaused(_state);
     } else {
-      if (index.getRedeemed() != false) {
+      if (getRedeemed()) {
         revert ErrorLibrary.TokensNotStaked();
       }
-      if (lastRebalanced > lastPaused || block.timestamp >= (lastPaused + 10 minutes)) {
-        index.setPaused(_state);
+      uint256 _lastPaused = index.getLastPaused();
+      if (getTimeStamp() >= (_lastPaused + 15 minutes)) {
+        _setPaused(_state);
       } else {
-        if (!(accessController.hasRole(keccak256("ASSET_MANAGER_ROLE"), msg.sender))) {
-          revert ErrorLibrary.TenMinutesPassOrRebalancingHasToBeCalled();
+        if (!(_checkRole("ASSET_MANAGER_ROLE", user))) {
+          revert ErrorLibrary.FifteenMinutesNotExcedeed();
         }
-        index.setPaused(_state);
+        _setPaused(_state);
       }
     }
-    emit SetPause(block.timestamp, _state);
+    emit SetPause(_state);
   }
 
   /**
    * @notice The function sells the excessive token amount of each token considering the new weights
    * @param _oldWeights The current token allocation in the portfolio
    * @param _newWeights The new token allocation the portfolio should be rebalanced to
+   * @param _slippage Array of the slippage values passed
+   * @param _lpSlippage Array of the lp slippage values passed
    * @return sumWeightsToSwap Returns the weight of tokens that have to be swapped to rebalance the portfolio (buy)
    */
   function sellTokens(
@@ -120,17 +122,17 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     address _swapHandler
   ) internal virtual returns (uint256 sumWeightsToSwap) {
     // sell - swap to BNB
-    address[] memory tokens = index.getTokens();
+    address[] memory tokens = getTokens();
     for (uint256 i = 0; i < tokens.length; i++) {
       if (_newWeights[i] < _oldWeights[i]) {
-        uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, tokens[i]);
+        uint256 tokenBalance = getTokenBalance(tokens[i]);
 
-        uint256 weightDiff = _oldWeights[i].sub(_newWeights[i]);
-        uint256 swapAmount = tokenBalance.mul(weightDiff).div(_oldWeights[i]);
+        uint256 weightDiff = _oldWeights[i] - _newWeights[i];
+        uint256 swapAmount = (tokenBalance * weightDiff) / _oldWeights[i];
         _pullAndSwap(tokens[i], swapAmount, address(this), _slippage[i], _lpSlippage[i], _swapHandler);
       } else if (_newWeights[i] > _oldWeights[i]) {
-        uint256 diff = _newWeights[i].sub(_oldWeights[i]);
-        sumWeightsToSwap = sumWeightsToSwap.add(diff);
+        uint256 diff = _newWeights[i] - _oldWeights[i];
+        sumWeightsToSwap = sumWeightsToSwap + diff;
       }
     }
   }
@@ -139,6 +141,10 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
    * @notice The function swaps the sold BNB into tokens that haven't reached the new weight
    * @param _oldWeights The current token allocation in the portfolio
    * @param _newWeights The new token allocation the portfolio should be rebalanced to
+   * @param sumWeightsToSwap Value of Sum Weight passed to the function
+   * @param _slippage Array of the slippage values passed
+   * @param _lpSlippage Array of the lp slippage values passed
+   * @param _swapHandler Address of the associated swap handler
    */
   function buyTokens(
     uint256[] memory _oldWeights,
@@ -149,22 +155,20 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     address _swapHandler
   ) internal virtual {
     uint256 totalBNBAmount = address(this).balance;
-    address[] memory tokens = index.getTokens();
+    address[] memory tokens = getTokens();
+    if (sumWeightsToSwap == 0) {
+      revert ErrorLibrary.DivBy0Sumweight();
+    }
     for (uint256 i = 0; i < tokens.length; i++) {
       if (_newWeights[i] > _oldWeights[i]) {
-        uint256 weightToSwap = _newWeights[i].sub(_oldWeights[i]);
-        if (weightToSwap == 0) {
-          revert ErrorLibrary.WeightNotGreaterThan0();
-        }
-        if (sumWeightsToSwap == 0) {
-          revert ErrorLibrary.DivBy0Sumweight();
-        }
-        uint256 swapAmount = totalBNBAmount.mul(weightToSwap).div(sumWeightsToSwap);
-        exchange._swapETHToToken{value: swapAmount}(
-          FunctionParameters.SwapETHToTokenData(
+        uint256 weightToSwap = _newWeights[i] - _oldWeights[i];
+        uint256 swapAmount = (totalBNBAmount * weightToSwap) / sumWeightsToSwap;
+        exchange.swapETHToToken{value: swapAmount}(
+          FunctionParameters.SwapETHToTokenPublicData(
             tokens[i],
-            index.vault(),
+            _vault,
             _swapHandler,
+            _vault,
             _slippage[i],
             _lpSlippage[i]
           )
@@ -175,103 +179,98 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
   /**
    * @notice The function rebalances the token weights in the portfolio
+   * @param _slippage Array of the slippage values passed
+   * @param _lpSlippage Array of the lp slippage values passed
+   * @param _swapHandler Address of the associated swap handler
    */
   function rebalance(
     uint256[] calldata _slippage,
     uint256[] calldata _lpSlippage,
     address _swapHandler
-  ) internal virtual onlyAssetManager nonReentrant {
+  ) internal virtual {
     if (index.totalSupply() <= 0) {
       revert ErrorLibrary.InvalidAmount();
     }
-    uint256 vaultBalance = 0;
-    address[] memory tokens = index.getTokens();
+    uint256 vaultBalance;
+    address[] memory tokens = getTokens();
     uint256[] memory newWeights = new uint256[](tokens.length);
     uint256[] memory oldWeights = new uint256[](tokens.length);
-    uint256[] memory tokenBalanceInBNB = new uint256[](tokens.length);
+    uint256[] memory tokenBalanceInUSD = new uint256[](tokens.length);
 
-    (tokenBalanceInBNB, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(index), tokens);
+    (tokenBalanceInUSD, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(index), tokens);
 
-    uint256 contractBalanceInUSD = IndexSwapLibrary._getTokenPriceETHUSD(oracle, address(this).balance);
-    vaultBalance = vaultBalance.add(contractBalanceInUSD);
+    uint256 contractBalanceInUSD = oracle.getEthUsdPrice(address(this).balance);
+    vaultBalance = vaultBalance + contractBalanceInUSD;
 
     for (uint256 i = 0; i < tokens.length; i++) {
-      oldWeights[i] = tokenBalanceInBNB[i].mul(index.TOTAL_WEIGHT()).div(vaultBalance);
-      newWeights[i] = uint256(index.getRecord(tokens[i]).denorm);
+      oldWeights[i] = (tokenBalanceInUSD[i] * index.TOTAL_WEIGHT()) / vaultBalance;
+      newWeights[i] = uint256(getDenorm(tokens[i]));
     }
 
     uint256 sumWeightsToSwap = sellTokens(oldWeights, newWeights, _slippage, _lpSlippage, _swapHandler);
     buyTokens(oldWeights, newWeights, sumWeightsToSwap, _slippage, _lpSlippage, _swapHandler);
 
-    lastRebalanced = block.timestamp;
+    index.setLastRebalance(getTimeStamp());
     index.setRedeemed(false);
   }
 
   /**
    * @notice The function updates the token weights and rebalances the portfolio to the new weights
    * @param denorms The new token weights of the portfolio
+   * @param _slippage Array of the slippage values passed
+   * @param _lpSlippage Array of the lp slippage values passed
+   * @param _swapHandler Address of the associated swap handler
    */
   function updateWeights(
     uint96[] calldata denorms,
     uint256[] calldata _slippage,
     uint256[] calldata _lpSlippage,
     address _swapHandler
-  ) public virtual onlyAssetManager {
-    address[] memory tokens = index.getTokens();
+  ) external virtual nonReentrant onlyAssetManager {
+    address[] memory tokens = getTokens();
+    validateUpdate(_swapHandler);
     if (denorms.length != tokens.length) {
       revert ErrorLibrary.LengthsDontMatch();
     }
     if (tokens.length != _slippage.length || tokens.length != _lpSlippage.length) {
       revert ErrorLibrary.InvalidSlippageLength();
     }
-    if (tokenRegistry.getProtocolState() == true) {
-      revert ErrorLibrary.ProtocolIsPaused();
-    }
-    if (!(tokenRegistry.isSwapHandlerEnabled(_swapHandler))) {
-      revert ErrorLibrary.SwapHandlerNotEnabled();
-    }
     index.updateRecords(tokens, denorms);
     rebalance(_slippage, _lpSlippage, _swapHandler);
-    emit UpdatedWeights(block.timestamp, denorms);
+    emit UpdatedWeights(denorms);
   }
 
   /**
    * @notice The function rebalances the portfolio to the updated tokens with the updated weights
-   * @param inputData The
-
+   * @param inputData The input calldata passed to the function
    */
-  function updateTokens(FunctionParameters.UpdateTokens calldata inputData) public virtual onlyAssetManager {
-    uint256 totalWeight = 0;
-    address[] memory tokens = index.getTokens();
-    RebalanceLibrary.updateTokensCheckBefore(
-      address(index),
-      address(tokenRegistry),
-      inputData._swapHandler,
-      inputData.tokens,
-      inputData._slippageSell,
-      inputData._slippageBuy,
-      inputData._lpSlippageSell,
-      inputData._lpSlippageBuy
-    );
+  function updateTokens(
+    FunctionParameters.UpdateTokens calldata inputData
+  ) external virtual nonReentrant onlyAssetManager {
+    address[] memory _tokens = getTokens();
+    validateUpdate(inputData._swapHandler);
+    if (
+      _tokens.length != inputData._slippageSell.length ||
+      inputData.tokens.length != inputData._slippageBuy.length ||
+      _tokens.length != inputData._lpSlippageSell.length ||
+      inputData.tokens.length != inputData._lpSlippageBuy.length
+    ) {
+      revert ErrorLibrary.InvalidSlippageLength();
+    }
     for (uint256 i = 0; i < inputData.tokens.length; i++) {
       RebalanceLibrary.updateTokensCheck(address(tokenRegistry), address(assetManagerConfig), inputData.tokens[i]);
-
-      totalWeight = totalWeight.add(inputData.denorms[i]);
-    }
-    if (totalWeight != index.TOTAL_WEIGHT()) {
-      revert ErrorLibrary.InvalidWeights({totalWeight: index.TOTAL_WEIGHT()});
     }
 
     uint256[] memory newDenorms = RebalanceLibrary.evaluateNewDenorms(index, inputData.tokens, inputData.denorms);
 
     if (index.totalSupply() > 0) {
       // sell - swap to BNB
-      for (uint256 i = 0; i < tokens.length; i++) {
+      for (uint256 i = 0; i < _tokens.length; i++) {
+        address _token = _tokens[i];
         if (newDenorms[i] == 0) {
-          uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(index, tokens[i]);
-
+          uint256 tokenBalance = getTokenBalance(_token);
           _pullAndSwap(
-            tokens[i],
+            _token,
             tokenBalance,
             address(this),
             inputData._slippageSell[i],
@@ -279,39 +278,33 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
             inputData._swapHandler
           );
         }
-        index.deleteRecord(tokens[i]);
+        index.deleteRecord(_token);
       }
     }
 
-    _updateTokenListAndRecords(inputData.tokens, inputData.denorms);
-
-    index.updateRecords(inputData.tokens, inputData.denorms);
-
+    index.updateTokenListAndRecords(inputData.tokens, inputData.denorms);
     rebalance(inputData._slippageBuy, inputData._lpSlippageBuy, inputData._swapHandler);
 
-    emit UpdatedTokens(block.timestamp, inputData.tokens, inputData.denorms);
+    emit UpdatedTokens(inputData.tokens, inputData.denorms);
   }
 
   /**
    * @notice This function returns the given token balance of the vault
+   * @param _token Address of the token whose balance is to be calculated
+   * @return Token balance of the index returned
    */
   function getTokenBalance(address _token) public view virtual returns (uint256) {
     return IndexSwapLibrary.getTokenBalance(index, _token);
   }
 
   /**
-   * @notice This function update records with new tokenlist and weights
-   */
-  function _updateTokenListAndRecords(
-    address[] memory _tokens,
-    uint96[] memory _denorms
-  ) public virtual onlyAssetManager {
-    index.updateTokenList(_tokens);
-    index.updateRecords(_tokens, _denorms);
-  }
-
-  /**
    * @notice This function swaps token using the swapHandler
+   * @param _token Address of the token which has to be pulled from the vault and swapped
+   * @param _amount Amount of the token to be pulled and swapped
+   * @param _to Address that would receive the pulled and swapped tokens (Exchange Handler)
+   * @param _slippage Array of the slippage values passed
+   * @param _lpSlippage Array of the lp slippage values passed
+   * @param _swapHandler Address of the associated swap handler
    */
   function _pullAndSwap(
     address _token,
@@ -323,8 +316,133 @@ contract Rebalancing is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
   ) internal virtual {
     exchange._pullFromVault(_token, _amount, address(exchange));
     exchange._swapTokenToETH(
-      FunctionParameters.SwapTokenToETHData(_token, _to,_swapHandler,_amount, _slippage, _lpSlippage)
+      FunctionParameters.SwapTokenToETHData(_token, _to, _swapHandler, _amount, _slippage, _lpSlippage)
     );
+  }
+
+  /**
+   * @notice This function swaps reward token to index token
+   * @param rewardToken address of reward token to swap
+   * @param swapHandler address fo swaphandler
+   * @param buyToken address of buyToken token
+   * @param amount amount of reward token to swap
+   * @param slippage amount of slippage
+   * @param _lpSlippage amount of lpSlippage
+   */
+  function swapRewardToken(
+    address rewardToken,
+    address swapHandler,
+    address buyToken,
+    uint256 amount,
+    uint256 slippage,
+    uint256 _lpSlippage
+  ) external nonReentrant onlyAssetManager {
+    validateUpdate(swapHandler);
+    if (!tokenRegistry.isRewardToken(rewardToken)) {
+      revert ErrorLibrary.NotRewardToken();
+    }
+    if (getDenorm(buyToken) == 0) {
+      revert ErrorLibrary.TokenNotIndexToken();
+    }
+    _swapRewardToken(rewardToken, swapHandler, buyToken, amount, slippage, _lpSlippage);
+  }
+
+  /**
+   * @notice This internal function is helper function of swapRewardToken
+   * @param rewardToken address of reward token to swap
+   * @param swapHandler address fo swaphandler
+   * @param buyToken address of buyToken token
+   * @param amount amount of reward token to swap
+   * @param slippage amount of slippage
+   * @param _lpSlippage amount of lpSlippage
+   */
+  function _swapRewardToken(
+    address rewardToken,
+    address swapHandler,
+    address buyToken,
+    uint256 amount,
+    uint256 slippage,
+    uint256 _lpSlippage
+  ) internal {
+    IHandler handler = IHandler(tokenRegistry.getTokenInformation(buyToken).handler);
+    uint balanceBefore = handler.getTokenBalance(_vault, buyToken);
+    exchange._pullFromVaultRewards(rewardToken, amount, address(exchange));
+    exchange._swapTokenToToken(
+      FunctionParameters.SwapTokenToTokenData(
+        rewardToken,
+        buyToken,
+        _vault,
+        swapHandler,
+        _vault,
+        amount,
+        slippage,
+        _lpSlippage,
+        true
+      )
+    );
+    uint balanceAfter = handler.getTokenBalance(_vault, buyToken);
+    if (balanceAfter - balanceBefore == 0) {
+      revert ErrorLibrary.SwapFailed();
+    }
+  }
+
+  function _setPaused(bool _state) internal {
+    index.setPaused(_state);
+  }
+
+  /**
+   * @notice This function validate states before updating tokens and weights
+   * @param _swapHandler Address of the swap handler to be used for validation
+   */
+  function validateUpdate(address _swapHandler) internal {
+    if (tokenRegistry.getProtocolState() == true) {
+      revert ErrorLibrary.ProtocolIsPaused();
+    }
+    if (!(tokenRegistry.isSwapHandlerEnabled(_swapHandler))) {
+      revert ErrorLibrary.SwapHandlerNotEnabled();
+    }
+    if (getRedeemed()) revert ErrorLibrary.AlreadyOngoingOperation();
+  }
+
+  /**
+   * @notice This function returns if the tokens have been redeemed or not
+   */
+  function getRedeemed() internal view returns (bool) {
+    return index.getRedeemed();
+  }
+
+  /**
+   * @notice This internal function check for role
+   * @param _role Role to be checked
+   * @param user User address who is checked for the role
+   * @return Boolean parameter for is the user having the specific role
+   */
+  function _checkRole(bytes memory _role, address user) internal view returns (bool) {
+    return accessController.hasRole(keccak256(_role), user);
+  }
+
+  /**
+   * @notice The function is used to get tokens from index
+   * @return Array of token returned
+   */
+  function getTokens() internal view returns (address[] memory) {
+    return index.getTokens();
+  }
+
+  /**
+   * @notice The function is used to get denorm of particular token
+   * @param _token Address of the token whose denorm is to be retreived
+   * @return Denorm value for the token
+   */
+  function getDenorm(address _token) internal view returns (uint96) {
+    return index.getRecord(_token).denorm;
+  }
+
+  /**
+   * @notice This function returns timeStamp
+   */
+  function getTimeStamp() internal view returns (uint256) {
+    return block.timestamp;
   }
 
   // important to receive ETH

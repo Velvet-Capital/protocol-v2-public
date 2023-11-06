@@ -121,3 +121,8 @@ coverage*
 .pnp.*
 
 .openzeppelin
+lib/forge-std/
+
+out
+.vs
+lib

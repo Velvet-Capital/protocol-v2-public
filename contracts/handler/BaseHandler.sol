@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 /**
  * @title Handler for the base tokens
@@ -15,12 +15,20 @@
 
 pragma solidity 0.8.16;
 
-import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { IHandler } from "./IHandler.sol";
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {IHandler} from "./IHandler.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
+import {IPriceOracle} from "../oracle/IPriceOracle.sol";
+import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 contract BaseHandler is IHandler {
+  IPriceOracle internal _oracle;
+
+  constructor(address _priceOracle) {
+    require(_priceOracle != address(0), "Oracle having zero address");
+    _oracle = IPriceOracle(_priceOracle);
+  }
 
   /**
    * @notice This function deposits assets to the base tokens
@@ -33,28 +41,23 @@ contract BaseHandler is IHandler {
     address _vAsset,
     uint256[] memory _amount,
     uint256 _lpSlippage,
-    address _to
-  ) public payable override {}
+    address _to,
+    address user
+  ) public payable override returns (uint256 _mintedAmount) {
+    _mintedAmount = _oracle.getPriceTokenUSD18Decimals(_vAsset, _amount[0]);
+  }
 
   /**
    * @notice This function redeems assets deposited into the base tokens
    */
-  function redeem(FunctionParameters.RedeemData calldata inputData)
-    public
-    override
-  {}
+  function redeem(FunctionParameters.RedeemData calldata inputData) public override {}
 
   /**
    * @notice This function returns address of the underlying asset
    * @param _vToken Address of the protocol token whose underlying asset is needed
    * @return underlying Address of the underlying asset
    */
-  function getUnderlying(address _vToken)
-    public
-    pure
-    override
-    returns (address[] memory)
-  {
+  function getUnderlying(address _vToken) public pure override returns (address[] memory) {
     address[] memory underlying = new address[](1);
     underlying[0] = _vToken;
     return underlying;
@@ -66,12 +69,7 @@ contract BaseHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256 tokenBalance)
-  {
+  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
     IERC20Upgradeable token = IERC20Upgradeable(t);
     tokenBalance = token.balanceOf(_tokenHolder);
   }
@@ -82,30 +80,34 @@ contract BaseHandler is IHandler {
    * @param t Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t)
-    public
-    view
-    override
-    returns (uint256[] memory)
-  {
+  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
     uint256[] memory tokenBalance = new uint256[](1);
     IERC20Upgradeable token = IERC20Upgradeable(t);
     tokenBalance[0] = token.balanceOf(_tokenHolder);
     return tokenBalance;
   }
 
-  function encodeData(address t, uint256 _amount)
-    public
-    returns (bytes memory)
-  {}
+  /**
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   */
+  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
+    address[] memory underlyingToken = getUnderlying(t);
+
+    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
+    return balanceUSD;
+  }
+
+  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address, address)
-    public
-    pure
-    returns (bytes memory, address)
-  {
+  function getClaimTokenCalldata(address, address) public pure returns (bytes memory, address) {
     return ("", address(0));
   }
 

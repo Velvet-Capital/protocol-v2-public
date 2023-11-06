@@ -1,28 +1,30 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 /**
  * @title IndexSwap for the Index
  * @author Velvet.Capital
  * @notice This contract is used by the user to invest and withdraw from the index
- * @dev This contract includes functionalities:
+ * @dev  The IndexSwap contract facilitates the investment and withdrawal of funds in a portfolio of tokens.
+ *        It allows users to invest in the portfolio and receive index tokens representing their share in the portfolio.
+ *        Users can also withdraw their investment by burning index tokens and receiving the corresponding portfolio tokens.
+ * This contract includes functionalities:
  *      1. Invest in the particular fund
  *      2. Withdraw from the fund
  */
 
 pragma solidity 0.8.16;
 
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/security/ReentrancyGuardUpgradeable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/UUPSUpgradeable.sol";
-
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/access/OwnableUpgradeable.sol";
 import {IIndexSwap} from "../core/IIndexSwap.sol";
 import "../core/IndexSwapLibrary.sol";
-import {IIndexOperations} from "./IIndexOperations.sol";
 import {IPriceOracle} from "../oracle/IPriceOracle.sol";
 import {IAccessController} from "../access/IAccessController.sol";
 import {ITokenRegistry} from "../registry/ITokenRegistry.sol";
 import {IExchange} from "./IExchange.sol";
 import {IAssetManagerConfig} from "../registry/IAssetManagerConfig.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
 
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
@@ -30,8 +32,9 @@ import {IFeeModule} from "../fee/IFeeModule.sol";
 import {FunctionParameters} from "../FunctionParameters.sol";
 
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
+import {CommonReentrancyGuard} from "./CommonReentrancyGuard.sol";
 
-contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, CommonReentrancyGuard {
   /**
    * @dev Token record data structure
    * @param lastDenormUpdate timestamp of last denorm change
@@ -39,7 +42,6 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param index index of address in tokens array
    * @param handler handler address for token
    */
-
   struct Record {
     uint40 lastDenormUpdate;
     uint96 denorm;
@@ -59,12 +61,15 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
 
   //Keeps track of user last investment time
   mapping(address => uint256) public lastInvestmentTime;
-  using SafeMathUpgradeable for uint256;
+  mapping(address => uint256) public lastWithdrawCooldown;
 
   address internal _vault;
   address internal _module;
 
   bool internal _paused;
+  uint256 internal _lastPaused;
+
+  uint256 internal _lastRebalanced;
 
   bool internal _redeemed;
 
@@ -74,7 +79,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   ITokenRegistry internal _tokenRegistry;
   IExchange internal _exchange;
   IAssetManagerConfig internal _iAssetManagerConfig;
-
+  address internal WETH;
   // Total denormalized weight of the pool.
   uint256 internal constant _TOTAL_WEIGHT = 10_000;
 
@@ -84,23 +89,30 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     uint256 investedAmount,
     uint256 tokenAmount,
     uint256 rate,
-    address index,
-    uint256 time
+    uint256 currentUserBalance,
+    address index
   );
   event WithdrawFund(
     address indexed user,
     uint256 tokenAmount,
     uint256 indexed rate,
-    address indexed index,
-    uint256 time
+    uint256 currentUserBalance,
+    address indexed index
   );
 
   // /** @dev Emitted when public trades are enabled. */
-  event LOG_PUBLIC_SWAP_ENABLED();
+  event LOG_PUBLIC_SWAP_ENABLED(uint indexed time);
 
+  constructor() {
+    _disableInitializers();
+  }
+
+  /**
+   * @notice This function make sure of the necessary checks before the transfer of index tokens.
+   * (Making sure that the fund allows the token transfer and the receipient address is whitelisted)
+   */
   function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
     super._beforeTokenTransfer(from, to, amount);
-
     if (from == address(0) || to == address(0)) {
       return;
     }
@@ -110,6 +122,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     ) {
       revert ErrorLibrary.Transferprohibited();
     }
+    checkCoolDownPeriod(from);
   }
 
   /**
@@ -119,15 +132,17 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   function init(FunctionParameters.IndexSwapInitData calldata initData) external initializer {
     __ERC20_init(initData._name, initData._symbol);
     __UUPSUpgradeable_init();
+    __Ownable_init();
+    __ReentrancyGuard_init();
     _vault = initData._vault;
     _module = initData._module;
     _accessController = IAccessController(initData._accessController);
     _tokenRegistry = ITokenRegistry(initData._tokenRegistry);
     _oracle = IPriceOracle(initData._oracle);
-    _paused = false;
     _exchange = IExchange(initData._exchange);
     _iAssetManagerConfig = IAssetManagerConfig(initData._iAssetManagerConfig);
     _feeModule = IFeeModule(initData._feeModule);
+    WETH = _tokenRegistry.getETH();
   }
 
   /**
@@ -136,182 +151,200 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param denorms Initial denormalized weights for the tokens
    */
   function initToken(address[] calldata tokens, uint96[] calldata denorms) external virtual onlySuperAdmin {
+    if (tokens.length > _tokenRegistry.getMaxAssetLimit())
+      revert ErrorLibrary.TokenCountOutOfLimit(_tokenRegistry.getMaxAssetLimit());
+
     if (tokens.length != denorms.length) {
       revert ErrorLibrary.InvalidInitInput();
     }
     if (_tokens.length != 0) {
       revert ErrorLibrary.AlreadyInitialized();
     }
-    uint256 len = tokens.length;
-    uint256 totalWeight = 0;
-    for (uint256 i = 0; i < len; i++) {
-      IndexSwapLibrary._beforeInitCheck(IIndexSwap(address(this)), tokens[i], denorms[i]);
-      _records[tokens[i]] = Record({lastDenormUpdate: uint40(block.timestamp), denorm: denorms[i], index: uint256(i)});
-      _tokens.push(tokens[i]);
+    uint256 totalWeight;
+    for (uint256 i = 0; i < tokens.length; i++) {
+      address token = tokens[i];
+      uint96 _denorm = denorms[i];
+      IndexSwapLibrary._beforeInitCheck(IIndexSwap(address(this)), token, _denorm);
+      _records[token] = Record({lastDenormUpdate: uint40(getTimeStamp()), denorm: _denorm, index: uint256(i)});
+      _tokens.push(token);
 
-      totalWeight = totalWeight.add(denorms[i]);
+      totalWeight = totalWeight + _denorm;
     }
-    if (totalWeight != _TOTAL_WEIGHT) {
-      revert ErrorLibrary.InvalidWeights({totalWeight: _TOTAL_WEIGHT});
-    }
-
-    emit LOG_PUBLIC_SWAP_ENABLED();
+    _weightCheck(totalWeight);
+    emit LOG_PUBLIC_SWAP_ENABLED(getTimeStamp());
   }
 
   modifier onlySuperAdmin() {
-    if (!(_accessController.hasRole(keccak256("SUPER_ADMIN"), msg.sender))) {
+    if (!_checkRole("SUPER_ADMIN", msg.sender)) {
       revert ErrorLibrary.CallerNotSuperAdmin();
     }
     _;
   }
 
-  function mintShares(address _to, uint256 _amount) public virtual onlyMinter {
+  /**
+   * @notice This function mints new shares to a particular address of the specific amount
+   */
+  function mintShares(address _to, uint256 _amount) external virtual onlyMinter {
     _mint(_to, _amount);
   }
 
-  function burnShares(address _to, uint256 _amount) public virtual onlyMinter {
+  /**
+   * @notice This function burns the specific amount of shares of a particular address
+   */
+  function burnShares(address _to, uint256 _amount) external virtual onlyMinter {
     _burn(_to, _amount);
   }
 
   /**
      * @notice The function swaps BNB into the portfolio tokens after a user makes an investment
-     * @dev The output of the swap is converted into BNB to get the actual amount after slippage to calculate 
+     * @dev The output of the swap is converted into USD to get the actual amount after slippage to calculate 
             the index token amount to mint
-     * @dev (tokenBalanceInBNB, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
+     * @dev (tokenBalance, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
             because during the swap the amount will change but the index token balance is still the same 
             (before minting)
      */
   function investInFund(
     FunctionParameters.InvestFund memory investData
   ) external payable virtual nonReentrant notPaused {
-    IndexSwapLibrary.beforeInvestment(investData._slippage.length, investData._lpSlippage.length, investData._to);
+    IndexSwapLibrary.beforeInvestment(
+      IIndexSwap(address(this)),
+      investData._slippage.length,
+      investData._lpSlippage.length,
+      msg.sender
+    );
+    address _token = investData._token;
+    uint256 balanceBefore = IndexSwapLibrary.checkBalance(_token, address(_exchange), WETH);
+    uint256 _amount = investData._tokenAmount;
+    uint256 _investmentAmountInUSD;
+
     if (msg.value > 0) {
-      investData._tokenAmount = msg.value;
-      IndexSwapLibrary._checkInvestmentValue(investData._tokenAmount, _iAssetManagerConfig);
+      if (WETH != _token) {
+        revert ErrorLibrary.InvalidToken();
+      }
+      _amount = msg.value;
     } else {
-      IndexSwapLibrary._checkPermissionAndBalance(
-        investData._token,
-        investData._tokenAmount,
-        _iAssetManagerConfig,
-        msg.sender
-      );
-      uint256 tokenBalanceInBNB = getTokenBalanceInBNB(investData._token, investData._tokenAmount);
-      IndexSwapLibrary._checkInvestmentValue(tokenBalanceInBNB, _iAssetManagerConfig);
-      TransferHelper.safeApprove(investData._token, address(this), investData._tokenAmount);
+      IndexSwapLibrary._checkPermissionAndBalance(_token, _amount, _iAssetManagerConfig, msg.sender);
+      TransferHelper.safeTransferFrom(_token, msg.sender, address(_exchange), _amount);
     }
 
-    uint256 investedAmountAfterSlippage = 0;
-    uint256 vaultBalance = 0;
-    uint256 len = _tokens.length;
-    uint256[] memory amount = new uint256[](len);
-    uint256[] memory tokenBalance = new uint256[](len);
+    _investmentAmountInUSD = _oracle.getPriceTokenUSD18Decimals(_token, _amount);
+    _checkInvestmentValue(_investmentAmountInUSD);
 
-    (tokenBalance, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(address(this)), getTokens());
+    uint256 investedAmountAfterSlippage;
+    uint256 vaultBalance;
+    uint256[] memory amount = new uint256[](_tokens.length);
+    uint256[] memory tokenBalance = new uint256[](_tokens.length);
 
-    uint256 vaultBalanceInBNB = IndexSwapLibrary._getTokenPriceUSDETH(_oracle, vaultBalance);
-    _feeModule.chargeFeesFromIndex(vaultBalanceInBNB);
+    (tokenBalance, vaultBalance) = getTokenAndVaultBalance();
+    chargeFees(vaultBalance);
 
     amount = IndexSwapLibrary.calculateSwapAmounts(
       IIndexSwap(address(this)),
-      investData._tokenAmount,
+      _amount,
       tokenBalance,
-      vaultBalance
+      vaultBalance,
+      _tokens
     );
-    IIndexOperations indexOperations = IIndexOperations(_tokenRegistry.IndexOperationHandler());
     uint256[] memory slippage = investData._slippage;
-    if (investData._token != _tokenRegistry.WETH()) {
-      TransferHelper.safeTransferFrom(investData._token, msg.sender, address(indexOperations), investData._tokenAmount);
-    }
-    investedAmountAfterSlippage = indexOperations._swapTokenToTokens{value: msg.value}(
+
+    investedAmountAfterSlippage = _exchange._swapTokenToTokens{value: msg.value}(
       FunctionParameters.SwapTokenToTokensData(
         address(this),
-        investData._token,
+        _token,
         investData._swapHandler,
-        investData._tokenAmount,
+        msg.sender,
+        _amount,
         totalSupply(),
         amount,
         slippage,
         investData._lpSlippage
-      )
+      ),
+      balanceBefore
     );
-    uint256 investedAmountAfterSlippageBNB = IndexSwapLibrary._getTokenPriceUSDETH(_oracle, investedAmountAfterSlippage);
 
-    require(investedAmountAfterSlippageBNB > 0, "final invested amount is 0");
-    uint256 tokenAmount;
-    if (totalSupply() > 0) {
-      tokenAmount = IndexSwapLibrary._mintShareAmount(investedAmountAfterSlippageBNB, vaultBalanceInBNB, totalSupply());
-    } else {
-      tokenAmount = investedAmountAfterSlippageBNB;
+    if (investedAmountAfterSlippage <= 0) {
+      revert ErrorLibrary.ZeroFinalInvestmentValue();
     }
-    require(tokenAmount > 0, "token amount is 0");
-
-    _mint(investData._to, tokenAmount);
-    lastInvestmentTime[investData._to] = block.timestamp;
+    uint256 tokenAmount;
+    uint256 _totalSupply = totalSupply();
+    tokenAmount = getTokenAmount(_totalSupply, investedAmountAfterSlippage, vaultBalance);
+    if (tokenAmount <= 0) {
+      revert ErrorLibrary.ZeroTokenAmount();
+    }
+    uint256 _mintedAmount = _mintInvest(msg.sender, tokenAmount);
+    lastWithdrawCooldown[msg.sender] = IndexSwapLibrary.calculateCooldownPeriod(
+      balanceOf(msg.sender),
+      _mintedAmount,
+      _tokenRegistry.COOLDOWN_PERIOD(),
+      lastWithdrawCooldown[msg.sender],
+      lastInvestmentTime[msg.sender]
+    );
+    lastInvestmentTime[msg.sender] = getTimeStamp();
 
     emit InvestInFund(
-      investData._to,
-      investData._tokenAmount,
-      tokenAmount,
+      msg.sender,
+      _amount,
+      _mintedAmount,
       IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
-      address(this),
-      block.timestamp
+      balanceOf(msg.sender),
+      address(this)
     );
-    // refund leftover ETH to user
-    (bool success, ) = payable(investData._to).call{value: address(this).balance}("");
-    require(success, "refund failed");
   }
 
-  /**
-     * @notice The function swaps the amount of portfolio tokens represented by the amount of index token back to 
-               BNB and returns it to the user and burns the amount of index token being withdrawn
-     */
-
+  /*
+   * @notice The function swaps the amount of portfolio tokens represented by the amount of index token back to
+   *           BNB or token pass and returns it to the user and burns the amount of index token being withdrawn
+   *          Allows users to withdraw their investment by burning index tokens.
+   *          also option  Users will receive the corresponding underlying tokens.
+   * @dev This function implements the withdrawal process for the fund.
+   * @param initData WithdrawFund struct containing the function parameters:
+   *        - _slippage: Array of slippage values for token swaps
+   *        - _lpSlippage: Array of slippage values for LP token swaps
+   *        - tokenAmount: Amount of index tokens to be burned
+   *        - _swapHandler: Address of the swap handler contract
+   *        - _token: Address of the token to withdraw or convert to
+   *        - isMultiAsset: Flag indicating if the withdrawal involves multiple assets or a single asset
+   *
+   */
   function withdrawFund(FunctionParameters.WithdrawFund calldata initData) external nonReentrant notPaused {
-    checkCoolDownPeriod();
+    checkCoolDownPeriod(msg.sender);
     IndexSwapLibrary.beforeWithdrawCheck(
       initData._slippage.length,
       initData._lpSlippage.length,
+      initData._token,
       msg.sender,
       IIndexSwap(address(this)),
       initData.tokenAmount
     );
     uint256 vaultBalance;
-    (, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(address(this)), getTokens());
-    uint256 vaultBalanceInBNB = IndexSwapLibrary._getTokenPriceUSDETH(_oracle, vaultBalance);
-
-    address assetManagerTreasury = _iAssetManagerConfig.assetManagerTreasury();
-    address velvetTreasury = _tokenRegistry.velvetTreasury();
-    if (!(msg.sender == assetManagerTreasury || msg.sender == velvetTreasury)) {
-      _feeModule.chargeFeesFromIndex(vaultBalanceInBNB);
+    (, vaultBalance) = getTokenAndVaultBalance();
+    if (!(msg.sender == _iAssetManagerConfig.assetManagerTreasury() || msg.sender == _tokenRegistry.velvetTreasury())) {
+      chargeFees(vaultBalance);
     }
-
     uint256 totalSupplyIndex = totalSupply();
-    emit WithdrawFund(
-      msg.sender,
-      initData.tokenAmount,
-      IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
-      address(this),
-      block.timestamp
-    );
-    _burn(msg.sender, initData.tokenAmount);
-
+    uint256 _exitFee = _burnWithdraw(msg.sender, initData.tokenAmount);
+    uint256 _tokenAmount = initData.tokenAmount - _exitFee;
     for (uint256 i = 0; i < _tokens.length; i++) {
-      uint256 tokenBalance = IndexSwapLibrary.getTokenBalance(IIndexSwap(address(this)), _tokens[i]);
-
-  //     require(tokenBalance.mul(initData.tokenAmount) >= totalSupplyIndex, "incorrect token amount");
-
-      tokenBalance = tokenBalance.mul(initData.tokenAmount).div(totalSupplyIndex);
-
-      if (initData.isMultiAsset || _tokens[i] == initData._token) {
-        IndexSwapLibrary.withdrawMultiAsset(_tokens[i], tokenBalance);
+      address token = _tokens[i];
+      IHandler handler = IHandler(_tokenRegistry.getTokenInformation(token).handler);
+      uint256 tokenBalance = handler.getTokenBalance(_vault, token);
+      tokenBalance = (tokenBalance * _tokenAmount) / totalSupplyIndex;
+      if (initData.isMultiAsset || token == initData._token) {
+        IndexSwapLibrary.withdrawMultiAssetORWithdrawToken(
+          address(_tokenRegistry),
+          address(_exchange),
+          token,
+          tokenBalance
+        );
       } else {
-        IndexSwapLibrary.pullFromVault(IIndexSwap(address(this)), _tokens[i], tokenBalance, address(_exchange));
+        _exchange._pullFromVault(token, tokenBalance, address(_exchange));
         _exchange._swapTokenToToken(
           FunctionParameters.SwapTokenToTokenData(
-            _tokens[i],
+            token,
             initData._token,
             msg.sender,
             initData._swapHandler,
+            msg.sender,
             tokenBalance,
             initData._slippage[i],
             initData._lpSlippage[i],
@@ -320,26 +353,142 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
         );
       }
     }
+    emit WithdrawFund(
+      msg.sender,
+      initData.tokenAmount,
+      IndexSwapLibrary.getIndexTokenRate(IIndexSwap(address(this))),
+      balanceOf(msg.sender),
+      address(this)
+    );
+  }
 
-    if (
-      !(balanceOf(msg.sender) == 0 ||
-        getVelvetTokenBalanceInBNB(balanceOf(msg.sender)) >= _tokenRegistry.MIN_VELVET_INVESTMENTAMOUNT())
-    ) {
-      revert ErrorLibrary.BalanceCantBeBelowVelvetMinInvestAmount({
-        minVelvetInvestment: _tokenRegistry.MIN_VELVET_INVESTMENTAMOUNT()
-      });
+  /**
+   * @notice Performs additional validation after the withdrawal process.
+   *  Basic us that when use withdraw he not keep dust after withdraw index token
+   * @dev This function is called after the withdrawal process is completed.
+   */
+  function validateWithdraw(address _user) internal {
+    uint256 _minInvestValue = _tokenRegistry.MIN_VELVET_INVESTMENTAMOUNT();
+    if (!(balanceOf(_user) == 0 || balanceOf(_user) >= _minInvestValue)) {
+      revert ErrorLibrary.BalanceCantBeBelowVelvetMinInvestAmount({minVelvetInvestment: _minInvestValue});
     }
   }
 
+  /**
+   * @notice Calculates the token amount based on the total supply, invested amount, and vault balance.
+   * @dev If the total supply is greater than zero, the token amount is calculated using the formula:
+   *  tokenAmount = investedAmount * _totalSupply / vaultBalance
+   *  If the total supply is zero, the token amount is equal to the invested amount.
+   * @param _totalSupply The total supply of index tokens.
+   * @param investedAmount The amount of funds invested.
+   * @param vaultBalance The balance of funds in the vault.
+   * @return tokenAmount The calculated token amount.
+   */
+  function getTokenAmount(
+    uint256 _totalSupply,
+    uint256 investedAmount,
+    uint256 vaultBalance
+  ) internal pure returns (uint256 tokenAmount) {
+    if (_totalSupply > 0) {
+      tokenAmount = (investedAmount * _totalSupply) / vaultBalance;
+    } else {
+      tokenAmount = investedAmount;
+    }
+  }
+
+  function nonReentrantBefore() external onlyMinter {
+    _nonReentrantBefore();
+  }
+
+  function nonReentrantAfter() external onlyMinter {
+    _nonReentrantAfter();
+  }
+
+  /**
+   * @notice Mints new index tokens and assigns them to the specified address.
+   * @dev If the entry fee is applicable, it is charged and deducted from the minted tokens.
+   * @param _to The address to which the minted index tokens are assigned.
+   * @param _mintAmount The amount of index tokens to mint.
+   */
+  function _mintInvest(address _to, uint256 _mintAmount) internal returns (uint256) {
+    uint256 entryFee = _iAssetManagerConfig.entryFee();
+
+    // Check if the entry fee should be charged and deducted from the minted tokens
+    if (IndexSwapLibrary.mintAndBurnCheck(entryFee, _to, address(_tokenRegistry), address(_iAssetManagerConfig))) {
+      _mintAmount = _feeModule.chargeEntryFee(_mintAmount, entryFee);
+    }
+
+    // Mint new index tokens and assign them to the specified address
+    _mint(_to, _mintAmount);
+    return _mintAmount;
+  }
+
+  /**
+   * @notice Burns a specified amount of index tokens from the specified address and returns the exit fee.
+   * @dev If the exit fee is applicable, it is charged and deducted from the burned tokens.
+   * @param _to The address from which the index tokens are burned.
+   * @param _mintAmount The amount of index tokens to burn.
+   * @return The exit fee deducted from the burned tokens.
+   */
+  function _burnWithdraw(address _to, uint256 _mintAmount) internal returns (uint256) {
+    uint256 exitFee = _iAssetManagerConfig.exitFee();
+    uint256 returnValue;
+
+    // Check if the exit fee should be charged and deducted from the burned tokens
+    if (IndexSwapLibrary.mintAndBurnCheck(exitFee, _to, address(_tokenRegistry), address(_iAssetManagerConfig))) {
+      (, , uint256 _exitFee) = _feeModule.chargeExitFee(_mintAmount, exitFee);
+      returnValue = _exitFee;
+    }
+
+    // Burn the specified amount of index tokens from the specified address
+    _burn(_to, _mintAmount);
+
+    validateWithdraw(_to);
+
+    return returnValue;
+  }
+
+  /**
+   * @notice Mints a specified amount of index tokens to the specified address.
+   * @dev This function can only be called by the designated minter.
+   * @param _to The address to which the index tokens are minted.
+   * @param _mintAmount The amount of index tokens to mint.
+   */
+  function mintTokenAndSetCooldown(
+    address _to,
+    uint256 _mintAmount
+  ) external onlyMinter returns (uint256 _mintedAmount) {
+    _mintedAmount = _mintInvest(_to, _mintAmount);
+    lastWithdrawCooldown[_to] = IndexSwapLibrary.calculateCooldownPeriod(
+      balanceOf(_to),
+      _mintedAmount,
+      _tokenRegistry.COOLDOWN_PERIOD(),
+      lastWithdrawCooldown[_to],
+      lastInvestmentTime[_to]
+    );
+    lastInvestmentTime[_to] = getTimeStamp();
+  }
+
+  /**
+   * @notice Burns a specified amount of index tokens from the specified address and returns the exit fee.
+   * @dev This function can only be called by the designated minter.
+   * @param _to The address from which the index tokens are burned.
+   * @param _mintAmount The amount of index tokens to burn.
+   * @return exitFee The exit fee charged for the burn operation.
+   */
+  function burnWithdraw(address _to, uint256 _mintAmount) external onlyMinter returns (uint256 exitFee) {
+    exitFee = _burnWithdraw(_to, _mintAmount);
+  }
+
   modifier onlyRebalancerContract() {
-    if (!(_accessController.hasRole(keccak256("REBALANCER_CONTRACT"), msg.sender))) {
+    if (!_checkRole("REBALANCER_CONTRACT", msg.sender)) {
       revert ErrorLibrary.CallerNotRebalancerContract();
     }
     _;
   }
 
   modifier onlyMinter() {
-    if (!(_accessController.hasRole(keccak256("MINTER_ROLE"), msg.sender))) {
+    if (!_checkRole("MINTER_ROLE", msg.sender)) {
       revert ErrorLibrary.CallerNotIndexManager();
     }
     _;
@@ -356,15 +505,36 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
     @notice The function will pause the InvestInFund() and Withdrawal() called by the rebalancing contract.
     @param _state The state is bool value which needs to input by the Index Manager.
   */
-  function setPaused(bool _state) public virtual onlyRebalancerContract {
+  function setPaused(bool _state) external virtual onlyRebalancerContract {
+    _setPaused(_state);
+  }
+
+  function _setPaused(bool _state) internal virtual {
     _paused = _state;
+    _lastPaused = getTimeStamp();
+  }
+
+  /**
+    @notice The function will set lastRebalanced time called by the rebalancing contract.
+    @param _time The time is block.timestamp, the moment when rebalance is done
+  */
+  function setLastRebalance(uint256 _time) external virtual onlyRebalancerContract {
+    _setLastRebalance(_time);
+  }
+
+  function _setLastRebalance(uint256 _time) internal virtual {
+    _lastRebalanced = _time;
   }
 
   /**
     @notice The function will update the redeemed value
     @param _state The state is bool value which needs to input by the Index Manager.
   */
-  function setRedeemed(bool _state) public virtual onlyRebalancerContract {
+  function setRedeemed(bool _state) external virtual onlyRebalancerContract {
+    _setRedeemed(_state);
+  }
+
+  function _setRedeemed(bool _state) internal virtual {
     _redeemed = _state;
   }
 
@@ -374,25 +544,47 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @param tokens The updated token list of the portfolio
    * @param denorms The new weights for for the portfolio
    */
-  function updateRecords(address[] calldata tokens, uint96[] calldata denorms) public virtual onlyRebalancerContract {
-    uint256 totalWeight = 0;
+  function updateRecords(address[] calldata tokens, uint96[] calldata denorms) external virtual onlyRebalancerContract {
+    _updateRecords(tokens, denorms);
+  }
+
+  /**
+   * @notice The function is internal function for update records
+   * @dev The token list is passed so the function can be called with current or updated token list
+   * @param tokens The updated token list of the portfolio
+   * @param denorms The new weights for for the portfolio
+   */
+  function _updateRecords(address[] calldata tokens, uint96[] calldata denorms) internal {
+    uint256 totalWeight;
     for (uint256 i = 0; i < tokens.length; i++) {
-      if (denorms[i] <= 0) {
+      uint96 _denorm = denorms[i];
+      address token = tokens[i];
+      if (_denorm <= 0) {
         revert ErrorLibrary.ZeroDenormValue();
       }
-      if (_previousToken[tokens[i]] == true) {
+      if (_previousToken[token] == true) {
         revert ErrorLibrary.TokenAlreadyExist();
       }
-      _records[tokens[i]] = Record({lastDenormUpdate: uint40(block.timestamp), denorm: denorms[i], index: uint8(i)});
+      _records[token] = Record({lastDenormUpdate: uint40(getTimeStamp()), denorm: _denorm, index: uint8(i)});
 
-      totalWeight = totalWeight.add(denorms[i]);
-      _previousToken[tokens[i]] = true;
+      totalWeight = totalWeight + _denorm;
+      _previousToken[token] = true;
     }
     setFalse(tokens);
+    _weightCheck(totalWeight);
+  }
 
-    if (totalWeight != _TOTAL_WEIGHT) {
-      revert ErrorLibrary.InvalidWeights({totalWeight: _TOTAL_WEIGHT});
-    }
+  /**
+   * @notice This function update records with new tokenlist and weights
+   * @param tokens Array of the tokens to be updated
+   * @param _denorms Array of the updated denorm values
+   */
+  function updateTokenListAndRecords(
+    address[] calldata tokens,
+    uint96[] calldata _denorms
+  ) external virtual onlyRebalancerContract {
+    _updateTokenList(tokens);
+    _updateRecords(tokens, _denorms);
   }
 
   /**
@@ -420,22 +612,23 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
   }
 
   /**
-    @notice This function calculates the IndexToken balance of user in terms of BNB
-    @param tokenAmount Index Token amount passed
-    @return tokenAmountBNB Final token balance of the user in BNB
+    @notice The function returns lastRebalanced time
   */
-  function getVelvetTokenBalanceInBNB(uint256 tokenAmount) internal virtual returns (uint256 tokenAmountBNB) {
-    (, uint256 vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(address(this)), getTokens());
+  function getLastRebalance() public view virtual returns (uint256) {
+    return _lastRebalanced;
+  }
 
-    if (tokenAmount > 0 && vaultBalance > 0) {
-      tokenAmountBNB = IndexSwapLibrary._getTokenPriceUSDETH(_oracle, vaultBalance.mul(tokenAmount).div(totalSupply()));
-    }
+  /**
+    @notice The function returns lastPaused time
+  */
+  function getLastPaused() public view virtual returns (uint256) {
+    return _lastPaused;
   }
 
   /**
    * @notice This function returns the record of a specific token
    */
-  function getRecord(address _token) public view virtual returns (Record memory) {
+  function getRecord(address _token) external view virtual returns (Record memory) {
     return _records[_token];
   }
 
@@ -443,43 +636,76 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @notice This function updates the token list with new tokens
    * @param tokens List of updated tokens
    */
-  function updateTokenList(address[] calldata tokens) public virtual onlyRebalancerContract {
+  function updateTokenList(address[] calldata tokens) external virtual onlyRebalancerContract {
+    _updateTokenList(tokens);
+  }
+
+  function _updateTokenList(address[] calldata tokens) internal {
+    uint256 _maxAssetLimit = _tokenRegistry.getMaxAssetLimit();
+    if (tokens.length > _maxAssetLimit) revert ErrorLibrary.TokenCountOutOfLimit(_maxAssetLimit);
     _tokens = tokens;
   }
 
-  function vault() external view returns(address){
+  /**
+   * @notice This function returns the address of the vault
+   */
+  function vault() external view returns (address) {
     return _vault;
   }
 
-  function feeModule() external view returns (address){
+  /**
+   * @notice This function returns the address of the fee module
+   */
+  function feeModule() external view returns (address) {
     return address(_feeModule);
   }
 
-  function exchange() external view returns (address){
+  /**
+   * @notice This function returns the address of the exchange
+   */
+  function exchange() external view returns (address) {
     return address(_exchange);
   }
 
-  function tokenRegistry() external view returns (address){
+  /**
+   * @notice This function returns the address of the token registry
+   */
+  function tokenRegistry() external view returns (address) {
     return address(_tokenRegistry);
   }
 
-  function accessController() external view returns (address){
+  /**
+   * @notice This function returns the address of the access controller
+   */
+  function accessController() external view returns (address) {
     return address(_accessController);
   }
 
-  function paused() external view returns (bool){
+  /**
+   * @notice This function returns the paused or unpaused state of the investment/withdrawal
+   */
+  function paused() external view returns (bool) {
     return _paused;
   }
 
-  function TOTAL_WEIGHT() external pure returns (uint256){
+  /**
+   * @notice This function returns the total weight, which is supposed to be = 10_000 (representing 100%)
+   */
+  function TOTAL_WEIGHT() external pure returns (uint256) {
     return _TOTAL_WEIGHT;
   }
 
-  function iAssetManagerConfig() external view returns (address){
+  /**
+   * @notice This function returns the address of the asset manager config
+   */
+  function iAssetManagerConfig() external view returns (address) {
     return address(_iAssetManagerConfig);
   }
 
-  function oracle() external view returns (address){
+  /**
+   * @notice This function returns the address of the price oracle
+   */
+  function oracle() external view returns (address) {
     return address(_oracle);
   }
 
@@ -487,7 +713,7 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @notice This function deletes a particular token record
    * @param t Address of the token whose record is to be deleted
    */
-  function deleteRecord(address t) public virtual onlyRebalancerContract {
+  function deleteRecord(address t) external virtual onlyRebalancerContract {
     delete _records[t];
   }
 
@@ -495,39 +721,79 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @notice Claims the token for the caller via the Exchange contract
    * @param tokens Addresses of the token for which the reward is to be claimed
    */
-  function claimTokens(address[] calldata tokens) public {
+  function claimTokens(address[] calldata tokens) external nonReentrant {
     _exchange.claimTokens(IIndexSwap(address(this)), tokens);
   }
 
   /**
-   * @notice Returns the token balance in BNB
-   * @param _token Address of the token whose balance is required
-   * @param _tokenAmount Amount of the token
-   * @return tokenBalanceInBNB Final token balance in BNB
+   * @notice Check for totalweight == _TOTAL_WEIGHT
+   * @param weight weight of portfolio
    */
-  function getTokenBalanceInBNB(
-    address _token,
-    uint256 _tokenAmount
-  ) internal view returns (uint256 tokenBalanceInBNB) {
-    uint256 tokenBalanceInUSD = IndexSwapLibrary._getTokenAmountInUSD(address(_oracle), _token, _tokenAmount);
-    tokenBalanceInBNB = IndexSwapLibrary._getTokenPriceUSDETH(_oracle, tokenBalanceInUSD);
+  function _weightCheck(uint256 weight) internal pure {
+    if (weight != _TOTAL_WEIGHT) {
+      revert ErrorLibrary.InvalidWeights({totalWeight: _TOTAL_WEIGHT});
+    }
   }
 
   /**
-   * @notice Checks for the cooldown period to be correct as per the block timestamp
+   * @notice This internal function returns tokenBalance in array, vaultBalance and vaultBalance in usd
    */
-  function checkCoolDownPeriod() public view {
-    if (block.timestamp.sub(lastInvestmentTime[msg.sender]) < _tokenRegistry.COOLDOWN_PERIOD()) {
+  function getTokenAndVaultBalance() internal returns (uint256[] memory tokenBalance, uint256 vaultBalance) {
+    (tokenBalance, vaultBalance) = IndexSwapLibrary.getTokenAndVaultBalance(IIndexSwap(address(this)), getTokens());
+  }
+
+  /**
+   * @notice This internal function check for role
+   */
+  function _checkRole(bytes memory _role, address user) internal view returns (bool) {
+    return _accessController.hasRole(keccak256(_role), user);
+  }
+
+  /**
+   * @notice This internal set multiple flags such as setLastRebalance,setPause and setRedeemed
+   */
+  function setFlags(bool _pauseState, bool _redeemState) external onlyRebalancerContract {
+    _setLastRebalance(getTimeStamp());
+    _setPaused(_pauseState);
+    _setRedeemed(_redeemState);
+  }
+
+  /**
+   * @notice The function is used to check investment value
+   */
+  function _checkInvestmentValue(uint256 _tokenAmount) internal view {
+    IndexSwapLibrary._checkInvestmentValue(_tokenAmount, _iAssetManagerConfig);
+  }
+
+  /**
+   * @notice This function is used to charge fees
+   */
+  function chargeFees(uint256 vaultBalance) internal {
+    _feeModule.chargeFeesFromIndex(vaultBalance);
+  }
+
+  /**
+   * @notice This function returns remaining cooldown for user
+   */
+  function getRemainingCoolDown(address _user) public view returns (uint256) {
+    uint256 userCoolDownPeriod = lastInvestmentTime[_user] + lastWithdrawCooldown[_user];
+    return userCoolDownPeriod < getTimeStamp() ? 0 : userCoolDownPeriod - getTimeStamp();
+  }
+
+  /**
+   * @notice This function check whether the cooldown period is passed or not
+   */
+  function checkCoolDownPeriod(address _user) public view {
+    if (getRemainingCoolDown(_user) > 0) {
       revert ErrorLibrary.CoolDownPeriodNotPassed();
     }
   }
 
   /**
-   * @notice Keeps a record of the last investment made
-   * @param _to Address of the last investor
+   * @notice This function returns timeStamp
    */
-  function setLastInvestmentPeriod(address _to) public onlyMinter {
-    lastInvestmentTime[_to] = block.timestamp;
+  function getTimeStamp() internal view returns (uint256) {
+    return block.timestamp;
   }
 
   // important to receive ETH
@@ -537,5 +803,5 @@ contract IndexSwap is Initializable, ERC20Upgradeable, ReentrancyGuardUpgradeabl
    * @notice Authorizes upgrade for this contract
    * @param newImplementation Address of the new implementation
    */
-  function _authorizeUpgrade(address newImplementation) internal virtual override {}
+  function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {}
 }

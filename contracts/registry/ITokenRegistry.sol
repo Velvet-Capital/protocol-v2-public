@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.16;
 
 interface ITokenRegistry {
@@ -39,17 +39,29 @@ interface ITokenRegistry {
 
   function protocolFee() external returns (uint256);
 
+  function protocolFeeBottomConstraint() external returns (uint256);
+
   function maxManagementFee() external returns (uint256);
 
   function maxPerformanceFee() external returns (uint256);
 
+  function maxEntryFee() external returns (uint256);
+
+  function maxExitFee() external returns (uint256);
+
+  function exceptedRangeDecimal() external view returns(uint256);
+
   function MIN_VELVET_INVESTMENTAMOUNT() external returns (uint256);
+
+  function MAX_VELVET_INVESTMENTAMOUNT() external returns (uint256);
 
   function enablePermittedTokens(address[] calldata _newTokens) external;
 
   function setIndexCreationState(bool _state) external;
 
   function setProtocolPause(bool _state) external;
+
+  function setExceptedRangeDecimal(uint256 _newRange) external ;
 
   function getProtocolState() external returns (bool);
 
@@ -60,4 +72,8 @@ interface ITokenRegistry {
   function getETH() external view returns (address);
 
   function COOLDOWN_PERIOD() external view returns (uint256);
+
+  function setMaxAssetLimit(uint256) external;
+
+  function getMaxAssetLimit() external view returns (uint256);
 }

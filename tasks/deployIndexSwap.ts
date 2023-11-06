@@ -17,17 +17,13 @@ task(DEPLOY_INDEXSWAP, "Deploy IndexSwap Contract ")
     const { chainId } = await hre.ethers.provider.getNetwork();
     const addresses = chainIdToAddresses[forkChainId];
     const accounts = await hre.ethers.getSigners();
-    console.log(
-      "------------------------------ Initial Setup Ended ------------------------------"
-    );
+    console.log("------------------------------ Initial Setup Ended ------------------------------");
 
     console.log("--------------- Contract Deployment Started ---------------");
 
     const [owner] = accounts;
     // Access Controller
-    const AccessController = await hre.ethers.getContractFactory(
-      "AccessController"
-    );
+    const AccessController = await hre.ethers.getContractFactory("AccessController");
     const accessController = await AccessController.deploy();
     await accessController.deployed();
 
@@ -40,7 +36,7 @@ task(DEPLOY_INDEXSWAP, "Deploy IndexSwap Contract ")
       accessController.address,
       addresses.PancakeSwapRouterAddress,
       taskArgs.module,
-      taskArgs.tokenmetadata
+      taskArgs.tokenmetadata,
     );
     await adapter.deployed();
 
@@ -59,7 +55,7 @@ task(DEPLOY_INDEXSWAP, "Deploy IndexSwap Contract ")
       accessController.address,
       taskArgs.tokenmetadata,
       taskArgs.fee,
-      owner.address
+      owner.address,
     );
     await indexSwap.deployed();
     console.log(`IndexSwap deployed to: ${indexSwap.address}`);
@@ -70,22 +66,18 @@ task(DEPLOY_INDEXSWAP, "Deploy IndexSwap Contract ")
       taskArgs.indexswaplibrary,
       adapter.address,
       accessController.address,
-      taskArgs.tokenmetadata
+      taskArgs.tokenmetadata,
     );
     await rebalancing.deployed();
 
-    console.log(
-      "-------------- Adding adapter contract as owner in safe wallet--------------------"
-    );
+    console.log("-------------- Adding adapter contract as owner in safe wallet--------------------");
 
     const VelvetSafeModule = hre.ethers.getContractFactory("VelvetSafeModule");
     let velvetSafeModule = (await VelvetSafeModule).attach(taskArgs.module);
     await velvetSafeModule.transferModuleOwnership(adapter.address);
 
     console.log(`Rebalancing deployed to: ${rebalancing.address}`);
-    console.log(
-      "------------------------------ Contract Deployment Ended ------------------------------"
-    );
+    console.log("------------------------------ Contract Deployment Ended ------------------------------");
 
     return indexSwap;
   });

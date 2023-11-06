@@ -9,19 +9,10 @@ import { chainIdToAddresses } from "./networkVariables";
 // let fs = require("fs");
 const ETHERSCAN_TX_URL = "https://testnet.bscscan.io/tx/";
 
-import Safe, {
-  SafeFactory,
-  SafeAccountConfig,
-  ContractNetworksConfig,
-} from "@gnosis.pm/safe-core-sdk";
+import Safe, { SafeFactory, SafeAccountConfig, ContractNetworksConfig } from "@gnosis.pm/safe-core-sdk";
 import EthersAdapter from "@gnosis.pm/safe-ethers-lib";
-import {
-  SafeTransactionDataPartial,
-  GnosisSafeContract,
-  SafeVersion,
-} from "@gnosis.pm/safe-core-sdk-types";
+import { SafeTransactionDataPartial, GnosisSafeContract, SafeVersion } from "@gnosis.pm/safe-core-sdk-types";
 import { getSafeContract } from "@gnosis.pm/safe-core-sdk/dist/src/contracts/safeDeploymentContracts";
-
 
 async function main() {
   // Hardhat always runs the compile task when running scripts with its command
@@ -44,27 +35,27 @@ async function main() {
   console.log("--------------- Contract Deployment Started ---------------");
 
   const ethAdapter = new EthersAdapter({
-        ethers,
-        signer: owner,
+    ethers,
+    signer: owner,
   });
 
   const id = await ethAdapter.getChainId();
-  
-  console.log("addresses",process.argv[0]);
+
+  console.log("addresses", process.argv[0]);
 
   const contractNetworks: ContractNetworksConfig = {
-        [id]: {
-          multiSendAddress: addresses.MULTI_SEND_ADDRESS,
-          safeMasterCopyAddress: addresses.SAFE_MASTER_COPY_ADDRESS,
-          safeProxyFactoryAddress: addresses.SAFE_PROXY_FACTORY_ADDRESS,
-        },
+    [id]: {
+      multiSendAddress: addresses.MULTI_SEND_ADDRESS,
+      safeMasterCopyAddress: addresses.SAFE_MASTER_COPY_ADDRESS,
+      safeProxyFactoryAddress: addresses.SAFE_PROXY_FACTORY_ADDRESS,
+    },
   };
 
   const safeFactory = await SafeFactory.create({
-        ethAdapter,
-        contractNetworks,
-        isL1SafeMasterCopy: true,
-  }); 
+    ethAdapter,
+    contractNetworks,
+    isL1SafeMasterCopy: true,
+  });
   const owners = [owner.address];
   const threshold = 1;
   const safeAccountConfig: SafeAccountConfig = {
@@ -74,19 +65,15 @@ async function main() {
 
   const safeSdk: Safe = await safeFactory.deploySafe({ safeAccountConfig });
 
-
   const newSafeAddress = safeSdk.getAddress();
   const safeAddress = newSafeAddress;
 
   console.log("Safe deployed to: ", newSafeAddress);
 
-
-  const VelvetSafeModule = await ethers.getContractFactory(
-    "VelvetSafeModule"
-  );
+  const VelvetSafeModule = await ethers.getContractFactory("VelvetSafeModule");
   const velvetSafeModule = await VelvetSafeModule.deploy(newSafeAddress);
   console.log("VelvetSafeModule deployed to: ", velvetSafeModule.address);
-  
+
   // await run("verify:verify", {
   //   address: velvetSafeModule.address,
   //   constructorArguments: [newSafeAddress],
@@ -95,9 +82,7 @@ async function main() {
 
   let ABI = ["function enableModule(address module)"];
   let abiEncode = new ethers.utils.Interface(ABI);
-  let txData = abiEncode.encodeFunctionData("enableModule", [
-    velvetSafeModule.address,
-  ]);
+  let txData = abiEncode.encodeFunctionData("enableModule", [velvetSafeModule.address]);
 
   const transaction: SafeTransactionDataPartial = {
     to: safeAddress,
@@ -126,14 +111,10 @@ async function main() {
     ethAdapter: ethAdapterOwner3,
     safeAddress,
   });
-  const executeTxResponse = await safeSdk3.executeTransaction(
-    safeTransaction
-  );
+  const executeTxResponse = await safeSdk3.executeTransaction(safeTransaction);
   await executeTxResponse.transactionResponse?.wait();
 
   console.log("------------------------------ Deployment Storage Ended ------------------------------");
-
-
 }
 
 // We recommend this pattern to be able to use async/await everywhere

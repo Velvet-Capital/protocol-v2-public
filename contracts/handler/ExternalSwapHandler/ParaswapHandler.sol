@@ -1,92 +1,61 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.16;
 
-import { SafeERC20Upgradeable, IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/Initializable.sol";
-import { ExchangeData } from "../ExternalSwapHandler/Helper/ExchangeData.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { ErrorLibrary } from "./../../library/ErrorLibrary.sol";
+import {SafeERC20Upgradeable, IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable-4.3.2/proxy/utils/Initializable.sol";
+import {ExchangeData} from "../ExternalSwapHandler/Helper/ExchangeData.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
+import {ApproveControl} from "../ApproveControl.sol";
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
+import {ExternalSlippageControl} from "../ExternalSlippageControl.sol";
 
-contract ParaswapHandler is Initializable {
+contract ParaswapHandler is Initializable, ApproveControl, ExternalSlippageControl {
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
-  address public WETH;
-  address public swapTarget;
-  address public paraswapTransferHelper;
+  IPriceOracle internal oracle;
+  address internal swapTarget;
+  address internal paraswapTransferHelper;
 
-  function init(
-    address _WETH,
-    address _swapTarget,
-    address _transferHelper
-  ) external initializer {
+  function init(address _swapTarget, address _transferHelper, address _oracle) external initializer {
     swapTarget = _swapTarget;
-    WETH = _WETH;
     paraswapTransferHelper = _transferHelper;
+    oracle = IPriceOracle(_oracle);
   }
 
   function swap(
     address sellTokenAddress,
     address buyTokenAddress,
     uint256 sellAmount,
-    uint256 protocolFee,
     bytes memory callData,
     address _to
   ) public payable {
-    uint256 tokenBalance = IERC20Upgradeable(sellTokenAddress).balanceOf(
-      address(this)
-    );
+    uint256 tokenBalance = IERC20Upgradeable(sellTokenAddress).balanceOf(address(this));
 
     if (tokenBalance < sellAmount) {
       revert ErrorLibrary.InsufficientFunds(tokenBalance, sellAmount);
     }
-    uint256 ethBalance = address(this).balance;
-    if (ethBalance < protocolFee) {
-      revert ErrorLibrary.InsufficientFeeFunds(ethBalance, protocolFee);
-    }
+
     setAllowance(sellTokenAddress, paraswapTransferHelper, sellAmount);
-    setAllowance(sellTokenAddress, swapTarget, sellAmount);
 
-    uint256 tokensBefore = IERC20Upgradeable(buyTokenAddress).balanceOf(
-      address(this)
-    );
-    (bool success, ) = swapTarget.call{ value: protocolFee }(callData);
-    uint256 tokensSwapped = 0;
-
-    if (success) {
-      tokensSwapped =
-        IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)) -
-        tokensBefore;
-      if (tokensSwapped == 0) {
-        revert ErrorLibrary.ZeroTokensSwapped();
-      }
-      TransferHelper.safeTransfer(
-        buyTokenAddress,
-        _to,
-        IERC20Upgradeable(buyTokenAddress).balanceOf(address(this))
-      );
+    uint256 tokensBefore = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
+    (bool success, ) = swapTarget.call(callData);
+    if (!success) {
+      revert ErrorLibrary.SwapFailed();
     }
-  }
+    uint256 tokensSwapped;
 
-  function setAllowance(
-    address _token,
-    address _spender,
-    uint256 _sellAmount
-  ) public {
-    uint256 _currentAllowance = IERC20Upgradeable(_token).allowance(
-      address(this),
-      _spender
-    );
-    if (_currentAllowance != _sellAmount) {
-      IERC20Upgradeable(_token).safeDecreaseAllowance(
-        _spender,
-        _currentAllowance
-      );
-      IERC20Upgradeable(_token).safeIncreaseAllowance(_spender, _sellAmount);
+    uint buyTokenBalance = IERC20Upgradeable(buyTokenAddress).balanceOf(address(this));
+
+    tokensSwapped = buyTokenBalance - tokensBefore;
+    if (tokensSwapped == 0) {
+      revert ErrorLibrary.ZeroTokensSwapped();
     }
-  }
+    uint priceSellToken = oracle.getPriceTokenUSD18Decimals(sellTokenAddress, sellAmount);
+    uint priceBuyToken = oracle.getPriceTokenUSD18Decimals(buyTokenAddress, buyTokenBalance);
 
-  function getETH() public view returns (address wbnb) {
-    wbnb = address(WETH);
+    validateSwap(priceSellToken, priceBuyToken);
+    TransferHelper.safeTransfer(buyTokenAddress, _to, IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)));
   }
 
   receive() external payable {}

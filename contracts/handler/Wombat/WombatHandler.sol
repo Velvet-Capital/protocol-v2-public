@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License-Identifier: BUSL-1.1
 
 // Wombat Official Docs: https://docs.wombat.exchange/docs/
 // Wombat GitHub: https://github.com/wombat-exchange
@@ -18,37 +18,43 @@
 
 pragma solidity 0.8.16;
 
-import { IERC20Upgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
-import { TransferHelper } from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import { SafeMathUpgradeable } from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
+import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
+import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {IAsset} from "./interfaces/IAsset.sol";
+import {IPool} from "./interfaces/IPool.sol";
+import {IWombat, StructLib} from "./interfaces/IWombat.sol";
+import {IWombatRouter} from "./interfaces/IWombatRouter.sol";
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
+import {IHandler} from "../IHandler.sol";
+import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
+import {SlippageControl} from "../SlippageControl.sol";
+import {FunctionParameters} from "contracts/FunctionParameters.sol";
 
-import { IAsset } from "./interfaces/IAsset.sol";
-import { IPool } from "./interfaces/IPool.sol";
-import { IWombat, StructLib } from "./interfaces/IWombat.sol";
-import { IWombatRouter } from "./interfaces/IWombatRouter.sol";
+import {DustHandler} from "../DustHandler.sol";
 
-import { IHandler } from "../IHandler.sol";
-import { ErrorLibrary } from "./../../library/ErrorLibrary.sol";
-import { SlippageControl } from "../SlippageControl.sol";
-import { FunctionParameters } from "contracts/FunctionParameters.sol";
+contract WombatHandler is IHandler, SlippageControl, DustHandler {
+  address internal constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
+  IWombat internal MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
 
-contract WombatHandler is IHandler, SlippageControl {
-  using SafeMathUpgradeable for uint256;
+  address internal constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
 
-  address public constant WOMBAT_OPTIMIZED_PROXY = 0x489833311676B566f888119c29bd997Dc6C95830;
-  IWombat MasterWombat = IWombat(WOMBAT_OPTIMIZED_PROXY);
+  IPriceOracle internal _oracle;
 
-  address public constant WOMBAT_ROUTER = 0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7;
-
-  event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
+  event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
-    uint256 time,
     address indexed user,
     address indexed token,
     uint256 amount,
     address indexed to,
     bool isWETH
   );
+
+  constructor(address _priceOracle) {
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
+    _oracle = IPriceOracle(_priceOracle);
+  }
 
   /**
    * @notice This function stakes to the Wombat protocol
@@ -61,21 +67,23 @@ contract WombatHandler is IHandler, SlippageControl {
     address _lpAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
-  ) public payable override {
+    address _to,
+    address user
+  ) public payable override returns (uint256 _mintedAmount) {
     if (_lpAsset == address(0) || _to == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     IAsset asset = IAsset(_lpAsset);
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_lpAsset)[0]);
+    IPool _pool = IPool(asset.pool());
 
     if (msg.value == 0) {
-      TransferHelper.safeApprove(address(underlyingToken), address(IPool(asset.pool())), 0);
-      TransferHelper.safeApprove(address(underlyingToken), address(IPool(asset.pool())), _amount[0]);
-      IPool(asset.pool()).deposit(
+      TransferHelper.safeApprove(address(underlyingToken), address(_pool), 0);
+      TransferHelper.safeApprove(address(underlyingToken), address(_pool), _amount[0]);
+      _mintedAmount = _pool.deposit(
         address(underlyingToken),
         _amount[0],
-        getSlippage(_amount[0], _lpSlippage),
+        getInternalSlippage(_amount[0], _lpAsset, _lpSlippage, true),
         _to,
         block.timestamp,
         true
@@ -84,16 +92,22 @@ contract WombatHandler is IHandler, SlippageControl {
       if (msg.value < _amount[0]) {
         revert ErrorLibrary.MintAmountNotEqualToPassedValue();
       }
-
-      IWombatRouter(WOMBAT_ROUTER).addLiquidityNative{value: _amount[0]}(
-        IPool(asset.pool()),
-        getSlippage(_amount[0], _lpSlippage),
+      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
+      _mintedAmount = IWombatRouter(WOMBAT_ROUTER).addLiquidityNative{value: _amount[0]}(
+        _pool,
+        getInternalSlippage(_amount[0], _lpAsset, _lpSlippage, true),
         _to,
         block.timestamp,
         true
       );
     }
-    emit Deposit(block.timestamp, msg.sender, _lpAsset, _amount, _to);
+
+    _returnDust(address(underlyingToken), user);
+
+    emit Deposit(msg.sender, _lpAsset, _amount, _to);
+
+    (uint256 _potentialWithdrawalAmount, ) = _pool.quotePotentialWithdraw(address(underlyingToken), _mintedAmount);
+    _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _potentialWithdrawalAmount);
   }
 
   /**
@@ -108,15 +122,15 @@ contract WombatHandler is IHandler, SlippageControl {
     if (inputData._amount > token.balanceOf(address(this))) {
       revert ErrorLibrary.NotEnoughBalanceInWombatProtocol();
     }
-
+    IPool _pool = IPool(token.pool());
     if (!inputData.isWETH) {
-      TransferHelper.safeApprove(address(token), address(IPool(token.pool())), 0);
-      TransferHelper.safeApprove(address(token), address(IPool(token.pool())), inputData._amount);
+      TransferHelper.safeApprove(address(token), address(_pool), 0);
+      TransferHelper.safeApprove(address(token), address(_pool), inputData._amount);
 
-      IPool(token.pool()).withdraw(
+      _pool.withdraw(
         address(underlyingToken),
         inputData._amount,
-        getSlippage(inputData._amount, inputData._lpSlippage),
+        getInternalSlippage(inputData._amount, inputData._yieldAsset, inputData._lpSlippage, false),
         inputData._to,
         block.timestamp
       );
@@ -125,14 +139,14 @@ contract WombatHandler is IHandler, SlippageControl {
       TransferHelper.safeApprove(address(token), address(WOMBAT_ROUTER), inputData._amount);
 
       IWombatRouter(WOMBAT_ROUTER).removeLiquidityNative(
-        IPool(token.pool()),
+        _pool,
         inputData._amount,
-        getSlippage(inputData._amount, inputData._lpSlippage),
+        getInternalSlippage(inputData._amount, inputData._yieldAsset, inputData._lpSlippage, false),
         inputData._to,
         block.timestamp
       );
     }
-    emit Redeem(block.timestamp, msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
+    emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
   /**
@@ -186,6 +200,22 @@ contract WombatHandler is IHandler, SlippageControl {
     return tokenBalance;
   }
 
+  /**
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   */
+  function getTokenBalanceUSD(address _tokenHolder, address t) public override returns (uint256) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
+    address[] memory underlyingToken = getUnderlying(t);
+
+    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
+    return balanceUSD;
+  }
+
   function encodeData(address t, uint256 _amount) public view returns (bytes memory) {
     IAsset asset = IAsset(t);
     return abi.encodeWithSelector(IWombat.withdraw.selector, MasterWombat.getAssetPid(address(asset)), _amount);
@@ -198,6 +228,37 @@ contract WombatHandler is IHandler, SlippageControl {
   function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
     uint256 pid = MasterWombat.getAssetPid(address(_token));
     return (abi.encodeWithSelector(IWombat.deposit.selector, pid, 0), address(MasterWombat));
+  }
+
+  /**
+   * @notice This function returns the slippage required by the Wombat Handler
+   * @param _amount This amount needed to be checked
+   * @param _token Address of the token needed
+   * @param _slippage Slippage required to be checked
+   * @param _deposit Type of operation done here, can be deposit or redeem
+   * @return slippageAmount amount calculated after slippage
+   */
+  function getInternalSlippage(
+    uint _amount,
+    address _token,
+    uint _slippage,
+    bool _deposit
+  ) internal returns (uint slippageAmount) {
+    IAsset asset = IAsset(_token);
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_token)[0]);
+    address pool = asset.pool();
+    //Formula By Wombat For Slippage
+    /**
+     minAmount = liquidity * (1/1+slippage)
+     */
+    //Here 1 is 100%(For Velvet) as slippage denoted by wombat is 0.01 for 1%
+    uint expectedAmount;
+    if (_deposit) {
+      (expectedAmount, ) = IPool(pool).quotePotentialDeposit(address(underlyingToken), _amount);
+    } else {
+      (expectedAmount, ) = IPool(pool).quotePotentialWithdraw(address(underlyingToken), _amount);
+    }
+    slippageAmount = (expectedAmount * HUNDRED_PERCENT ) / (HUNDRED_PERCENT + _slippage);
   }
 
   receive() external payable {}

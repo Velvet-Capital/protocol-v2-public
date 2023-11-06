@@ -2,13 +2,12 @@ import { config as dotEnvConfig } from "dotenv";
 dotEnvConfig();
 import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
-import "@nomiclabs/hardhat-waffle";
 import "@nomiclabs/hardhat-ethers";
 import "@typechain/hardhat";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-contract-sizer";
 import "solidity-coverage";
-
+import "hardhat-tracer";
 import "./tasks/accounts";
 import "./tasks/balance";
 import "./tasks/block-number";
@@ -18,7 +17,6 @@ import "./tasks/createIndex";
 
 import "hardhat-gas-reporter";
 import "hardhat-abi-exporter";
-
 
 import { HardhatUserConfig } from "hardhat/types";
 import { chainIdToAddresses } from "./scripts/networkVariables";
@@ -51,7 +49,7 @@ const chainIds = {
 
 const config: HardhatUserConfig = {
   gasReporter: {
-    enabled: true,
+    enabled: false,
     currency: "ETH",
     showTimeSpent: true,
   },
@@ -63,11 +61,9 @@ const config: HardhatUserConfig = {
       forking: {
         // eslint-disable-next-line
         enabled: true,
-        url: process.env.BSC_RPC
-          ? process.env.BSC_RPC
-          : "https://bsc-dataseed.binance.org/",
+        url: process.env.BSC_RPC ? process.env.BSC_RPC : "https://bsc-dataseed.binance.org/",
       },
-      // chainId: chainIds.hardhat,
+      chainId: 56,
       // allowUnlimitedContractSize: true
     },
     ganache: {
@@ -121,10 +117,7 @@ const config: HardhatUserConfig = {
       // chainId: chainIds["MaticTestnet"],
       chainId: 80001,
       allowUnlimitedContractSize: true,
-      url:
-        "https://speedy-nodes-nyc.moralis.io/" +
-        infuraApiKey +
-        "/polygon/mumbai",
+      url: "https://speedy-nodes-nyc.moralis.io/" + infuraApiKey + "/polygon/mumbai",
     },
     MaticMainnet: {
       accounts: {
@@ -170,10 +163,10 @@ const config: HardhatUserConfig = {
       "OffChainRebalance",
       "Rebalancing",
       "AssetManagerConfig",
-      "TokenRegistry"
+      "TokenRegistry",
     ],
     spacing: 2,
-  }
+  },
 };
 
 module.exports = config;

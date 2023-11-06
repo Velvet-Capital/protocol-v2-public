@@ -1,12 +1,7 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.16;
 
-import {SafeMathUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/utils/math/SafeMathUpgradeable.sol";
-import {ErrorLibrary} from "../library/ErrorLibrary.sol";
-
 library FeeLibrary {
-  using SafeMathUpgradeable for uint256;
-
   // Represents 100%
   uint256 public constant TOTAL_WEIGHT = 10_000;
 
@@ -21,14 +16,13 @@ library FeeLibrary {
     uint256 _fee
   ) public view returns (uint256 tokensToMint) {
     if (_lastCharged >= block.timestamp) {
-      revert ErrorLibrary.NoTimePassedSinceLastCharge();
+      return tokensToMint;
     }
+    uint256 feeForIntervall = (_vaultBalance * (_fee) * (block.timestamp - _lastCharged)) / (365 days) / (TOTAL_WEIGHT);
 
-    uint256 feeForIntervall = _vaultBalance.mul(_fee).mul(block.timestamp.sub(_lastCharged)).div(365 days).div(
-      TOTAL_WEIGHT
-    );
+    tokensToMint = (feeForIntervall * _totalSupply) / (_vaultBalance - feeForIntervall);
 
-    tokensToMint = feeForIntervall.mul(_totalSupply).div(_vaultBalance.sub(feeForIntervall));
+    return tokensToMint;
   }
 
   /**
@@ -44,16 +38,37 @@ library FeeLibrary {
     uint256 _highWaterMark,
     uint256 _fee
   ) public pure returns (uint256 tokensToMint, uint256 currentPrice) {
-    currentPrice = _vaultBalance.mul(10 ** 18).div(_totalSupply);
-
+    currentPrice = (_vaultBalance * (10 ** 18)) / (_totalSupply);
     uint256 feeForIntervall;
 
     if (currentPrice > _highWaterMark) {
-      feeForIntervall = (currentPrice.sub(_highWaterMark)).mul(_totalSupply).mul(_fee).div(TOTAL_WEIGHT).div(10 ** 18);
+      feeForIntervall = ((currentPrice - _highWaterMark) * (_totalSupply) * (_fee) ) / (TOTAL_WEIGHT) /(10 ** 18);
     } else {
       return (0, currentPrice);
     }
 
-    tokensToMint = feeForIntervall.mul(_totalSupply).div(_vaultBalance.sub(feeForIntervall));
+    tokensToMint = (feeForIntervall * _totalSupply) / (_vaultBalance - feeForIntervall);
+  }
+
+  /**
+   * @notice This function calculates entry and exit fee based on the investment/withdrawal amount
+   */
+  function calculateEntryAndExitFee(uint256 _fee, uint256 _tokenAmount) public pure returns (uint256) {
+    return (_tokenAmount * _fee) / TOTAL_WEIGHT;
+  }
+
+  /**
+   * @notice This function calculates a cut of management fees that's going to our protocol, e.g. we're taking a 25% cut of the management fees as protocol fees
+   */
+  function feeSplitter(
+    uint256 _fee,
+    uint256 _protocolFee
+  ) public pure returns (uint256 protocolFee, uint256 assetManagerFee) {
+    if (_fee == 0) {
+      return (0, 0);
+    }
+    // we take a percentage as protocol fee, e.g. 25%
+    protocolFee = (_fee * _protocolFee) / 10_000;
+    assetManagerFee = _fee - protocolFee;
   }
 }

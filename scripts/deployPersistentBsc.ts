@@ -24,9 +24,7 @@ async function deployPersistentBsc() {
   const accounts = await ethers.getSigners();
   const [owner] = accounts;
 
-  console.log(
-    "------------------------------ Initial Setup Ended ------------------------------"
-  );
+  console.log("------------------------------ Initial Setup Ended ------------------------------");
 
   console.log("--------------- Contract Deployment Started ---------------");
 
@@ -45,16 +43,11 @@ async function deployPersistentBsc() {
   const indexSwapLibrary = await IndexSwapLibrary.deploy(
     priceOracle.address,
     addresses.WETH_Address,
-    tokenMetadata.address
+    tokenMetadata.address,
   );
-  console.log(
-    "Contract indexSwapLibrary deployed to: ",
-    indexSwapLibrary.address
-  );
+  console.log("Contract indexSwapLibrary deployed to: ", indexSwapLibrary.address);
 
-  console.log(
-    "------------------------------ Contract Deployment Ended ------------------------------"
-  );
+  console.log("------------------------------ Contract Deployment Ended ------------------------------");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

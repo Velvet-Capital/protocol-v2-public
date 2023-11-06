@@ -6,7 +6,7 @@
 import { run, ethers, upgrades } from "hardhat";
 import { TokenMetadata } from "../typechain";
 import { chainIdToAddresses } from "./networkVariables";
-// let fs = require("fs");                      
+// let fs = require("fs");
 const ETHERSCAN_TX_URL = "https://testnet.bscscan.io/tx/";
 
 async function main() {
@@ -16,8 +16,7 @@ async function main() {
   // If this script is run directly using `node` you may want to call compile
   // manually to make sure everything is compiled
   await run("compile");
-  const delay = (ms: number | undefined) =>
-    new Promise((res) => setTimeout(res, ms));
+  const delay = (ms: number | undefined) => new Promise((res) => setTimeout(res, ms));
 
   // get current chainId
   const { chainId } = await ethers.provider.getNetwork();
@@ -28,9 +27,7 @@ async function main() {
 
   //console.log("accounts",accounts);
 
-  console.log(
-    "------------------------------ Initial Setup Ended ------------------------------"
-  );
+  console.log("------------------------------ Initial Setup Ended ------------------------------");
 
   /*console.log("--------------- Contract Deployment Started ---------------");
   const PriceOracle = await ethers.getContractFactory("PriceOracle");
@@ -39,9 +36,7 @@ async function main() {
 
   console.log("--------------- Contract Deployment Started ---------------");
   const PriceOracle = await ethers.getContractFactory("PriceOracle");
-  const priceOracle = await PriceOracle.attach(
-    "0xA812C7aCB1e6f41e7B4dE2d7CaF9F2fc176c6Bc7"
-  );
+  const priceOracle = await PriceOracle.attach("0xA812C7aCB1e6f41e7B4dE2d7CaF9F2fc176c6Bc7");
 
   await delay(15000);
   console.log("Waited 5s");
@@ -64,11 +59,9 @@ async function main() {
   const indexSwapLibrary = await IndexSwapLibrary.deploy(
     priceOracle.address,
     addresses.WETH_Address,
-    tokenMetadata.address
+    tokenMetadata.address,
   );
-  console.log(
-    `Contract indexSwapLibrary deployed to: ${indexSwapLibrary.address}`
-  );
+  console.log(`Contract indexSwapLibrary deployed to: ${indexSwapLibrary.address}`);
 
   await delay(15000);
   console.log("Waited 5s");
@@ -89,9 +82,7 @@ async function main() {
   console.log("Waited 5s");*/
 
   const AccessController = await ethers.getContractFactory("AccessController");
-  const accessController = await AccessController.attach(
-    "0xfaFcD7c86855e93AF9f7Cf216a792De64c413526"
-  );
+  const accessController = await AccessController.attach("0xfaFcD7c86855e93AF9f7Cf216a792De64c413526");
 
   // Adapterd
   /*const Adapter = await ethers.getContractFactory("Adapter");
@@ -103,9 +94,7 @@ async function main() {
   console.log("Waited 5s");*/
 
   const Adapter = await ethers.getContractFactory("Adapter");
-  const adapter = await Adapter.attach(
-    "0x15cf19b4648e7a2c4f8B61Ef14286D2A8d0bdEe4"
-  );
+  const adapter = await Adapter.attach("0x15cf19b4648e7a2c4f8B61Ef14286D2A8d0bdEe4");
 
   const Rebalancing = await ethers.getContractFactory("Rebalancing");
   const rebalancing = await Rebalancing.deploy();
@@ -124,7 +113,7 @@ async function main() {
     indexSwapLibrary.address,
     tokenMetadata.address,
     adapter.address,
-    rebalancing.address
+    rebalancing.address,
   );
 
   await indexFactory.deployed();
@@ -143,9 +132,7 @@ async function main() {
 
   console.log("Contract indexFactory deployed to: ", indexFactory.address);
 
-  console.log(
-    "------------------------------ Contract Deployment Ended ------------------------------"
-  );
+  console.log("------------------------------ Contract Deployment Ended ------------------------------");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 /**
  * @title IndexSwap for the Index
@@ -11,7 +11,7 @@
 
 pragma solidity 0.8.16;
 
-import { FunctionParameters } from "../FunctionParameters.sol";
+import {FunctionParameters} from "../FunctionParameters.sol";
 
 interface IIndexSwap {
   function vault() external view returns (address);
@@ -131,9 +131,9 @@ interface IIndexSwap {
 
   /**
      * @notice The function swaps BNB into the portfolio tokens after a user makes an investment
-     * @dev The output of the swap is converted into BNB to get the actual amount after slippage to calculate 
+     * @dev The output of the swap is converted into USD to get the actual amount after slippage to calculate 
             the index token amount to mint
-     * @dev (tokenBalanceInBNB, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
+     * @dev (tokenBalance, vaultBalance) has to be calculated before swapping for the _mintShareAmount function 
             because during the swap the amount will change but the index token balance is still the same 
             (before minting)
      */
@@ -155,12 +155,35 @@ interface IIndexSwap {
   function setRedeemed(bool _state) external;
 
   /**
+    @notice The function will set lastRebalanced time called by the rebalancing contract.
+    @param _time The time is block.timestamp, the moment when rebalance is done
+  */
+  function setLastRebalance(uint256 _time) external;
+
+  /**
+    @notice The function returns lastRebalanced time
+  */
+  function getLastRebalance() external view returns (uint256);
+
+  /**
+    @notice The function returns lastPaused time
+  */
+  function getLastPaused() external view returns (uint256);
+
+  /**
    * @notice The function updates the record struct including the denorm information
    * @dev The token list is passed so the function can be called with current or updated token list
    * @param tokens The updated token list of the portfolio
    * @param denorms The new weights for for the portfolio
    */
   function updateRecords(address[] memory tokens, uint96[] memory denorms) external;
+
+  /**
+   * @notice This function update records with new tokenlist and weights
+   * @param tokens Array of the tokens to be updated
+   * @param _denorms Array of the updated denorm values
+   */
+  function updateTokenListAndRecords(address[] calldata tokens, uint96[] calldata _denorms) external;
 
   function getRedeemed() external view returns (bool);
 
@@ -176,7 +199,17 @@ interface IIndexSwap {
 
   function lastInvestmentTime(address owner) external view returns (uint256);
 
-  function setLastInvestmentPeriod(address _to) external;
+  function checkCoolDownPeriod(address _user) external view;
 
-  function checkCoolDownPeriod() external view;
+  function mintTokenAndSetCooldown(address _to, uint256 _mintAmount) external returns (uint256);
+
+  function burnWithdraw(address _to, uint256 _mintAmount) external returns (uint256 exitFee);
+
+  function setFlags(bool _pauseState, bool _redeemState) external;
+
+  function reentrancyGuardEntered() external returns (bool);
+
+  function nonReentrantBefore() external;
+
+  function nonReentrantAfter() external;
 }

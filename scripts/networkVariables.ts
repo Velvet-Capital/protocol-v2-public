@@ -15,8 +15,7 @@ export const ETHMainNet: ChainAddresses = {
   //ChainLink
   LINK_Address: "0x514910771af9ca656af840dff83e8264ecf986ca",
   VRFCoordinator: "0xf0d54349aDdcf704F77AE15b96510dEA15cb7952",
-  VRFKeyHash:
-    "0xAA77729D3466CA35AE8D28B3BBAC7CC36A5031EFDC430821C02BC31A238AF445",
+  VRFKeyHash: "0xAA77729D3466CA35AE8D28B3BBAC7CC36A5031EFDC430821C02BC31A238AF445",
   VRFFee: parseEther("2.0"), //2 LINK fee
 };
 
@@ -36,8 +35,7 @@ export const BSCTestNet: ChainAddresses = {
   //ChainLink
   LINK_Address: "0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06",
   VRFCoordinator: "0xa555fC018435bef5A13C6c6870a9d4C11DEC329C",
-  VRFKeyHash:
-    "0xc251acd21ec4fb7f31bb8868288bfdbaeb4fbfec2df3735ddbd4f7dc8d60103c",
+  VRFKeyHash: "0xc251acd21ec4fb7f31bb8868288bfdbaeb4fbfec2df3735ddbd4f7dc8d60103c",
   VRFFee: parseEther("0.1"), //0.1 LINK fee
 };
 
@@ -48,7 +46,7 @@ export const BSCMainNet: ChainAddresses = {
   PancakeSwapV2FactoryAddress: "0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
   IndexSwapLibrary: "0x0728cD14faE68eD3e48307b8FBd4B95BF5631d36",
   WETH_Address: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
-  BUSD: "0xe9e7cea3dedca5984780bafc599bd69add087d56",
+  BUSD: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
   USDT: "0x55d398326f99059fF775485246999027B3197955",
   ADA: "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
   BAND: "0xAD6cAEb32CD2c308980a548bD0Bc5AA4306c6c18",
@@ -62,6 +60,7 @@ export const BSCMainNet: ChainAddresses = {
   DOGE_Address: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43",
   LINK_Address: "0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD",
   CAKE_Address: "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
+  USDC_Address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
 
   MULTI_SEND_ADDRESS: "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
   SAFE_MASTER_COPY_ADDRESS: "0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552",
@@ -89,6 +88,9 @@ export const BSCMainNet: ChainAddresses = {
   ADA_WBNBLP_Address: "0x28415ff2C35b65B9E5c7de82126b4015ab9d031F",
   BAND_WBNBLP_Address: "0x168B273278F3A8d302De5E879aA30690B7E6c28f",
   DOT_WBNBLP_Address: "0xDd5bAd8f8b360d76d12FdA230F8BAF42fe0022CF",
+  DOGE_WBNBLP_Address: "0xac109C8025F272414fd9e2faA805a583708A017f",
+  BUSD_BTCLP_Address: "0xF45cd219aEF8618A92BAa7aD848364a158a24F33",
+  BTC_WBNBLP_Address: "0x61EB789d75A95CAa3fF50ed7E47b96c132fEc082",
 
   // BiswapLP Pool
   BSwap_WBNB_BUSDLP_Address: "0xaCAac9311b0096E04Dfe96b6D87dec867d3883Dc",
@@ -96,17 +98,16 @@ export const BSCMainNet: ChainAddresses = {
   BSwap_BUSDT_WBNBLP_Address: "0x8840C6252e2e86e545deFb6da98B2a0E26d8C1BA",
   BSwap_ETH_BTCLP_Address: "0x6216E04cd40DB2c6FBEd64f1B5830A98D3A91740",
   BSwap_BTC_WBNBLP_Address: "0xC7e9d76ba11099AF3F330ff829c5F442d571e057",
+  BSwap_DOGE_WBNBLPAddress: "0x1ef315fa08e0e1b116d97e3dfe0af292ed8b7f02",
+  BSwap_WBNB_XVSLP_Address: "0x753C734Dfe05aF28A732C033e26Ea6D369e07662",
+  BSwap_WBNB_LINKLP_Address: "0x16fe21c91c426e603977b1c6ecd59fc510a518c2",
 
   // ApeSwapLP Pool
   ApeSwap_WBNB_BUSD_Address: "0x51e6D27FA57373d8d4C256231241053a70Cb1d93",
   ApeSwap_ETH_BTCB_Address: "0xc6EA23E8aDAf03E700be3AA50bE30ECd39B7bF49",
   ApeSwap_ETH_WBNB_Address: "0xA0C3Ef24414ED9C9B456740128d8E63D016A9e11",
   ApeSwap_USDT_WBNB_Address: "0x83C5b5b309EE8E232Fe9dB217d394e262a71bCC0",
-
-  // Alpaca
-  ibBNB_Address: "0xd7d069493685a581d27824fc46eda46b7efc0063",
-  ibBUSD_Address: "0x7C9e73d4C71dae564d41F78d56439bB4ba87592f",
-  ibBTCB_Address: "0x08FC9Ba2cAc74742177e0afC3dC8Aed6961c24e7",
+  ApeSwap_DOGE_WBNB_Address: "0xfd1ef328a17a8e8eeaf7e4ea1ed8a108e1f2d096",
 
   // Wombat
   MAIN_LP_BUSD: "0xF319947eCe3823b790dd87b0A509396fE325745a",
@@ -125,6 +126,7 @@ export const BSCMainNet: ChainAddresses = {
   mooBTCBUSDLP: "0x40D21bCd71B0Be8864ff3Dd62373CFFA4E151d6F",
   mooBTCBNBLP: "0xB78b6A0137ad8745784D3B23c16abeA8F527ff54",
   mooBTCBETH: "0xEf43E54Bb4221106953951238FC301a1f8939490",
+  mooDOGEWBNB: "0x3b3bc8AE6dcAcCeaaC3C19E196ebD3341Cfe9c4e",
 
   // ApeSwap
   oBNB: "0x34878F6a484005AA90E7188a546Ea9E52b538F6f",
@@ -143,11 +145,17 @@ export const BSCMainNet: ChainAddresses = {
   biswap_RewardToken: "0x965F527D9159dCe6288a2219DB51fc6Eef120dD1",
 
   //GnosisContracts
-  gnosisSingleton : "0x3E5c63644E683549055b9Be8653de26E0B4CD36E",
-  gnosisFallbackLibrary : "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4",
-  gnosisMultisendLibrary : "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
-  gnosisSafeProxyFactory :"0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2",
-  moduleProxyFactory : "0x76E2cFc1F5Fa8F6a5b3fC4c8F4788F0116861F9B",
+  gnosisSingleton: "0x3E5c63644E683549055b9Be8653de26E0B4CD36E",
+  gnosisFallbackLibrary: "0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4",
+  gnosisMultisendLibrary: "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
+  gnosisSafeProxyFactory: "0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2",
+  moduleProxyFactory: "0x76E2cFc1F5Fa8F6a5b3fC4c8F4788F0116861F9B",
+
+  //External Swap URL
+  zeroExUrl: "https://bsc.api.0x.org/swap/v1/quote?",
+  oneInchUrl: "https://api-velvet.1inch.io/v5.0/56/swap?",
+  paraswapPricesUrl: "https://apiv5.paraswap.io/prices?",
+  paraswapTransactionUrl: "https://apiv5.paraswap.io/transactions/56?",
 };
 
 export const MaticMainNet: ChainAddresses = {

@@ -27,11 +27,9 @@ The contracts are divided into multiple sections:
 - Performance Fee: This fee is based upon the performance of a particular portfolio.
 
 **4. Handler** : This folder contains the handlers for various protocols that are supported in our v2 launch. They can be listed as follows:
-- [Alpaca](https://www.alpacafinance.org/): It is a lending protocol on the BNB chain and helps lenders earn safe and stable yields.
 - [ApeSwap](https://apeswap.finance/): It provides lending as well as (pair) Liquidity options where the users can invest and get interest bearing tokens in return.
 - [Beefy](https://beefy.com/): It provides lending as well as Liquidity options. After providing liquidity to a chosen protocol (e.g. PancakeSwap) the LP token can be deposited into Beefy and their protocol stakes the LP token which will in turn bring additional rewards (e.g. on PancakeSwap we get CAKE tokens).
 - [BiSwap](https://biswap.org/): It allows for Liquidity option where the user gets interest bearing LP token in return that brings additional rewards.
-- [Liqee](https://liqee.io/#/): It is a lending-based platform bringing better yields for the users.
 - [PancakeSwap](https://pancakeswap.finance/): It provides the liquidity option and also additional yield farming options for better returns.
 - [Venus](https://venus.io/): It is a lending-based platform bringing better yields for the users.
 - [Wombat](https://www.wombat.exchange/): It is a staking platform where after investing, the LP token gets staked in the protocol, thus bringing rewards for the investor.
@@ -91,9 +89,23 @@ To deploy the smart contracts we use the command:
 
 ```
 $ npm run deployBscNew
+
 ```
 
 To initialise the individual contracts we need to call different tasks:
 
 ```
 ```
+
+
+## Audit
+### V2
+- [peckshield](https://github.com/Velvet-Capital/audits/blob/main/PeckShield-Audit-Report-VelvetV2-v1.0-2.pdf)
+- [Shellboxes](https://github.com/Velvet-Capital/audits/blob/main/Velvet_Capital_V2_Security_Audit_Report.pdf)
+
+
+- Website: [velvet.capital](https://www.velvet.capital/)
+- Docs: [docs.velvet.capital](https://docs.velvet.capital/)
+- Twitter: [@velvet_capital](https://twitter.com/velvet_capital)
+- Email: [info@velvet.capital](mailto:info@velvet.capital)
+- Discord: [velvet](https://discord.com/invite/GkEwgezVMR)

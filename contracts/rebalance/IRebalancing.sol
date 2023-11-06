@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 /**
  * @title IRebalancing for a particular Index
@@ -14,21 +14,14 @@
 
 pragma solidity 0.8.16;
 
-import { IIndexSwap } from "../core/IIndexSwap.sol";
+import {IIndexSwap} from "../core/IIndexSwap.sol";
 
 interface IRebalancing {
   event FeeCharged(uint256 charged, address token, uint256 amount);
   event UpdatedWeights(uint256 updated, uint96[] newDenorms);
-  event UpdatedTokens(
-    uint256 updated,
-    address[] newTokens,
-    uint96[] newDenorms
-  );
+  event UpdatedTokens(uint256 updated, address[] newTokens, uint96[] newDenorms);
 
-  function init(
-    IIndexSwap _index,
-    address _accessController
-  ) external;
+  function init(IIndexSwap _index, address _accessController) external;
 
   /**
     @notice The function will pause the InvestInFund() and Withdrawal().
@@ -52,6 +45,15 @@ interface IRebalancing {
     uint96[] memory denorms,
     uint256[] calldata _slippageSell,
     uint256[] calldata _slippageBuy
+  ) external;
+
+  function swapRewardToken(
+    address rewardToken,
+    address swapHandler,
+    address buyToken,
+    uint256 amount,
+    uint256 slippage,
+    uint256 _lpSlippage
   ) external;
 
   function updateTreasury(address _newAddress) external;

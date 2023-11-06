@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 // ApeSwap Official Docs: https://apeswap.gitbook.io/apeswap-finance/welcome/master
 // ApeSwap GitHub: https://github.com/ApeSwapFinance/
@@ -29,18 +29,27 @@ import {IRainMaker} from "./interfaces/IRainMaker.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 
 import {Ownable} from "@openzeppelin/contracts-4.8.2/access/Ownable.sol";
-
+import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract ApeSwapLendingHandler is IHandler, Ownable {
-  address constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
-  address constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-  address public constant RAIN_MAKER = 0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa;
+  address internal constant oBNB = 0x34878F6a484005AA90E7188a546Ea9E52b538F6f;
+  address internal constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+  address internal constant RAIN_MAKER = 0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa;
+
+  IPriceOracle internal _oracle;
 
   event Velvet_ApeSwap_Mint(address _cAsset, uint256 _amount, address _to);
   event Velvet_ApeSwap_Redeem(address _cAsset, uint256 _amount, address _to, bool isWETH);
 
-  mapping(address => uint256) public pid;
+  mapping(address => uint256) internal pid;
+
+  constructor(address _priceOracle) {
+    if(_priceOracle == address(0)){
+      revert ErrorLibrary.InvalidAddress();
+    }
+    _oracle = IPriceOracle(_priceOracle);
+  }
 
   /**
    * @notice This function deposits assets to the ApeSwap protocol
@@ -53,14 +62,16 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     address _cAsset,
     uint256[] calldata _amount,
     uint256 _lpSlippage,
-    address _to
-  ) public payable override {
-    require(address(_cAsset) != address(0), "zero address passed");
-    require(address(_to) != address(0), "zero address passed");
+    address _to,
+    address user
+  ) public payable override returns (uint256 _mintedAmount) {
+    if ((address(_cAsset)) == address(0)) revert ErrorLibrary.InvalidAddress();
+    if ((address(_to)) == address(0)) revert ErrorLibrary.InvalidAddress();
 
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_cAsset)[0]);
     IcToken cToken = IcToken(_cAsset);
 
+    uint256 balanceBefore = cToken.balanceOf(address(this));
     if (msg.value == 0) {
       TransferHelper.safeApprove(address(underlyingToken), address(cToken), 0);
       TransferHelper.safeApprove(address(underlyingToken), address(cToken), _amount[0]);
@@ -68,26 +79,31 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
         revert ErrorLibrary.MintProcessFailed();
       }
     } else {
-      if (msg.value < _amount[0]) {
+      if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
+      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
       cToken.mint{value: _amount[0]}();
     }
-
+    uint256 balanceAfter = cToken.balanceOf(address(this));
+    if (balanceAfter - balanceBefore == 0) {
+      revert ErrorLibrary.ZeroBalanceAmount();
+    }
     if (_to != address(this)) {
-      uint256 cBalance = cToken.balanceOf(address(this));
-      TransferHelper.safeTransfer(_cAsset, _to, cBalance);
+      TransferHelper.safeTransfer(_cAsset, _to, balanceAfter - balanceBefore);
     }
 
     emit Velvet_ApeSwap_Mint(_cAsset, _amount[0], _to);
+    _mintedAmount = _oracle.getPriceTokenUSD18Decimals(address(underlyingToken), _amount[0]);
   }
 
   /**
    * @notice This function redeems assets from the ApeSwap protocol
    */
   function redeem(FunctionParameters.RedeemData calldata inputData) public override {
-    require(address(inputData._yieldAsset) != address(0), "zero address passed");
-    require(address(inputData._to) != address(0), "zero address passed");
+    if (address(inputData._yieldAsset) == address(0)) revert ErrorLibrary.InvalidAddress();
+
+    if (address(inputData._to) == address(0)) revert ErrorLibrary.InvalidAddress();
 
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
     IcToken cToken = IcToken(inputData._yieldAsset);
@@ -102,7 +118,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     if (inputData._to != address(this)) {
       if (inputData.isWETH) {
         (bool success, ) = payable(inputData._to).call{value: address(this).balance}("");
-        require(success, "Transfer failed.");
+        if (!success) revert ErrorLibrary.TransferFailed();
       } else {
         IERC20Upgradeable token = IERC20Upgradeable(underlyingToken);
         uint256 tokenAmount = token.balanceOf(address(this));
@@ -119,7 +135,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
    * @return underlying Address of the underlying asset
    */
   function getUnderlying(address _apeToken) public view override returns (address[] memory) {
-    require(address(_apeToken) != address(0), "zero address passed");
+    if (address(_apeToken) == address(0)) revert ErrorLibrary.InvalidAddress();
     address[] memory underlying = new address[](1);
 
     if (_apeToken == oBNB) {
@@ -139,8 +155,8 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
    * @return tokenBalance t token balance of the holder
    */
   function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    require(address(_tokenHolder) != address(0), "zero address passed");
-    require(address(t) != address(0), "zero address passed");
+    if (address(_tokenHolder) == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (address(t) == address(0)) revert ErrorLibrary.InvalidAddress();
 
     IcToken token = IcToken(t);
     tokenBalance = token.balanceOf(_tokenHolder);
@@ -153,8 +169,8 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
    * @return tokenBalance t token's underlying asset balance of the holder
    */
   function getUnderlyingBalance(address _tokenHolder, address t) public override returns (uint256[] memory) {
-    require(address(_tokenHolder) != address(0), "zero address passed");
-    require(address(t) != address(0), "zero address passed");
+    if ((address(_tokenHolder)) == address(0)) revert ErrorLibrary.InvalidAddress();
+    if ((address(t)) == address(0)) revert ErrorLibrary.InvalidAddress();
     uint256[] memory tokenBalance = new uint256[](1);
 
     IcToken token = IcToken(t);
@@ -162,11 +178,27 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     return tokenBalance;
   }
 
+  /**
+   * @notice This function returns the USD value of the LP asset using Fair LP Price model
+   * @param _tokenHolder Address whose balance is to be retrieved
+   * @param t Address of the protocol token
+   */
+  function getTokenBalanceUSD(address _tokenHolder, address t) public override returns (uint256) {
+    if (t == address(0) || _tokenHolder == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
+    address[] memory underlyingToken = getUnderlying(t);
+
+    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
+    return balanceUSD;
+  }
+
   function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address _token, address _holder) public view returns (bytes memory, address) {
+  function getClaimTokenCalldata(address _token, address _holder) public pure returns (bytes memory, address) {
     return (abi.encodeWithSelector(IRainMaker.claimComp.selector, _holder), RAIN_MAKER);
   }
 

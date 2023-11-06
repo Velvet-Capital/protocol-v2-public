@@ -12,16 +12,11 @@ library StructLib {
 }
 
 interface IWombat {
-  function withdraw(uint256 _pid, uint256 _amount)
-    external
-    returns (uint256, uint256[] memory);
+  function withdraw(uint256 _pid, uint256 _amount) external returns (uint256, uint256[] memory);
 
   function getAssetPid(address asset) external view returns (uint256);
 
-  function userInfo(uint256 pid, address owner)
-    external
-    view
-    returns (StructLib.UserInfo memory);
+  function userInfo(uint256 pid, address owner) external view returns (StructLib.UserInfo memory);
 
   function deposit(uint256 _pid, uint256 _amount) external;
 
