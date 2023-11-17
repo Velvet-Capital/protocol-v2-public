@@ -741,6 +741,14 @@ describe.only("Tests for IndexFactory", () => {
           .withArgs("10000");
       });
 
+      it("initialize should revert for token duplicates", async () => {
+        const indexAddress = await indexFactory.getIndexList(0);
+        const index = indexSwap.attach(indexAddress);
+        await expect(
+          index.initToken([iaddress.btcAddress, iaddress.btcAddress], [5000, 5000]),
+        ).to.be.revertedWithCustomError(indexSwap, "TokenAlreadyExist");
+      });
+
       it("initialize should revert if tokens and denorms length is not equal", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
@@ -2797,18 +2805,20 @@ describe.only("Tests for IndexFactory", () => {
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
-        await expect(
-          assetManagerConfig.proposeNewEntryAndExitFee("20000", "200"),
-        ).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
+        await expect(assetManagerConfig.proposeNewEntryAndExitFee("20000", "200")).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "InvalidFee",
+        );
       });
 
       it("asset manager should not be able to propose wrong entry and exit fee(exit)", async () => {
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig = AssetManagerConfig.attach(config);
-        await expect(
-          assetManagerConfig.proposeNewEntryAndExitFee("200", "20000"),
-        ).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
+        await expect(assetManagerConfig.proposeNewEntryAndExitFee("200", "20000")).to.be.revertedWithCustomError(
+          assetManagerConfig,
+          "InvalidFee",
+        );
       });
 
       it("Asset manager should propose new entry and exit fee", async () => {
