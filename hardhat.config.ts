@@ -14,7 +14,6 @@ import "./tasks/block-number";
 import "./tasks/deployIndexSwap";
 import "./tasks/setTokenIndexSwap";
 import "./tasks/createIndex";
-import "./tasks/defenderAdd";
 import "hardhat-gas-reporter";
 import "hardhat-abi-exporter";
 
