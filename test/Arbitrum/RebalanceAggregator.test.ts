@@ -34,6 +34,7 @@ import {
   OneInchHandler,
   KyberSwapHandler,
   ParaswapHandler,
+  BebopHandler,
   OffChainRebalance__factory,
   RebalanceAggregator__factory,
   PriceOracle,
@@ -125,7 +126,7 @@ describe.only("Tests for MetaAggregator", () => {
   let whitelistManager: SignerWithAddress;
   let assetManagerTreasury: SignerWithAddress;
   let zeroExHandler: ZeroExHandler;
-  //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
+  let bebopHandler: BebopHandler;
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
   let velvetTreasuryBalance = 0;
@@ -152,6 +153,14 @@ describe.only("Tests for MetaAggregator", () => {
 
       zeroExHandler.init("0xdef1c0ded9bec7f1a1670819833240f027b25eff", priceOracle.address);
       await zeroExHandler.addOrUpdateProtocolSlippage("500");
+
+      const BebopHandler = await ethers.getContractFactory("BebopHandler");
+      bebopHandler = await BebopHandler.deploy();
+      await bebopHandler.deployed();
+
+      // bebopHandler = BebopHandler.attach("0x2069b31Cfd7145224Da7f6198C31d2a09e5Cba9b");
+      bebopHandler.init("0xBeB09000fa59627dc02Bb55448AC1893EAa501A5", priceOracle.address);
+      await bebopHandler.addOrUpdateProtocolSlippage("500");
 
       const latestBlock = await hre.ethers.provider.getBlock("latest");
       await tokenRegistry.initialize(
@@ -383,6 +392,7 @@ describe.only("Tests for MetaAggregator", () => {
       tokenRegistry.enableExternalSwapHandler(zeroExHandler.address);
       tokenRegistry.enableExternalSwapHandler(oneInchHandler.address);
       tokenRegistry.enableExternalSwapHandler(kyberswapHandler.address);
+      tokenRegistry.enableExternalSwapHandler(bebopHandler.address);
       tokenRegistry.enableSwapHandlers([swapHandler.address]);
 
       tokenRegistry.addNonDerivative(wombatHandler.address);
@@ -922,7 +932,7 @@ describe.only("Tests for MetaAggregator", () => {
         const vaultAddress = await indexSwap2.vault();
 
         const sAmount = await handler1.getTokenBalance(vaultAddress, sToken);
-
+        const balBefore = await ERC20.attach(bToken).balanceOf(vaultAddress);
         const tx = await metaAggregator2.redeem(sAmount, "200", sToken);
 
         const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
@@ -1105,8 +1115,6 @@ describe.only("Tests for MetaAggregator", () => {
           _lpSlippage: "200",
           callData: _callData,
         };
-
-        const balBefore = await ERC20.attach(bToken).balanceOf(vaultAddress);
 
         const tx2 = await metaAggregator2.metaAggregatorSwap(exchangeData);
 
@@ -2972,6 +2980,203 @@ describe.only("Tests for MetaAggregator", () => {
 
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
+
+      // it("swaps using bebop protocol", async () => {
+      //   const tokens = await indexSwap5.getTokens();
+      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+      //   const sToken = tokens[0];
+      //   const bToken = addresses.DAI;
+      //   console.log("sellToken",sToken);
+      //   const tokenInfo1: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(sToken);
+      //   const handlerAddress1 = tokenInfo1[2];
+      //   const handler1 = await ethers.getContractAt("IHandler", handlerAddress1);
+      //   const vaultAddress = await indexSwap5.vault();
+
+      //   const sAmount = await handler1.getTokenBalance(vaultAddress, sToken);
+      //   console.log("sAmount",sAmount);
+
+      //   const tx = await metaAggregator5.redeem(sAmount, "200", sToken);
+
+      //   const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
+      //   const handlerAddress0 = tokenInfo0[2];
+      //   const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
+      //   const getUnderlyingTokens1: string[] = await handler1.getUnderlying(sToken);
+      //   const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
+
+      //   var exchangeData = {};
+      //   var _sellTokenAddress = [];
+      //   var _buyTokenAddress = [];
+      //   var _sellAmount = [];
+      //   var _callData = [];
+      //   console.log("handler address",bebopHandler.address);
+
+      //   if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 1) {
+      //     const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator5.address);
+      //     if (getUnderlyingTokens0[0] == getUnderlyingTokens1[0]) {
+      //       _sellTokenAddress.push(getUnderlyingTokens1[0].toString());
+      //       _buyTokenAddress.push(getUnderlyingTokens0[0].toString());
+      //       _sellAmount.push(bal.toString());
+      //       _callData.push("0x");
+      //     } else {
+      //       const params = {
+      //         sell_tokens: getUnderlyingTokens1[0].toString(),
+      //         buy_tokens: getUnderlyingTokens0[0].toString(),
+      //         sell_amounts: bal.toString(),
+      //         taker_address : bebopHandler.address,
+      //         skip_validation : true,
+      //         gasless : false
+      //       };
+
+      //       const getResponse = await axios.get(addresses.bebopUrl + `${qs.stringify(params)}`, {
+      //         headers: {
+      //           "accept": "application/json",
+      //         },
+      //       });
+
+      //       console.log("urll",addresses.bebopUrl + `${qs.stringify(params)}`);
+
+      //       _sellTokenAddress.push(getUnderlyingTokens1[0]);
+      //       _buyTokenAddress.push(getUnderlyingTokens0[0]);
+      //       _sellAmount.push(bal.toString());
+      //       console.log("BEFORE DATA");
+      //       // console.log("DATA",getResponse);
+      //       _callData.push(getResponse.data.tx.data.toString());
+      //     }
+      //   } else if (getUnderlyingTokens1.length == 1 && getUnderlyingTokens0.length == 2) {
+      //     const bal = await ERC20.attach(getUnderlyingTokens1[0]).balanceOf(metaAggregator5.address);
+      //     var bal1 = bal.div(2);
+      //     var bal2 = bal.sub(bal1);
+      //     var balAmount = [bal1, bal2];
+
+      //     for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+      //       if (getUnderlyingTokens1[0] == getUnderlyingTokens0[i]) {
+      //         _sellTokenAddress.push(getUnderlyingTokens1[0]);
+      //         _buyTokenAddress.push(getUnderlyingTokens0[i]);
+      //         _sellAmount.push(balAmount[i].toString());
+      //         _callData.push("0x");
+      //       } else {
+      //         const params = {
+      //           sell_tokens: getUnderlyingTokens1[0].toString(),
+      //           buy_tokens: getUnderlyingTokens0[i].toString(),
+      //           sell_amounts: balAmount[i].toString(),
+      //           taker_address : owner.address,
+      //           skip_validation : true,
+      //           gasless : false
+      //         };
+
+      //         const getResponse = await axios.get(addresses.bebopUrl + `${qs.stringify(params)}`, {
+      //           headers: {
+      //             "accept": "application/json",
+      //           },
+      //         });
+
+      //         _sellTokenAddress.push(getUnderlyingTokens1[0]);
+      //         _buyTokenAddress.push(getUnderlyingTokens0[i]);
+      //         _sellAmount.push(balAmount[i].toString());
+      //         _callData.push(getResponse.tx.data.toString());
+      //       }
+      //     }
+      //   } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 1) {
+      //     for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+      //       const bal = await ERC20.attach(getUnderlyingTokens1[i]).balanceOf(metaAggregator5.address);
+      //       if (getUnderlyingTokens1[i] == getUnderlyingTokens0[0]) {
+      //         _sellTokenAddress.push(getUnderlyingTokens1[i]);
+      //         _buyTokenAddress.push(getUnderlyingTokens0[0]);
+      //         _sellAmount.push(bal.toString());
+      //         _callData.push("0x");
+      //       } else {
+      //         const params = {
+      //           sell_tokens: getUnderlyingTokens1[i].toString(),
+      //           buy_tokens: getUnderlyingTokens0[0].toString(),
+      //           sell_amounts: bal.toString(),
+      //           taker_address : owner.address,
+      //           skip_validation : true,
+      //           gasless : false
+      //         };
+
+      //         const getResponse = await axios.get(addresses.bebopUrl + `${qs.stringify(params)}`, {
+      //           headers: {
+      //             "accept": "application/json",
+      //           },
+      //         });
+
+      //         _sellTokenAddress.push(getUnderlyingTokens1[i]);
+      //         _buyTokenAddress.push(getUnderlyingTokens0[0]);
+      //         _sellAmount.push(bal.toString());
+      //         _callData.push(getResponse.tx.data.toString());
+      //       }
+      //     }
+      //   } else if (getUnderlyingTokens1.length == 2 && getUnderlyingTokens0.length == 2) {
+      //     var common = [];
+      //     var tempUnder0 = [];
+      //     var tempUnder1 = [];
+      //     for (let i = 0; i < getUnderlyingTokens1.length; i++) {
+      //       if (getUnderlyingTokens0.includes(getUnderlyingTokens1[i])) {
+      //         common.push(getUnderlyingTokens1[i]);
+      //       } else {
+      //         tempUnder1.push(getUnderlyingTokens1[i]);
+      //       }
+      //     }
+
+      //     for (let i = 0; i < getUnderlyingTokens0.length; i++) {
+      //       if (!common.includes(getUnderlyingTokens0[i])) {
+      //         tempUnder0.push(getUnderlyingTokens0[i]);
+      //       }
+      //     }
+
+      //     var newUnderlying0 = tempUnder0.concat(common);
+      //     var newUnderlying1 = tempUnder1.concat(common);
+
+      //     for (let i = 0; i < newUnderlying1.length; i++) {
+      //       const bal = await ERC20.attach(newUnderlying1[i]).balanceOf(metaAggregator5.address);
+      //       if (newUnderlying1[i] == newUnderlying0[i]) {
+      //         _sellTokenAddress.push(newUnderlying1[i]);
+      //         _buyTokenAddress.push(newUnderlying0[i]);
+      //         _sellAmount.push(bal.toString());
+      //         _callData.push("0x");
+      //       } else {
+      //         const params = {
+      //           sell_tokens: getUnderlyingTokens1[i].toString(),
+      //           buy_tokens: getUnderlyingTokens0[i].toString(),
+      //           sell_amounts: bal.toString(),
+      //           taker_address : owner.address,
+      //           skip_validation : true,
+      //           gasless : false
+      //         };
+
+      //         const getResponse = await axios.get(addresses.bebopUrl + `${qs.stringify(params)}`, {
+      //           headers: {
+      //             "accept": "application/json",
+      //           },
+      //         });
+
+      //         _sellTokenAddress.push(newUnderlying1[i]);
+      //         _buyTokenAddress.push(newUnderlying0[i]);
+      //         _sellAmount.push(bal.toString());
+      //         _callData.push(getResponse.tx.data.toString());
+      //       }
+      //     }
+      //   }
+      //   exchangeData = {
+      //     sellTokenAddress: _sellTokenAddress,
+      //     buyTokenAddress: _buyTokenAddress,
+      //     swapHandler: bebopHandler.address,
+      //     portfolioToken: bToken,
+      //     sellAmount: _sellAmount,
+      //     _lpSlippage: "200",
+      //     callData: _callData,
+      //   };
+
+      //   const balBefore = await ERC20.attach(bToken).balanceOf(vaultAddress);
+
+      //   const tx2 = await metaAggregator5.metaAggregatorSwap(exchangeData);
+
+      //   const balAfter = await ERC20.attach(bToken).balanceOf(vaultAddress);
+
+      //   const newTokenList = await indexSwap5.getTokens();
+      //   expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
+      //   expect(newTokenList.includes(bToken)).to.equal(true);
+      // })
 
       it("swaps into primary using ZeroEx Protocol from primary", async () => {
         var tokens = await indexSwap5.getTokens();

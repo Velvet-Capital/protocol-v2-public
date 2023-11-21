@@ -277,7 +277,9 @@ export const ArbitrumOne: ChainAddresses = {
   paraswapPricesUrl: "https://apiv5.paraswap.io/transactions/42161?",
   paraswapTransactionUrl: "https://apiv5.paraswap.io/transactions/42161?",
   kyberSwapUrl : "https://aggregator-api.kyberswap.com/arbitrum/api/v1/routes?",
-  kyberSwapPostUrl : "https://aggregator-api.kyberswap.com/arbitrum/api/v1/route/build"
+  kyberSwapPostUrl : "https://aggregator-api.kyberswap.com/arbitrum/api/v1/route/build",
+  bebopUrl : "https://api.bebop.xyz/arbitrum/v2/quote?"
+  
 };
 
 export const chainIdToAddresses: {
