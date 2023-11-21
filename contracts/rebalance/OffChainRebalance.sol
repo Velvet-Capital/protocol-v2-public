@@ -45,7 +45,6 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
   struct RebalanceData {
     uint96[] oldWeight;
     address[] oldTokens;
-    address[] sellTokens;
   }
 
   RebalanceData internal rebalanceData;

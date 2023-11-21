@@ -4,9 +4,9 @@ import "@nomicfoundation/hardhat-chai-matchers";
 import { ethers, upgrades } from "hardhat";
 import { BigNumber } from "ethers";
 
-import { Exchange, PancakeSwapHandler, PriceOracle, TokenRegistry, VelvetSafeModule } from "../typechain";
+import { Exchange, UniswapV2Handler, PriceOracle, TokenRegistry, VelvetSafeModule } from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 import { indexSwapLibrary, tokenAddresses, IAddresses, priceOracle } from "./Deployments.test";
 
 var chai = require("chai");
@@ -19,7 +19,7 @@ describe.only("Tests for priceOracle", () => {
   let vaultAddress: string;
   let velvetSafeModule: VelvetSafeModule;
   let tokenRegistry: TokenRegistry;
-  let swapHandler: PancakeSwapHandler;
+  let swapHandler: UniswapV2Handler;
   let exchange: Exchange;
   // let priceOracle: PriceOracle;
   //let tokenMetadata: TokenMetadata;
@@ -87,8 +87,8 @@ describe.only("Tests for priceOracle", () => {
         addresses.WETH_Address
       );
 
-      const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
-      swapHandler = await PancakeSwapHandler.deploy();
+      const UniswapV2Handler = await ethers.getContractFactory("UniswapV2Handler");
+      swapHandler = await UniswapV2Handler.deploy();
       await swapHandler.deployed();
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);

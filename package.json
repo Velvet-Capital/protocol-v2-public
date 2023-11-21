@@ -18,6 +18,7 @@
     "deployBsc": "npx hardhat run scripts/deployBsc.ts --network bscMainnet",
     "deployBsc:safe": "npx hardhat run scripts/deploySafeBsc.ts --network bscMainnet",
     "deployBsc:common": "npx hardhat run scripts/deployPersistentBsc.ts --network bscMainnet",
+    "deployArbitrum": "npx hardhat run scripts/deployArbitrum.ts --network TenderlyArbitrum",
     "verify:network": "hardhat verify --network",
     "test": "npx hardhat test",
     "testAll": "npx hardhat test test/AllGenericHandlers.test.ts && npx hardhat test test/FeeWithMockOracle.test.ts && npx hardhat test test/IndexFactory.test.ts && npx hardhat test test/IndexSwap_1.test.ts && npx hardhat test test/IndexSwap_2.test.ts && npx hardhat test test/OffChainIndexSwap.test.ts && npx hardhat test test/PriceOracle.test.ts && npx hardhat test test/RebalanceAggregator.test.ts && npx hardhat test test/ZeroExSwap.test.ts && npx hardhat test test/TimeDependentTest.test.ts",
@@ -29,7 +30,9 @@
     "lint:sol": "solhint \"contracts/**/*.sol\"",
     "lint:fix": "solhint \"contracts/**/*.sol\" && eslint . --fix",
     "prettier": "prettier -l --write . '**/*.{js,ts,json}'",
-    "compile-types": "npx hardhat typechain && npx hardhat export-abi"
+    "compile-types": "npx hardhat typechain && npx hardhat export-abi",
+    "test:arb": "CHAIN_ID=42161 hardhat test test/Arbitrum",
+    "test:bsc": "CHAIN_ID=56 hardhat test test/Bsc"
   },
   "private": true,
   "devDependencies": {
@@ -79,10 +82,12 @@
     "@gnosis.pm/zodiac": "^1.0.11",
     "@openzeppelin/contracts-4.8.2": "npm:@openzeppelin/contracts@^4.8.2",
     "@openzeppelin/contracts-upgradeable-4.3.2": "npm:@openzeppelin/contracts-upgradeable@^4.3.2",
+    "@openzeppelin/defender-admin-client": "^1.49.0",
     "@safe-global/api-kit": "^1.1.0",
     "@safe-global/protocol-kit": "^1.0.1",
     "@safe-global/safe-core-sdk-types": "^2.0.0",
     "@safe-global/safe-ethers-adapters": "^0.2.0-alpha.0",
+    "@tenderly/hardhat-tenderly": "^1.7.7",
     "@typescript-eslint/eslint-plugin": "^5.14.0",
     "@typescript-eslint/parser": "5.14.0",
     "@uniswap/lib": "^4.0.1-alpha",

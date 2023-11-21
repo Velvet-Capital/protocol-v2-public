@@ -19,7 +19,7 @@ import {
   Rebalancing__factory,
   AccessController,
   IndexFactory,
-  PancakeSwapHandler,
+  UniswapV2Handler,
   VelvetSafeModule,
   PriceOracle,
   AssetManagerConfig,
@@ -30,9 +30,9 @@ import {
   VelvetSafeModule__factory,
   MockPriceOracle,
   IERC20Upgradeable__factory,
-} from "../typechain";
+} from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";;
 import { MerkleTree } from "merkletreejs";
 import { BigNumber } from "ethers";
 
@@ -47,8 +47,8 @@ describe.only("Tests for Mock Fee", () => {
   let indexSwap: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
-  let swapHandler1: PancakeSwapHandler;
-  let swapHandler: PancakeSwapHandler;
+  let swapHandler1: UniswapV2Handler;
+  let swapHandler: UniswapV2Handler;
   let tokenRegistry: TokenRegistry;
   let assetManagerConfig: AssetManagerConfig;
   let exchange: Exchange;
@@ -212,7 +212,7 @@ describe.only("Tests for Mock Fee", () => {
 
       await tokenRegistry.setCoolDownPeriod("1");
 
-      const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
+      const PancakeSwapHandler = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler = await PancakeSwapHandler.deploy();
       await swapHandler.deployed();
 
@@ -271,7 +271,7 @@ describe.only("Tests for Mock Fee", () => {
       offChainIndexSwap = await offChainIndex.deploy();
       await offChainIndexSwap.deployed();
 
-      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      const PancakeSwapHandler1 = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler1 = await PancakeSwapHandler1.deploy();
       await swapHandler1.deployed();
 

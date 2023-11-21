@@ -20,6 +20,8 @@ pragma solidity 0.8.16;
 
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/IERC20Upgradeable.sol";
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+
 
 import {IHandler} from "../IHandler.sol";
 import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
@@ -27,20 +29,29 @@ import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
-contract BeefyHandler is IHandler {
+import {IProtocolMetadata} from "./interfaces/IProtocolMetadata.sol";
+
+contract BeefyBridgeHandler is IHandler {
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   IPriceOracle internal _oracle;
-  address internal immutable WETH;
-  address internal constant MOO_VENUS_BNB = address(0x6BE4741AB0aD233e4315a10bc783a7B923386b71);
+  address internal MOO_ETH;
+  address internal WETH;
+  address internal Protocol_Handler;
 
-  constructor(address _priceOracle) {
-    if(_priceOracle == address(0)){
-      revert ErrorLibrary.InvalidAddress();
-    }
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _moo_eth address of moo_eth token
+   * @param _protocol_Handler address of beefy contract used for deposit and withdraw
+   */
+
+  constructor(address _priceOracle,address _moo_eth,address _protocol_Handler) {
+    if (_priceOracle == address(0) || _moo_eth == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
+    MOO_ETH = _moo_eth;
     WETH = _oracle.WETH();
+    Protocol_Handler = _protocol_Handler;
   }
 
   /**
@@ -62,20 +73,24 @@ contract BeefyHandler is IHandler {
     }
     IVaultBeefy asset = IVaultBeefy(_mooAsset);
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_mooAsset)[0]);
+    address underlyingLPToken = address(asset.want());
     uint256 balanceBefore = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
-    if (msg.value == 0) {
-      TransferHelper.safeApprove(address(underlyingToken), address(_mooAsset), 0);
-      TransferHelper.safeApprove(address(underlyingToken), address(_mooAsset), _amount[0]);
-      asset.deposit(_amount[0]);
-    } else {
-      if (_mooAsset != MOO_VENUS_BNB) {
+    if (msg.value > 0) {
+      if (_mooAsset != MOO_ETH) {
         revert ErrorLibrary.PleaseDepositUnderlyingToken();
       }
       if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
-      asset.depositBNB{value: msg.value}();
+    }else{
+      TransferHelper.safeTransfer(address(underlyingToken), Protocol_Handler, _amount[0]);
     }
+
+    IHandler(Protocol_Handler).deposit{value : msg.value}(underlyingLPToken,_amount,_lpSlippage,address(this),user);
+    uint256 tokBal = IERC20Upgradeable(underlyingLPToken).balanceOf(address(this));
+    TransferHelper.safeApprove(underlyingLPToken, _mooAsset, tokBal);
+    asset.deposit(tokBal);
+
     uint256 balanceAfter = IERC20Upgradeable(_mooAsset).balanceOf(address(this));
     if (balanceAfter - balanceBefore == 0) {
       revert ErrorLibrary.ZeroBalanceAmount();
@@ -95,24 +110,23 @@ contract BeefyHandler is IHandler {
       revert ErrorLibrary.InvalidAddress();
     }
     IVaultBeefy asset = IVaultBeefy(inputData._yieldAsset);
-    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
+    address underlyingLPToken = address(asset.want());
     if (inputData._amount > asset.balanceOf(address(this))) {
       revert ErrorLibrary.NotEnoughBalanceInBeefyProtocol();
     }
-    if (inputData.isWETH) {
-      asset.withdrawBNB(inputData._amount);
-    } else {
-      asset.withdraw(inputData._amount);
-    }
-    if (inputData._to != address(this)) {
-      if (inputData.isWETH) {
-        (bool success, ) = payable(inputData._to).call{value: address(this).balance}("");
-        if (!success) revert ErrorLibrary.TransferFailed();
-      } else {
-        uint256 tokenAmount = underlyingToken.balanceOf(address(this));
-        TransferHelper.safeTransfer(address(underlyingToken), inputData._to, tokenAmount);
-      }
-    }
+    asset.withdraw(inputData._amount);
+    uint256 LPTokens = IERC20Upgradeable(underlyingLPToken).balanceOf(address(this));
+    TransferHelper.safeTransfer(underlyingLPToken, Protocol_Handler, LPTokens);
+
+    IHandler(Protocol_Handler).redeem(
+      FunctionParameters.RedeemData(
+        inputData._amount,
+        inputData._lpSlippage,
+        inputData._to,
+        underlyingLPToken,
+        inputData.isWETH
+      )
+    );
     emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 
@@ -128,10 +142,10 @@ contract BeefyHandler is IHandler {
     }
     address[] memory underlying = new address[](1);
     IVaultBeefy token = IVaultBeefy(_mooAsset);
-    if (_mooAsset == MOO_VENUS_BNB) {
+    if (_mooAsset == MOO_ETH) {
       underlying[0] = WETH;
     } else {
-      underlying[0] = address(token.want());
+      underlying[0] = address(IHandler(Protocol_Handler).getUnderlying(address(token.want()))[0]);
     }
     return underlying;
   }
@@ -160,10 +174,12 @@ contract BeefyHandler is IHandler {
     if (_t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint256[] memory tokenBalance = new uint256[](1);
-    uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, _t);
-    tokenBalance[0] = (yieldTokenBalance * IVaultBeefy(_t).balance()) / IVaultBeefy(_t).totalSupply();
-    return tokenBalance;
+
+    IVaultBeefy asset = IVaultBeefy(_t);
+
+    uint256[] memory underlyingBalance = new uint256[](1);
+    underlyingBalance[0] = (getTokenBalance(_tokenHolder, _t) * (asset.getPricePerFullShare()))/10 ** IERC20MetadataUpgradeable(_t).decimals();
+    return underlyingBalance;
   }
 
   /**
@@ -175,10 +191,14 @@ contract BeefyHandler is IHandler {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
     address[] memory underlyingToken = getUnderlying(t);
+    uint256[] memory lpBalance = getUnderlyingBalance(_tokenHolder,t);
 
-    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
+    IVaultBeefy token = IVaultBeefy(t);
+    address underlyingLPToken = address(token.want());
+    uint underlyingBalance = IProtocolMetadata(Protocol_Handler).getUnderlyingAmount(_tokenHolder,lpBalance[0],underlyingLPToken);
+
+    uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance);
     return balanceUSD;
   }
 

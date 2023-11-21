@@ -31,18 +31,24 @@ import {FunctionParameters} from "contracts/FunctionParameters.sol";
 import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
 contract VenusHandler is IHandler {
-  address internal constant COMPTROLLER = 0xfD36E2c2a6789Db23113685031d7F16329158384;
+  address internal COMPTROLLER;
 
   IPriceOracle internal _oracle;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
-  constructor(address _priceOracle) {
+
+  /**
+   * @param _priceOracle address of price oracle
+   * @param comptroller address of venus protocol router used for deposit and withdraw
+   */
+  constructor(address _priceOracle, address comptroller) {
     if(_priceOracle == address(0)){
       revert ErrorLibrary.InvalidAddress();
     }
     _oracle = IPriceOracle(_priceOracle);
+    COMPTROLLER = comptroller;
   }
 
   /**
@@ -194,7 +200,13 @@ contract VenusHandler is IHandler {
 
   function getRouterAddress() public view returns (address) {}
 
-  function getClaimTokenCalldata(address _venusToken, address _holder) public pure returns (bytes memory, address) {
+  /**
+   * @notice This function returns encoded data, for withdrawal
+   * @param _venusToken address of token
+   * @param _holder address of holder
+   * @return bytes endoded data for claim
+   */
+  function getClaimTokenCalldata(address _venusToken, address _holder) public view returns (bytes memory, address) {
     return (abi.encodeWithSelector(ComptrollerInterface.claimVenus.selector, _holder), COMPTROLLER);
   }
 

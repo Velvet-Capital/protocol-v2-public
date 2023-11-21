@@ -29,7 +29,7 @@ import {
   Rebalancing__factory,
   AccessController,
   IndexFactory,
-  PancakeSwapHandler,
+  UniswapV2Handler,
   VelvetSafeModule,
   PriceOracle,
   AssetManagerConfig,
@@ -40,9 +40,9 @@ import {
   VelvetSafeModule__factory,
   RebalanceAggregator__factory,
   ZeroExHandler
-} from "../typechain";
+} from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 import { copyFileSync, link } from "fs";
 import { MerkleTree } from "merkletreejs";
 import { equal } from "assert";
@@ -66,8 +66,8 @@ describe.only("Tests for TimeDependent", () => {
   let indexSwap4: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
-  let swapHandler1: PancakeSwapHandler;
-  let swapHandler: PancakeSwapHandler;
+  let swapHandler1: UniswapV2Handler;
+  let swapHandler: UniswapV2Handler;
   let tokenRegistry: TokenRegistry;
   let assetManagerConfig: AssetManagerConfig;
   let exchange: Exchange;
@@ -165,8 +165,8 @@ describe.only("Tests for TimeDependent", () => {
       tokenRegistry = TokenRegistry.attach(registry.address);
       await tokenRegistry.setCoolDownPeriod("1");
 
-      const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
-      swapHandler = await PancakeSwapHandler.deploy();
+      const UniswapV2Handler = await ethers.getContractFactory("UniswapV2Handler");
+      swapHandler = await UniswapV2Handler.deploy();
       await swapHandler.deployed();
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
@@ -224,7 +224,7 @@ describe.only("Tests for TimeDependent", () => {
       offChainIndexSwap = await offChainIndex.deploy();
       await offChainIndexSwap.deployed();
 
-      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      const PancakeSwapHandler1 = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler1 = await PancakeSwapHandler1.deploy();
       await swapHandler1.deployed();
 

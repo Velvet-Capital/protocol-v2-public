@@ -4,23 +4,10 @@ import "@nomicfoundation/hardhat-chai-matchers";
 import { ethers, upgrades } from "hardhat";
 
 import {
-  tokenAddresses,
-  IAddresses,
-  indexSwapLibrary,
-  baseHandler,
-  venusHandler,
-  wombatHandler,
-  apeSwapLPHandler,
-  biSwapLPHandler,
-  pancakeLpHandler,
-  priceOracle
-} from "./Deployments.test";
-
-import {
   MockSlippageControl,
-} from "../typechain";
+} from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 import { BigNumber } from "ethers";
 
 var chai = require("chai");

@@ -1,7 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 import console from "console";
 
 import { tokenAddresses, priceOracle } from "./Deployments.test";
@@ -13,8 +13,8 @@ chai.use(require("chai-bignumber")());
 const ps = require("prompt-sync");
 const userInput = ps();
 
-let handlerJSON = require("../config/HandlerTestingData.json");
-let underlyingjson = require("../config/underlying.json");
+let handlerJSON = require("../../config/HandlerTestingData.json");
+let underlyingjson = require("../../config/underlying.json");
 
 var startLoopValue = 0;
 var endLoopValue = 0;
@@ -44,7 +44,7 @@ async function deployPriceOracle() {
 
   await tokenAddresses();
 }
-
+console.log("AFTER DEPLOYORACLE");
 if (wishInput == 0) {
   startLoopValue = 1;
   endLoopValue = handlerJSON.length - 1;
@@ -70,11 +70,12 @@ if (wishInput == 0) {
 } else {
   throw new Error("Wrong input provided!");
 }
+console.log("AFTER INPUTSs");
 
 for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; protocolVariable++) {
   if (startTokenValue != endTokenValue) {
     let temp = Object.keys(handlerJSON[protocolVariable - 1]).length;
-    endTokenValue = temp - 3;
+    endTokenValue = temp - 5;
   }
   if (protocolVariable == startLoopValue) {
     deployPriceOracle();
@@ -103,24 +104,33 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
           accounts = await ethers.getSigners();
           [owner] = accounts;
 
-          const isLP = handlerJSON[protocolVariable - 1].isLPHAndler;
+          const no_of_inits = handlerJSON[protocolVariable - 1].no_of_inits;
           const HandlerName = handlerJSON[protocolVariable - 1].handlerName;
           const deployHandler = await ethers.getContractFactory(HandlerName);
 
-          if (isLP == "true") {
-            if (HandlerName == "BeefyLPHandler") {
-              const pancakeSwapLP = await ethers.getContractFactory("PancakeSwapLPHandler");
-              pancakeswaplp = await pancakeSwapLP.deploy(priceOracle.address);
-              await pancakeswaplp.deployed();
-              await pancakeswaplp.addOrUpdateProtocolSlippage("700");
-
-              // if (tokenVariable == 3 || tokenVariable == 4) {
-              handlerVariable = await deployHandler.deploy(pancakeswaplp.address, priceOracle.address);
-              await handlerVariable.deployed();
-            } else {
-              handlerVariable = await deployHandler.deploy(priceOracle.address);
-            }
-          } else {
+          if (no_of_inits == "1") {
+            handlerVariable = await deployHandler.deploy(
+              priceOracle.address,
+              handlerJSON[protocolVariable - 1].init_Array[0],
+            );
+            await handlerVariable.deployed();
+          } else if (no_of_inits == "2") {
+            handlerVariable = await deployHandler.deploy(
+              priceOracle.address,
+              handlerJSON[protocolVariable - 1].init_Array[0],
+              handlerJSON[protocolVariable - 1].init_Array[1],
+            );
+            await handlerVariable.deployed();
+          } else if(no_of_inits == "3"){
+            handlerVariable = await deployHandler.deploy(
+              priceOracle.address,
+              handlerJSON[protocolVariable - 1].init_Array[0],
+              handlerJSON[protocolVariable - 1].init_Array[1],
+              handlerJSON[protocolVariable - 1].init_Array[2],
+            );
+            await handlerVariable.deployed();
+          }
+           else {
             handlerVariable = await deployHandler.deploy(priceOracle.address);
             await handlerVariable.deployed();
           }
