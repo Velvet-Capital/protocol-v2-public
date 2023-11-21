@@ -777,6 +777,14 @@ describe.only("Tests for IndexFactory", () => {
           .withArgs("10000");
       });
 
+      it("initialize should revert for token duplicates", async () => {
+        const indexAddress = await indexFactory.getIndexList(0);
+        const index = indexSwap.attach(indexAddress);
+        await expect(
+          index.initToken([addresses.WBTC, addresses.WBTC], [5000, 5000]),
+        ).to.be.revertedWithCustomError(indexSwap, "TokenAlreadyExist");
+      });
+
       it("initialize should revert if tokens and denorms length is not equal", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
