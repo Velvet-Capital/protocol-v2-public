@@ -1,6 +1,6 @@
 import { ethers, upgrades } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 import {
   IERC20Upgradeable,
   IndexSwap,
@@ -25,10 +25,10 @@ import {
   ApeSwapLPHandler,
   BiSwapLPHandler,
   ApeSwapLendingHandler,
-  BeefyHandler,
+  BeefyYieldHandler,
   SlippageControl,
   RebalanceLibrary,
-} from "../typechain";
+} from "../../typechain";
 
 let tokenRegistry: TokenRegistry;
 let indexSwapLibrary: IndexSwapLibrary;
@@ -40,7 +40,7 @@ let apeSwapLPHandler: ApeSwapLPHandler;
 let apeSwapLendingHandler: ApeSwapLendingHandler;
 let wombatHandler: WombatHandler;
 let beefyLPHandler: BeefyLPHandler;
-let beefyHandler: BeefyHandler;
+let beefyHandler: BeefyYieldHandler;
 let accessController: AccessController;
 let slippageController: SlippageControl;
 let rebalanceLibrary: RebalanceLibrary;
@@ -163,9 +163,9 @@ before(async () => {
   [owner, treasury] = accounts;
 
   const provider = ethers.getDefaultProvider();
-
+  
   const PriceOracle = await ethers.getContractFactory("PriceOracle");
-  priceOracle = await PriceOracle.deploy("0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c");
+  priceOracle = await PriceOracle.deploy(addresses.WETH_Address);
   await priceOracle.deployed();
 
   const IndexSwapLibrary = await ethers.getContractFactory("IndexSwapLibrary");
@@ -181,41 +181,41 @@ before(async () => {
   await baseHandler.deployed();
 
   const VenusHandler = await ethers.getContractFactory("VenusHandler");
-  venusHandler = await VenusHandler.deploy(priceOracle.address);
+  venusHandler = await VenusHandler.deploy(priceOracle.address,"0xfD36E2c2a6789Db23113685031d7F16329158384");
   await venusHandler.deployed();
 
-  const BeefyHandler = await ethers.getContractFactory("BeefyHandler");
-  beefyHandler = await BeefyHandler.deploy(priceOracle.address);
+  const BeefyHandler = await ethers.getContractFactory("BeefyYieldHandler");
+  beefyHandler = await BeefyHandler.deploy(priceOracle.address,"0x6BE4741AB0aD233e4315a10bc783a7B923386b71");
   await beefyHandler.deployed();
 
   const WombatHandler = await ethers.getContractFactory("WombatHandler");
-  wombatHandler = await WombatHandler.deploy(priceOracle.address);
+  wombatHandler = await WombatHandler.deploy(priceOracle.address,"0x489833311676B566f888119c29bd997Dc6C95830","0x19609B03C976CCA288fbDae5c21d4290e9a4aDD7");
   await wombatHandler.deployed();
   await wombatHandler.addOrUpdateProtocolSlippage("2500");
 
   const ApeSwapLendingHandler = await ethers.getContractFactory("ApeSwapLendingHandler");
-  apeSwapLendingHandler = await ApeSwapLendingHandler.deploy(priceOracle.address);
+  apeSwapLendingHandler = await ApeSwapLendingHandler.deploy(priceOracle.address,"0x34878F6a484005AA90E7188a546Ea9E52b538F6f","0x5CB93C0AdE6B7F2760Ec4389833B0cCcb5e4efDa");
   await apeSwapLendingHandler.deployed();
 
   const PancakeLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-  pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address);
+  pancakeLpHandler = await PancakeLPHandler.deploy(priceOracle.address,"0x10ED43C718714eb63d5aA57B78B54704E256024E");
   await pancakeLpHandler.deployed();
   await pancakeLpHandler.addOrUpdateProtocolSlippage("2500");
 
   const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
-  biSwapLPHandler = await BiSwapLPHandler.deploy(priceOracle.address);
+  biSwapLPHandler = await BiSwapLPHandler.deploy(priceOracle.address,"0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8");
   await biSwapLPHandler.deployed();
   await biSwapLPHandler.addOrUpdateProtocolSlippage("2500");
 
   const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
-  apeSwapLPHandler = await ApeSwapLPHandler.deploy(priceOracle.address);
+  apeSwapLPHandler = await ApeSwapLPHandler.deploy(priceOracle.address,"0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7");
   await apeSwapLPHandler.deployed();
   await apeSwapLPHandler.addOrUpdateProtocolSlippage("2500");
 
   const BeefyLPHandlerdefault = await ethers.getContractFactory("BeefyLPHandler");
   beefyLPHandler = await BeefyLPHandlerdefault.deploy(pancakeLpHandler.address, priceOracle.address);
   await beefyLPHandler.deployed();
-
+  
   const aggregator = await deployLPAggregators();
 
   await priceOracle._addFeed(
@@ -469,8 +469,6 @@ async function deployLPAggregators(): Promise<Aggregators> {
     priceOracle.address,
   );
   await bswap_wbnb_link_aggregator.deployed();
-
-  //APESWAP LP POOL AGGREGATOR
 
   const ApeSwap_WBNB_BUSD_Aggregator = await ethers.getContractFactory("UniswapV2LPAggregator");
   const apeswap_wbnb_busd_aggregator = await ApeSwap_WBNB_BUSD_Aggregator.deploy(

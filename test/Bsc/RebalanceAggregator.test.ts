@@ -30,7 +30,7 @@ import {
   OffChainRebalance,
   AccessController,
   IndexFactory,
-  PancakeSwapHandler,
+  UniswapV2Handler,
   VelvetSafeModule,
   ZeroExHandler,
   OneInchHandler,
@@ -42,9 +42,9 @@ import {
   TokenRegistry,
   ERC20Upgradeable,
   OffChainIndexSwap,
-} from "../typechain";
+} from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 
 var chai = require("chai");
 
@@ -64,7 +64,7 @@ describe.only("Tests for MetaAggregator", () => {
   let accounts;
   let iaddress: IAddresses;
   let vaultAddress: string;
-  let swapHandler: PancakeSwapHandler;
+  let swapHandler: UniswapV2Handler;
   let assetManagerConfig: AssetManagerConfig;
   let exchange: Exchange;
   let indexSwap: any;
@@ -77,7 +77,7 @@ describe.only("Tests for MetaAggregator", () => {
   let indexSwap7: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
-  let swapHandler1: PancakeSwapHandler;
+  let swapHandler1: UniswapV2Handler;
   let velvetSafeModule: VelvetSafeModule;
   //let lendingHandler: LendingHandler;
   let oneInchHandler: OneInchHandler;
@@ -171,8 +171,8 @@ describe.only("Tests for MetaAggregator", () => {
       exchange = await Exchange.deploy();
       await exchange.deployed();
 
-      const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
-      swapHandler = await PancakeSwapHandler.deploy();
+      const UniswapV2Handler = await ethers.getContractFactory("UniswapV2Handler");
+      swapHandler = await UniswapV2Handler.deploy();
       await swapHandler.deployed();
 
       swapHandler.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
@@ -233,7 +233,7 @@ describe.only("Tests for MetaAggregator", () => {
       const offChainIndexSwap = await offChainIndex.deploy();
       await offChainIndexSwap.deployed();
 
-      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      const PancakeSwapHandler1 = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler1 = await PancakeSwapHandler1.deploy();
       await swapHandler1.deployed();
 

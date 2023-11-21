@@ -89,23 +89,9 @@ To deploy the smart contracts we use the command:
 
 ```
 $ npm run deployBscNew
-
 ```
 
 To initialise the individual contracts we need to call different tasks:
 
 ```
 ```
-
-
-## Audit
-### V2
-- [peckshield](https://github.com/Velvet-Capital/audits/blob/main/PeckShield-Audit-Report-VelvetV2-v1.0-2.pdf)
-- [Shellboxes](https://github.com/Velvet-Capital/audits/blob/main/Velvet_Capital_V2_Security_Audit_Report.pdf)
-
-
-- Website: [velvet.capital](https://www.velvet.capital/)
-- Docs: [docs.velvet.capital](https://docs.velvet.capital/)
-- Twitter: [@velvet_capital](https://twitter.com/velvet_capital)
-- Email: [info@velvet.capital](mailto:info@velvet.capital)
-- Discord: [velvet](https://discord.com/invite/GkEwgezVMR)

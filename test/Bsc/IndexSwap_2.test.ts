@@ -25,7 +25,7 @@ import {
   Rebalancing__factory,
   AccessController,
   IndexFactory,
-  PancakeSwapHandler,
+  UniswapV2Handler,
   VelvetSafeModule,
   PriceOracle,
   AssetManagerConfig,
@@ -36,9 +36,9 @@ import {
   VelvetSafeModule__factory,
   Exchange__factory,
   AccessController__factory,
-} from "../typechain";
+} from "../../typechain";
 
-import { chainIdToAddresses } from "../scripts/networkVariables";
+import { chainIdToAddresses } from "../../scripts/networkVariables";
 
 var chai = require("chai");
 //use default BigNumber
@@ -54,8 +54,8 @@ describe.only("Tests for MixedIndex", () => {
   let indexSwap4: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
-  let swapHandler1: PancakeSwapHandler;
-  let swapHandler: PancakeSwapHandler;
+  let swapHandler1: UniswapV2Handler;
+  let swapHandler: UniswapV2Handler;
   let tokenRegistry: TokenRegistry;
   let assetManagerConfig: AssetManagerConfig;
   let exchange: any;
@@ -134,8 +134,8 @@ describe.only("Tests for MixedIndex", () => {
       tokenRegistry = TokenRegistry.attach(registry.address);
       await tokenRegistry.setCoolDownPeriod("1");
 
-      const PancakeSwapHandler = await ethers.getContractFactory("PancakeSwapHandler");
-      swapHandler = await PancakeSwapHandler.deploy();
+      const UniswapV2Handler = await ethers.getContractFactory("UniswapV2Handler");
+      swapHandler = await UniswapV2Handler.deploy();
       await swapHandler.deployed();
 
       swapHandler.addOrUpdateProtocolSlippage("1600");
@@ -195,9 +195,11 @@ describe.only("Tests for MixedIndex", () => {
       offChainIndexSwap = await offChainIndex.deploy();
       await offChainIndexSwap.deployed();
 
-      const PancakeSwapHandler1 = await ethers.getContractFactory("PancakeSwapHandler");
+      const PancakeSwapHandler1 = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler1 = await PancakeSwapHandler1.deploy();
       await swapHandler1.deployed();
+
+      swapHandler1.init(addresses.PancakeSwapRouterAddress, priceOracle.address);
 
       const Exchange = await ethers.getContractFactory("Exchange", {
         libraries: {
@@ -742,7 +744,7 @@ describe.only("Tests for MixedIndex", () => {
         let oldHandlerAddress = tokenInfo1.handler;
 
         const LpHandler2 = await ethers.getContractFactory("PancakeSwapLPHandler");
-        const lpHandler2 = await LpHandler2.connect(owner).deploy(priceOracle.address);
+        const lpHandler2 = await LpHandler2.connect(owner).deploy(priceOracle.address,"0x10ED43C718714eb63d5aA57B78B54704E256024E");
         await lpHandler2.deployed();
         lpHandler2.addOrUpdateProtocolSlippage("1000");
 
@@ -762,7 +764,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should revert if wrong LP slippage is assigned to a LP handler", async () => {
         const LpHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-        const lpHandler2 = await LpHandler.connect(owner).deploy(priceOracle.address);
+        const lpHandler2 = await LpHandler.connect(owner).deploy(priceOracle.address,"0x10ED43C718714eb63d5aA57B78B54704E256024E");
         await lpHandler2.deployed();
         await expect(lpHandler2.addOrUpdateProtocolSlippage("12000")).to.be.revertedWithCustomError(
           pancakeLpHandler,
@@ -772,7 +774,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should revert if a zero address is passed to ApeSwapLP Handler's constructor", async () => {
         const ApeSwapLPHandler = await ethers.getContractFactory("ApeSwapLPHandler");
-        await expect(ApeSwapLPHandler.deploy(zeroAddress)).to.be.revertedWithCustomError(
+        await expect(ApeSwapLPHandler.deploy(zeroAddress,zeroAddress)).to.be.revertedWithCustomError(
           apeSwapLPHandler,
           "InvalidAddress",
         );
@@ -780,7 +782,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should revert if a zero address is passed to BiSwapLP Handler's constructor", async () => {
         const BiSwapLPHandler = await ethers.getContractFactory("BiSwapLPHandler");
-        await expect(BiSwapLPHandler.deploy(zeroAddress)).to.be.revertedWithCustomError(
+        await expect(BiSwapLPHandler.deploy(zeroAddress,"0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8")).to.be.revertedWithCustomError(
           biSwapLPHandler,
           "InvalidAddress",
         );
@@ -788,7 +790,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should revert if a zero address is passed to PancakeSwapLP Handler's constructor", async () => {
         const PancakeSwapLPHandler = await ethers.getContractFactory("PancakeSwapLPHandler");
-        await expect(PancakeSwapLPHandler.deploy(zeroAddress)).to.be.revertedWithCustomError(
+        await expect(PancakeSwapLPHandler.deploy(zeroAddress,"0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8")).to.be.revertedWithCustomError(
           pancakeLpHandler,
           "InvalidAddress",
         );

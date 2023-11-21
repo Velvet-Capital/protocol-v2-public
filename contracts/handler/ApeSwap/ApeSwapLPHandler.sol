@@ -41,10 +41,8 @@ import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
 contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   IPriceOracle internal _oracle;
 
-  address internal constant routerAddress = 0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7;
-  RouterInterface internal router = RouterInterface(routerAddress);
+  RouterInterface internal router;
   uint256 internal constant DIVISOR_INT = 10_000;
-  address internal constant MASTER_CHEF = 0x5c8D727b265DBAfaba67E050f2f739cAeEB4A6F9;
 
   mapping(address => uint256) pid;
 
@@ -57,10 +55,15 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     bool isWETH
   );
 
-  constructor(address _priceOracle) {
-    if(_priceOracle == address(0)){
+  /**
+   * @param _priceOracle address of price oracle
+   * @param _routerAddress address of apwSwapLp protocol router used for deposit and withdraw non-ETH
+   */
+  constructor(address _priceOracle,address _routerAddress) {
+    if(_priceOracle == address(0) || _routerAddress == address(0)){
       revert ErrorLibrary.InvalidAddress();
     }
+    router = RouterInterface(_routerAddress);
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -92,7 +95,7 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address[] memory t = getUnderlying(inputData._yieldAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
-    _redeem(inputData, routerAddress, p1, p2);
+    _redeem(inputData, address(router), p1, p2);
     emit Redeem(msg.sender, inputData._yieldAsset, inputData._amount, inputData._to, inputData.isWETH);
   }
 

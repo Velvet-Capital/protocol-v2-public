@@ -7,7 +7,7 @@ import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token
 import {ErrorLibrary} from "../library/ErrorLibrary.sol";
 
 abstract contract DustHandler {
-  address public constant WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+  address public constant WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
 
   // after investment if we can't deposit everything we might have underlying tokens left, no need to deposit/redeem - only swap
   function _returnDust(address _token, address _to) internal {

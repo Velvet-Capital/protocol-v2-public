@@ -110,8 +110,8 @@ library ErrorLibrary {
   error InsufficientBalance();
   /// @notice Thrown when the redeem function returns 1 for fail & 0 for success
   error RedeemingFailed();
-  /// @notice Thrown when the token passed in getUnderlying is not vToken
-  error NotVToken();
+  /// @notice Thrown when the token passed in getUnderlying is not cToken
+  error NotcToken();
   /// @notice Thrown when the redeem amount is more than protocol balance
   error NotEnoughBalanceInWombatProtocol();
   /// @notice Thrown when the mint amount is not equal to token amount passed
@@ -262,6 +262,10 @@ library ErrorLibrary {
   error CallFailed();
   /// @notice Generic transfer failed error
   error TransferFailed();
+  /// @notice Throws when handler underlying token is not ETH
+  error TokenNotETH();  
+   /// @notice Thrown when the token passed in getUnderlying is not vToken
+  error NotVToken();
   /// @notice Throws when incorrect token amount is encountered during offchain/onchain investment
   error IncorrectInvestmentTokenAmount();
   /// @notice Throws when final invested amount after slippage is 0
@@ -288,6 +292,8 @@ library ErrorLibrary {
   error ReentrancyGuardReentrantCall();
   /// @notice Throws when user calls updateFees function before proposing a new fee
   error NoNewFeeSet();
-  /// @notice Throws when token is not ETH
-  error TokenNotETH();
+  /// @notice Throws when wrong asset is supplied to the Compound v3 Protocol
+  error WrongAssetBeingSupplied();
+  /// @notice Throws when wrong asset is being withdrawn from the Compound v3 Protocol
+  error WrongAssetBeingWithdrawn();
 }

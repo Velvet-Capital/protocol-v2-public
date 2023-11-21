@@ -14,12 +14,16 @@ import "./tasks/block-number";
 import "./tasks/deployIndexSwap";
 import "./tasks/setTokenIndexSwap";
 import "./tasks/createIndex";
-
+import "./tasks/defenderAdd";
 import "hardhat-gas-reporter";
 import "hardhat-abi-exporter";
 
 import { HardhatUserConfig } from "hardhat/types";
 import { chainIdToAddresses } from "./scripts/networkVariables";
+
+import * as tdly from "@tenderly/hardhat-tenderly";
+
+tdly.setup({ automaticVerifications: false });
 
 const mnemonic = process.env.MNEMONIC;
 if (!mnemonic) {
@@ -33,6 +37,19 @@ const forkChainId: any = process.env.FORK_CHAINID;
 if (!infuraApiKey) {
   throw new Error("Please set your INFURA_API_KEY in a .env file");
 }
+
+interface ForkingConfigurations {
+  [network: string]: string | undefined;
+}
+
+const forkingConfigs: ForkingConfigurations = {
+  42161 : process.env.ARB_RPC,
+  56 : process.env.BSC_RPC,
+};
+
+const forkNetwork = process.env.CHAIN_ID;
+const forkingUrl = forkingConfigs[forkNetwork || ""];
+
 const chainIds = {
   ganache: 5777,
   goerli: 5,
@@ -45,6 +62,7 @@ const chainIds = {
   MaticTestnet: 80001,
   MaticMainnet: 137,
   ropsten: 3,
+  ArbitrumOne: 42161,
 };
 
 const config: HardhatUserConfig = {
@@ -61,10 +79,8 @@ const config: HardhatUserConfig = {
       forking: {
         // eslint-disable-next-line
         enabled: true,
-        url: process.env.BSC_RPC ? process.env.BSC_RPC : "https://bsc-dataseed.binance.org/",
+        url: forkingUrl ? forkingUrl : undefined,
       },
-      chainId: 56,
-      // allowUnlimitedContractSize: true
     },
     ganache: {
       chainId: 5777,
@@ -129,6 +145,22 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: true,
       url: "https://rpc-mainnet.maticvigil.com/",
     },
+    ArbitrumOne: {
+      accounts: {
+        mnemonic,
+      },
+      chainId: chainIds["ArbitrumOne"],
+      allowUnlimitedContractSize: true,
+      url: "https://arbitrum-one.publicnode.com",
+    },
+    TenderlyArbitrum: {
+      accounts: {
+        mnemonic,
+      },
+      chainId: chainIds["ArbitrumOne"],
+      allowUnlimitedContractSize: true,
+      url: "https://rpc.vnet.tenderly.co/devnet/arbitrum-velvet-v2/cd36114b-0a3a-4be4-8e34-8423cdd151ab",
+    },
   },
   solidity: {
     compilers: [
@@ -164,8 +196,24 @@ const config: HardhatUserConfig = {
       "Rebalancing",
       "AssetManagerConfig",
       "TokenRegistry",
+      "VenusHandler",
+      "PancakeSwapLPHandler",
+      "BiSwapLPHandler",
+      "ApeSwapLPHandler",
+      "WombatHandler",
+      "ApeSwapLendingHandler",
+      "BeefyHandler",
+      "BeefyLPHandler",
+      "ZeroExSwapHandler",
+      "OneInchSwapHandler",
+      "ParaswapHandler",
     ],
     spacing: 2,
+  },
+  tenderly: {
+    project: "9oct",
+    username: "velvet-capital",
+    privateVerification: true,
   },
 };
 
