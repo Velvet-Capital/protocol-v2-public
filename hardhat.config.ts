@@ -14,6 +14,7 @@ import "./tasks/block-number";
 import "./tasks/deployIndexSwap";
 import "./tasks/setTokenIndexSwap";
 import "./tasks/createIndex";
+import "./tasks/defenderAdd";
 import "hardhat-gas-reporter";
 import "hardhat-abi-exporter";
 
@@ -80,8 +81,6 @@ const config: HardhatUserConfig = {
         enabled: true,
         url: forkingUrl ? forkingUrl : undefined,
       },
-      // allowUnlimitedContractSize: true
-      // blockGasLimit: 100000000429720
     },
     ganache: {
       chainId: 5777,
