@@ -767,8 +767,8 @@ describe.only("Tests for ZeroExSwap", () => {
         var tokens = await indexSwap1.getTokens();
         const newTokens = [
           iaddress.busdAddress,
-          "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0",
-          "0xA07c5b74C9B40447a954e1466938b865b6BBea36",
+          addresses.Cake_WBNBLP_Address,
+          addresses.vBNB_Address,
         ];
         const newWeights = [3000, 1000, 6000];
 
@@ -861,7 +861,7 @@ describe.only("Tests for ZeroExSwap", () => {
 
         await offChainRebalance1.connect(nonOwner).revertSellTokens();
         const balanceAfter = await ERC20.attach(iaddress.wbnbAddress).balanceOf(v);
-        // var tokens = await indexSwap1.getTokens();
+        var tokens = await indexSwap1.getTokens();
         // for(let i = 0 ; i < tokens.length; i++){
         //   console.log("token",tokens[i]);
         //   console.log("balanceAfter",await ERC20.attach(tokens[i]).balanceOf(v));
@@ -869,9 +869,68 @@ describe.only("Tests for ZeroExSwap", () => {
         expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
       });
 
-      it("should update weights", async () => {
+      it("should revert enablePrimaryTokens", async () => {
         var tokens = await indexSwap.getTokens();
         const newWeights = [3000, 7000];
+
+        var sellTokens = [];
+        var swapAmounts = [];
+        var buyTokens = [];
+        var buyWeights = [];
+        var sellTokenSwapData = [];
+        var buyTokenSwapData = [];
+        var buyUnderlyingTokensContract = [];
+        var buyTokenAmountContract = [];
+        var protocolFee = [];
+        var sumWeight;
+        var v = await indexSwap.vault();
+
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const data: [string[], string[]] = await offChainRebalance.callStatic.getSwapData(newWeights);
+
+        sellTokens = data[0];
+        swapAmounts = data[1];
+
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != wbnb) {
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: wbnb,
+                sellAmount: swapAmounts[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              sellTokenSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        const tokenLengthBefore = (await indexSwap.getTokens()).length;
+        await offChainRebalance.enablePrimaryTokens(newWeights, sellTokenSwapData, zeroExHandler.address, [0, 0, 0]);
+
+        await offChainRebalance.revertSellTokens();
+
+        const tokenLengthAfter = (await indexSwap.getTokens()).length;
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
+          const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
+          const balanceAfterToken = await token2.balanceOf(v);
+          expect(balanceAfterToken).to.be.greaterThan(0);
+        }
+        expect(BigNumber.from(tokenLengthAfter)).to.be.equal(BigNumber.from(tokenLengthBefore).add(1));
+      })
+
+      it("should update weights", async () => {
+        var tokens = await indexSwap.getTokens();
+        const newWeights = [3000, 6000, 1000];
 
         var sellTokens = [];
         var swapAmounts = [];
@@ -972,9 +1031,6 @@ describe.only("Tests for ZeroExSwap", () => {
           const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
           const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
           balanceAfterToken.push(await token2.balanceOf(v));
-          // expect(Number(balanceAfterToken[i])).to.be.greaterThanOrEqual(
-          //   Number(balanceBeforeToken[i])
-          // );
         }
       });
 
