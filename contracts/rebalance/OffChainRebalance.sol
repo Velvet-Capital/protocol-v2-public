@@ -436,8 +436,7 @@ contract OffChainRebalance is Initializable, ReentrancyGuardUpgradeable, UUPSUpg
     if (getRedeemed()) {
       revert ErrorLibrary.AlreadyOngoingOperation();
     }
-    address[] memory tokens = getTokens();
-    setPaused(true);
+    address[] memory tokens = setRebalanceDataAndPause();
     validatePrimaryAndHandler(tokens, offChainHandler);
     address[] memory sellTokens;
     updateRecord(tokens, newWeights);

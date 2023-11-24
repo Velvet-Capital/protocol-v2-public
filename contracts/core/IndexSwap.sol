@@ -162,17 +162,17 @@ contract IndexSwap is Initializable, ERC20Upgradeable, UUPSUpgradeable, OwnableU
     }
     uint256 totalWeight;
     for (uint256 i = 0; i < tokens.length; i++) {
-      if (_previousToken[tokens[i]] == true) {
+      address token = tokens[i];
+      if (_previousToken[token] == true) {
         revert ErrorLibrary.TokenAlreadyExist();
       }
-      address token = tokens[i];
       uint96 _denorm = denorms[i];
       IndexSwapLibrary._beforeInitCheck(IIndexSwap(address(this)), token, _denorm);
       _records[token] = Record({lastDenormUpdate: uint40(getTimeStamp()), denorm: _denorm, index: uint256(i)});
       _tokens.push(token);
 
       totalWeight = totalWeight + _denorm;
-      _previousToken[tokens[i]] = true;
+      _previousToken[token] = true;
     }
     setFalse(tokens);
     _weightCheck(totalWeight);
