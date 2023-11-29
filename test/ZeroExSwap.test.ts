@@ -861,11 +861,14 @@ describe.only("Tests for ZeroExSwap", () => {
 
         await offChainRebalance1.connect(nonOwner).revertSellTokens();
         const balanceAfter = await ERC20.attach(iaddress.wbnbAddress).balanceOf(v);
-        var tokens = await indexSwap1.getTokens();
-        // for(let i = 0 ; i < tokens.length; i++){
-        //   console.log("token",tokens[i]);
-        //   console.log("balanceAfter",await ERC20.attach(tokens[i]).balanceOf(v));
-        // }
+        var tokensAfter = await indexSwap1.getTokens();
+        for(let i = 0 ; i < tokensAfter.length; i++){
+          expect(tokensAfter[i]).to.be.equal(tokens[i]);
+          let contractBalance = await ERC20.attach(tokensAfter[i]).balanceOf(offChainRebalance1.address);
+          let vaultBalance = await ERC20.attach(tokensAfter[i]).balanceOf(v);
+          expect(contractBalance).to.be.equal(0);
+          expect(vaultBalance).to.be.greaterThan(0);
+        }
         expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
       });
 
@@ -918,12 +921,16 @@ describe.only("Tests for ZeroExSwap", () => {
 
         await offChainRebalance.revertSellTokens();
 
-        const tokenLengthAfter = (await indexSwap.getTokens()).length;
-        for (let i = 0; i < tokens.length; i++) {
-          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokens[i]);
-          const token2 = await ethers.getContractAt("VBep20Interface", tokens[i]);
+        const tokensAfter = await indexSwap.getTokens();
+        const tokenLengthAfter = tokensAfter.length;
+        for (let i = 0; i < tokenLengthAfter.length; i++) {
+          const tokenInfo: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(tokensAfter[i]);
+          const token2 = await ethers.getContractAt("VBep20Interface", tokensAfter[i]);
           const balanceAfterToken = await token2.balanceOf(v);
+          expect(tokensAfter[i]).to.be.equal(tokens[i]);
           expect(balanceAfterToken).to.be.greaterThan(0);
+          let contractBalance = await ERC20.attach(tokensAfter[i]).balanceOf(offChainRebalance.address);
+          expect(contractBalance).to.be.equal(0);
         }
         expect(BigNumber.from(tokenLengthAfter)).to.be.equal(BigNumber.from(tokenLengthBefore).add(1));
       })
@@ -2930,6 +2937,15 @@ describe.only("Tests for ZeroExSwap", () => {
           "FifteenMinutesNotExcedeed",
         );
         await offChainRebalance.revertSellTokens();
+        
+        let tokensAfter = await indexSwap.getTokens();
+        for(let i = 0 ; i < tokensAfter.length; i++){
+          expect(tokensAfter[i]).to.be.equal(tokens[i]);
+          let contractBalance = await ERC20.attach(tokensAfter[i]).balanceOf(offChainRebalance.address);
+          expect(contractBalance).to.be.equal(0);
+          let vaultBalance = await ERC20.attach(tokensAfter[i]).balanceOf(v);
+        }
+        expect(BigNumber.from(tokensAfter.length).add(1)).to.be.equal(BigNumber.from(tokens.length));
       });
 
       it("it should fail if assetmanager tries to execute 3rd transacton after 1st", async () => {
@@ -3238,6 +3254,16 @@ describe.only("Tests for ZeroExSwap", () => {
         ).to.be.revertedWithCustomError(offChainRebalance, "CallerNotAssetManager");
 
         await offChainRebalance.revertSellTokens();
+
+        let tokensAfter = await indexSwap.getTokens();
+        for(let i = 0 ; i < tokensAfter.length; i++){
+          expect(tokensAfter[i]).to.be.equal(tokens[i]);
+          let contractBalance = await ERC20.attach(tokensAfter[i]).balanceOf(offChainRebalance.address);
+          expect(contractBalance).to.be.equal(0);
+          let vaultBalance = await ERC20.attach(tokensAfter[i]).balanceOf(v);
+          expect(vaultBalance).to.be.greaterThan(0);
+        }
+        expect(tokens.length).to.be.equal(tokensAfter.length);
       });
 
       it("should revert if AlreadyOngoingOperation", async () => {
