@@ -30,7 +30,7 @@ import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
 contract CompoundV3Handler is IHandler {
   IPriceOracle internal _oracle;
-  address internal _cometReward;
+  address internal immutable _cometReward;
 
   event Deposit(uint256 time, address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(
@@ -47,7 +47,7 @@ contract CompoundV3Handler is IHandler {
    * @param _rewardContract address of compound reward contract
    */
   constructor(address _priceOracle, address _rewardContract) {
-    if (_priceOracle == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (_priceOracle == address(0) || _rewardContract == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     _cometReward = _rewardContract;
   }
@@ -115,6 +115,7 @@ contract CompoundV3Handler is IHandler {
    * @return underlying Address of the underlying asset
    */
   function getUnderlying(address _cToken) public view override returns (address[] memory) {
+    if (_cToken == address(0)) revert ErrorLibrary.InvalidAddress();
     address[] memory underlying = new address[](1);
     CometMainInterface token = CometMainInterface(_cToken);
     underlying[0] = token.baseToken();
@@ -124,28 +125,28 @@ contract CompoundV3Handler is IHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    tokenBalance = IERC20Upgradeable(t).balanceOf(_tokenHolder);
+    tokenBalance = IERC20Upgradeable(_token).balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
-    CometMainInterface token = CometMainInterface(t);
+    CometMainInterface token = CometMainInterface(_token);
     tokenBalance[0] = token.balanceOf(_tokenHolder);
     return tokenBalance;
   }
@@ -153,22 +154,22 @@ contract CompoundV3Handler is IHandler {
   /**
    * @notice This function returns the USD value of the asset
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
   }
 
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+  function getFairLpPrice(address _tokenHolder, address _token) public view returns (uint) {}
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

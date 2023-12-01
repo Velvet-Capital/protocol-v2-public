@@ -125,7 +125,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               handlerJSON[protocolVariable - 1].init_Array[1],
             );
             await handlerVariable.deployed();
-          } else if(no_of_inits == "3"){
+          } else if (no_of_inits == "3") {
             handlerVariable = await deployHandler.deploy(
               priceOracle.address,
               handlerJSON[protocolVariable - 1].init_Array[0],
@@ -133,8 +133,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               handlerJSON[protocolVariable - 1].init_Array[2],
             );
             await handlerVariable.deployed();
-          }
-           else {
+          } else {
             handlerVariable = await deployHandler.deploy(priceOracle.address);
             await handlerVariable.deployed();
           }

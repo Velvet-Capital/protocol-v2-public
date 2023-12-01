@@ -33,31 +33,24 @@ import {FunctionParameters} from "contracts/FunctionParameters.sol";
 import {DustHandler} from "../DustHandler.sol";
 
 contract WombatHandler is IHandler, SlippageControl, DustHandler {
-  address public WOMBAT_OPTIMIZED_PROXY;
+  address public immutable WOMBAT_OPTIMIZED_PROXY;
   IWombat public MasterWombat;
 
-  address public WOMBAT_ROUTER;
+  address public immutable WOMBAT_ROUTER;
 
   IPriceOracle internal _oracle;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
-  event Redeem(
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   /**
    * @param _priceOracle address of price oracle
    * @param _wombat_optimized_proxy address of wombat router proxy address
    * @param _wombat_router address of wombat protocol router used for deposit and withdraw
    */
-  constructor(address _priceOracle, address _wombat_optimized_proxy,address _wombat_router) {
-    if(_priceOracle == address(0)){
+  constructor(address _priceOracle, address _wombat_optimized_proxy, address _wombat_router) {
+    if (_priceOracle == address(0) || _wombat_optimized_proxy == address(0) || _wombat_router == address(0))
       revert ErrorLibrary.InvalidAddress();
-    }
     WOMBAT_OPTIMIZED_PROXY = _wombat_optimized_proxy;
     MasterWombat = IWombat(_wombat_optimized_proxy);
 
@@ -79,7 +72,7 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
-    if (_lpAsset == address(0) || _to == address(0)) {
+    if (_lpAsset == address(0) || _to == address(0) || user == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     IAsset asset = IAsset(_lpAsset);
@@ -176,14 +169,14 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (_tokenHolder == address(0) || t == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_tokenHolder == address(0) || _token == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IAsset asset = IAsset(t);
+    IAsset asset = IAsset(_token);
     StructLib.UserInfo memory _amountStaked = MasterWombat.userInfo(
       MasterWombat.getAssetPid(address(asset)),
       _tokenHolder
@@ -194,17 +187,17 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t) public override returns (uint256[] memory) {
-    if (_tokenHolder == address(0) || t == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public override returns (uint256[] memory) {
+    if (_tokenHolder == address(0) || _token == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
-    uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, t);
+    uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, _token);
     if (yieldTokenBalance != 0) {
-      (tokenBalance[0], ) = IPool(IAsset(t).pool()).quotePotentialWithdraw(getUnderlying(t)[0], yieldTokenBalance);
+      (tokenBalance[0], ) = IPool(IAsset(_token).pool()).quotePotentialWithdraw(getUnderlying(_token)[0], yieldTokenBalance);
     }
     return tokenBalance;
   }
@@ -212,28 +205,27 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
   }
 
-
   /**
    * @notice This function returns encoded data, for withdrawal
-   * @param t address of token
+   * @param _token address of token
    * @param _amount amount of token to withdraw
    * @return bytes endoded data for withdrawal
    */
-  function encodeData(address t, uint256 _amount) public view returns (bytes memory) {
-    IAsset asset = IAsset(t);
+  function encodeData(address _token, uint256 _amount) public view returns (bytes memory) {
+    IAsset asset = IAsset(_token);
     return abi.encodeWithSelector(IWombat.withdraw.selector, MasterWombat.getAssetPid(address(asset)), _amount);
   }
 
@@ -280,7 +272,7 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
     } else {
       (expectedAmount, ) = IPool(pool).quotePotentialWithdraw(address(underlyingToken), _amount);
     }
-    slippageAmount = (expectedAmount * HUNDRED_PERCENT ) / (HUNDRED_PERCENT + _slippage);
+    slippageAmount = (expectedAmount * HUNDRED_PERCENT) / (HUNDRED_PERCENT + _slippage);
   }
 
   receive() external payable {}

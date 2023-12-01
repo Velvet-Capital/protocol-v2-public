@@ -16,6 +16,7 @@ contract KyberSwapHandler is Initializable, ApproveControl, ExternalSlippageCont
   IPriceOracle internal oracle;
 
   function init(address _swapTarget, address _oracle) external initializer {
+    if (_swapTarget == address(0) || _oracle == address(0)) revert ErrorLibrary.InvalidAddress();
     swapTarget = _swapTarget;
     oracle = IPriceOracle(_oracle);
   }
@@ -26,7 +27,7 @@ contract KyberSwapHandler is Initializable, ApproveControl, ExternalSlippageCont
     uint256 sellAmount,
     bytes memory callData,
     address _to
-  ) public payable {
+  ) public {
     uint256 tokenBalance = IERC20Upgradeable(sellTokenAddress).balanceOf(address(this));
     if (tokenBalance < sellAmount) {
       revert ErrorLibrary.InsufficientFunds(tokenBalance, sellAmount);
@@ -48,8 +49,7 @@ contract KyberSwapHandler is Initializable, ApproveControl, ExternalSlippageCont
     uint priceBuyToken = oracle.getPriceTokenUSD18Decimals(buyTokenAddress, buyTokenBalance);
 
     validateSwap(priceSellToken, priceBuyToken);
-    TransferHelper.safeTransfer(buyTokenAddress, _to, IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)));
+    TransferHelper.safeTransfer(buyTokenAddress, _to, buyTokenBalance);
   }
 
-  receive() external payable {}
 }

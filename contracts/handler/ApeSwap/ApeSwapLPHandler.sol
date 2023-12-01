@@ -42,25 +42,16 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   IPriceOracle internal _oracle;
 
   RouterInterface internal router;
-  uint256 internal constant DIVISOR_INT = 10_000;
-
-  mapping(address => uint256) pid;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
-  event Redeem(
-    address indexed user,
-    address indexed token,
-    uint256 amount,
-    address indexed to,
-    bool isWETH
-  );
+  event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   /**
    * @param _priceOracle address of price oracle
    * @param _routerAddress address of apwSwapLp protocol router used for deposit and withdraw non-ETH
    */
-  constructor(address _priceOracle,address _routerAddress) {
-    if(_priceOracle == address(0) || _routerAddress == address(0)){
+  constructor(address _priceOracle, address _routerAddress) {
+    if (_priceOracle == address(0) || _routerAddress == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     router = RouterInterface(_routerAddress);
@@ -81,6 +72,9 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
+    if (_lpAsset == address(0) || _to == address(0) || user == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
     address[] memory t = getUnderlying(_lpAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
@@ -92,6 +86,9 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
    * @notice This function remove liquidity from the PancakeSwap protocol
    */
   function redeem(FunctionParameters.RedeemData calldata inputData) public override {
+    if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
     address[] memory t = getUnderlying(inputData._yieldAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
@@ -105,6 +102,7 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
    * @return underlying Address of the underlying asset
    */
   function getUnderlying(address _lpToken) public view override returns (address[] memory) {
+    if (_lpToken == address(0)) revert ErrorLibrary.InvalidAddress();
     return _getUnderlyingTokens(_lpToken);
   }
 
@@ -121,45 +119,18 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    return _calculatePriceForBalance(t, address(_oracle),_getTokenBalance(_tokenHolder, t));
+    return _calculatePriceForBalance(_token, address(_oracle), _getTokenBalance(_tokenHolder, _token));
   }
 
-  /**
-   * @notice This function allows to map token addresses to their protocol's pid value
-   */
-  function pidMap(address[] calldata _lpTokens, uint256[] calldata _pid) external onlyOwner {
-    if (_lpTokens.length != _pid.length) {
-      revert ErrorLibrary.InvalidLength();
-    }
-    uint256 len = _lpTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-      pid[_lpTokens[i]] = _pid[i];
-    }
-  }
+  function getUnderlyingBalance(address _tokenHolder, address _token) public override returns (uint256[] memory) {}
 
-  /**
-   * @notice This function allows to remove entries from the pid map
-   */
-  function removePidMap(address[] calldata _lpTokens, uint256[] calldata _pid) external onlyOwner {
-    if (_lpTokens.length != _pid.length) {
-      revert ErrorLibrary.InvalidLength();
-    }
-    uint256 len = _lpTokens.length;
-    for (uint256 i = 0; i < len; i++) {
-      if (pid[_lpTokens[i]] != _pid[i]) revert ErrorLibrary.InvalidPID();
-      delete (pid[_lpTokens[i]]);
-    }
-  }
-
-  function getUnderlyingBalance(address _tokenHolder, address t) public override returns (uint256[] memory) {}
-
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

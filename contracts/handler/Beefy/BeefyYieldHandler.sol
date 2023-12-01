@@ -33,17 +33,14 @@ contract BeefyYieldHandler is IHandler {
 
   IPriceOracle internal _oracle;
   address internal immutable WETH;
-  address internal MOO_ETH ;
-
+  address internal immutable MOO_ETH;
 
   /**
    * @param _priceOracle address of price oracle
    * @param _moo_eth address of moo_eth token of beefy protocol
    */
-  constructor(address _priceOracle,address _moo_eth) {
-    if(_priceOracle == address(0)){
-      revert ErrorLibrary.InvalidAddress();
-    }
+  constructor(address _priceOracle, address _moo_eth) {
+    if (_priceOracle == address(0) || _moo_eth == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     WETH = _oracle.WETH();
     MOO_ETH = _moo_eth;
@@ -145,50 +142,50 @@ contract BeefyYieldHandler is IHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (_tokenHolder == address(0) || t == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_tokenHolder == address(0) || _token == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IVaultBeefy asset = IVaultBeefy(t);
+    IVaultBeefy asset = IVaultBeefy(_token);
     tokenBalance = IERC20Upgradeable(asset).balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param _t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address _t) public view override returns (uint256[] memory) {
-    if (_t == address(0) || _tokenHolder == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
-    uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, _t);
-    tokenBalance[0] = (yieldTokenBalance * IVaultBeefy(_t).balance()) / IVaultBeefy(_t).totalSupply();
+    uint256 yieldTokenBalance = getTokenBalance(_tokenHolder, _token);
+    tokenBalance[0] = (yieldTokenBalance * IVaultBeefy(_token).balance()) / IVaultBeefy(_token).totalSupply();
     return tokenBalance;
   }
 
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
   }
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

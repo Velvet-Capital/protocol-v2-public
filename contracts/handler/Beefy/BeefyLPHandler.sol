@@ -38,7 +38,6 @@ import {UniswapV2LPHandler} from "../AbstractLPHandler.sol";
 import {Denominations} from "@chainlink/contracts/src/v0.8/Denominations.sol";
 
 contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
-  uint256 internal constant DIVISOR_INT = 10_000;
   address internal immutable lpHandlerAddress;
   IPriceOracle internal _oracle;
 
@@ -50,9 +49,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
    * @param _lpHandlerAddress address of lp handler used in beefy protocol
    */
   constructor(address _lpHandlerAddress, address _priceOracle) {
-     if(_priceOracle == address(0) || _lpHandlerAddress == address(0)){
-      revert ErrorLibrary.InvalidAddress();
-    }
+    if (_priceOracle == address(0) || _lpHandlerAddress == address(0)) revert ErrorLibrary.InvalidAddress();
     lpHandlerAddress = _lpHandlerAddress;
     _oracle = IPriceOracle(_priceOracle);
   }
@@ -71,7 +68,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
-    if (mooLpAsset == address(0) || _to == address(0)) {
+    if (mooLpAsset == address(0) || _to == address(0) || user == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     address[] memory underlying = getUnderlying(mooLpAsset);
@@ -168,36 +165,37 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (_tokenHolder == address(0) || t == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_tokenHolder == address(0) || _token == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IVaultBeefy asset = IVaultBeefy(t);
+    IVaultBeefy asset = IVaultBeefy(_token);
     tokenBalance = asset.balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IVaultBeefy asset = IVaultBeefy(t);
+    IVaultBeefy asset = IVaultBeefy(_token);
 
     address underlyingLpToken = address(IStrategy(address(asset.strategy())).want());
-    uint256 underlyingBalance = (getTokenBalance(_tokenHolder, t) * (asset.getPricePerFullShare()))/10 ** IERC20MetadataUpgradeable(t).decimals();
+    uint256 underlyingBalance = (getTokenBalance(_tokenHolder, _token) * (asset.getPricePerFullShare())) /
+      10 ** IERC20MetadataUpgradeable(_token).decimals();
     return _calculatePriceForBalance(underlyingLpToken, address(_oracle), underlyingBalance);
   }
 
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {}
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {}
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

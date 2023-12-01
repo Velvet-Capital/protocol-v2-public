@@ -31,22 +31,19 @@ import {FunctionParameters} from "contracts/FunctionParameters.sol";
 import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 
 contract VenusHandler is IHandler {
-  address internal COMPTROLLER;
+  address internal immutable COMPTROLLER;
 
   IPriceOracle internal _oracle;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
-
   /**
    * @param _priceOracle address of price oracle
    * @param comptroller address of venus protocol router used for deposit and withdraw
    */
   constructor(address _priceOracle, address comptroller) {
-    if(_priceOracle == address(0)){
-      revert ErrorLibrary.InvalidAddress();
-    }
+    if (_priceOracle == address(0) || comptroller == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     COMPTROLLER = comptroller;
   }
@@ -153,29 +150,29 @@ contract VenusHandler is IHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    VBep20Interface token = VBep20Interface(t);
+    VBep20Interface token = VBep20Interface(_token);
     tokenBalance = token.balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t) public override returns (uint256[] memory) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public override returns (uint256[] memory) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
-    VBep20Interface token = VBep20Interface(t);
+    VBep20Interface token = VBep20Interface(_token);
     tokenBalance[0] = token.balanceOfUnderlying(_tokenHolder);
     return tokenBalance;
   }
@@ -183,20 +180,20 @@ contract VenusHandler is IHandler {
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
   }
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address, uint256) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

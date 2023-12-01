@@ -22,7 +22,6 @@ import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-
 import {IHandler} from "../IHandler.sol";
 import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
@@ -36,9 +35,9 @@ contract BeefyBridgeHandler is IHandler {
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   IPriceOracle internal _oracle;
-  address internal MOO_ETH;
-  address internal WETH;
-  address internal Protocol_Handler;
+  address internal immutable MOO_ETH;
+  address internal immutable WETH;
+  address internal immutable Protocol_Handler;
 
   /**
    * @param _priceOracle address of price oracle
@@ -46,8 +45,9 @@ contract BeefyBridgeHandler is IHandler {
    * @param _protocol_Handler address of beefy contract used for deposit and withdraw
    */
 
-  constructor(address _priceOracle,address _moo_eth,address _protocol_Handler) {
-    if (_priceOracle == address(0) || _moo_eth == address(0)) revert ErrorLibrary.InvalidAddress();
+  constructor(address _priceOracle, address _moo_eth, address _protocol_Handler) {
+    if (_priceOracle == address(0) || _moo_eth == address(0) || _protocol_Handler == address(0))
+      revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     MOO_ETH = _moo_eth;
     WETH = _oracle.WETH();
@@ -68,7 +68,7 @@ contract BeefyBridgeHandler is IHandler {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
-    if (_mooAsset == address(0) || _to == address(0)) {
+    if (_mooAsset == address(0) || _to == address(0) || user == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     IVaultBeefy asset = IVaultBeefy(_mooAsset);
@@ -82,11 +82,11 @@ contract BeefyBridgeHandler is IHandler {
       if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
-    }else{
+    } else {
       TransferHelper.safeTransfer(address(underlyingToken), Protocol_Handler, _amount[0]);
     }
 
-    IHandler(Protocol_Handler).deposit{value : msg.value}(underlyingLPToken,_amount,_lpSlippage,address(this),user);
+    IHandler(Protocol_Handler).deposit{value: msg.value}(underlyingLPToken, _amount, _lpSlippage, address(this), user);
     uint256 tokBal = IERC20Upgradeable(underlyingLPToken).balanceOf(address(this));
     TransferHelper.safeApprove(underlyingLPToken, _mooAsset, tokBal);
     asset.deposit(tokBal);
@@ -137,9 +137,6 @@ contract BeefyBridgeHandler is IHandler {
    */
   function getUnderlying(address _mooAsset) public view override returns (address[] memory) {
     if (address(_mooAsset) == address(0)) revert ErrorLibrary.InvalidAddress();
-    if (_mooAsset == address(0)) {
-      revert ErrorLibrary.InvalidAddress();
-    }
     address[] memory underlying = new address[](1);
     IVaultBeefy token = IVaultBeefy(_mooAsset);
     if (_mooAsset == MOO_ETH) {
@@ -153,56 +150,62 @@ contract BeefyBridgeHandler is IHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (_tokenHolder == address(0) || t == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_tokenHolder == address(0) || _token == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IVaultBeefy asset = IVaultBeefy(t);
+    IVaultBeefy asset = IVaultBeefy(_token);
     tokenBalance = IERC20Upgradeable(asset).balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param _t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address _t) public view override returns (uint256[] memory) {
-    if (_t == address(0) || _tokenHolder == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
 
-    IVaultBeefy asset = IVaultBeefy(_t);
+    IVaultBeefy asset = IVaultBeefy(_token);
 
     uint256[] memory underlyingBalance = new uint256[](1);
-    underlyingBalance[0] = (getTokenBalance(_tokenHolder, _t) * (asset.getPricePerFullShare()))/10 ** IERC20MetadataUpgradeable(_t).decimals();
+    underlyingBalance[0] =
+      (getTokenBalance(_tokenHolder, _token) * (asset.getPricePerFullShare())) /
+      10 ** IERC20MetadataUpgradeable(_token).decimals();
     return underlyingBalance;
   }
 
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    address[] memory underlyingToken = getUnderlying(t);
-    uint256[] memory lpBalance = getUnderlyingBalance(_tokenHolder,t);
+    address[] memory underlyingToken = getUnderlying(_token);
+    uint256[] memory lpBalance = getUnderlyingBalance(_tokenHolder, _token);
 
-    IVaultBeefy token = IVaultBeefy(t);
+    IVaultBeefy token = IVaultBeefy(_token);
     address underlyingLPToken = address(token.want());
-    uint underlyingBalance = IProtocolMetadata(Protocol_Handler).getUnderlyingAmount(_tokenHolder,lpBalance[0],underlyingLPToken);
+    uint underlyingBalance = IProtocolMetadata(Protocol_Handler).getUnderlyingAmount(
+      _tokenHolder,
+      lpBalance[0],
+      underlyingLPToken
+    );
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance);
     return balanceUSD;
   }
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

@@ -34,16 +34,14 @@ import {IPriceOracle} from "../../oracle/IPriceOracle.sol";
 import {FunctionParameters} from "../../FunctionParameters.sol";
 
 contract ApeSwapLendingHandler is IHandler, Ownable {
-  address internal oBNB;
-  address internal RAIN_MAKER;
-  address internal WETH;
+  address internal immutable oBNB;
+  address internal immutable RAIN_MAKER;
+  address internal immutable WETH;
 
   IPriceOracle internal _oracle;
 
   event Velvet_ApeSwap_Mint(address _cAsset, uint256 _amount, address _to);
   event Velvet_ApeSwap_Redeem(address _cAsset, uint256 _amount, address _to, bool isWETH);
-
-  mapping(address => uint256) internal pid;
 
   /**
    * @param _priceOracle address of price oracle
@@ -51,9 +49,8 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
    * @param _rain_maker address of apeswap protocol handler used for deposit and withdraw ETH
    */
   constructor(address _priceOracle, address _oBNB, address _rain_maker) {
-    if(_priceOracle == address(0)){
+    if (_priceOracle == address(0) || _oBNB == address(0) || _rain_maker == address(0))
       revert ErrorLibrary.InvalidAddress();
-    }
     oBNB = _oBNB;
     RAIN_MAKER = _rain_maker;
     _oracle = IPriceOracle(_priceOracle);
@@ -74,8 +71,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
-    if ((address(_cAsset)) == address(0)) revert ErrorLibrary.InvalidAddress();
-    if ((address(_to)) == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (_cAsset == address(0) || _to == address(0)) revert ErrorLibrary.InvalidAddress();
 
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_cAsset)[0]);
     IcToken cToken = IcToken(_cAsset);
@@ -91,7 +87,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
       if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
-      if (address(underlyingToken) != _oracle.WETH()) revert ErrorLibrary.TokenNotETH();
+      if (address(underlyingToken) != WETH) revert ErrorLibrary.TokenNotETH();
       cToken.mint{value: _amount[0]}();
     }
     uint256 balanceAfter = cToken.balanceOf(address(this));
@@ -110,9 +106,7 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
    * @notice This function redeems assets from the ApeSwap protocol
    */
   function redeem(FunctionParameters.RedeemData calldata inputData) public override {
-    if (address(inputData._yieldAsset) == address(0)) revert ErrorLibrary.InvalidAddress();
-
-    if (address(inputData._to) == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (inputData._yieldAsset == address(0) || inputData._to == address(0)) revert ErrorLibrary.InvalidAddress();
 
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(inputData._yieldAsset)[0]);
     IcToken cToken = IcToken(inputData._yieldAsset);
@@ -160,29 +154,26 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (address(_tokenHolder) == address(0)) revert ErrorLibrary.InvalidAddress();
-    if (address(t) == address(0)) revert ErrorLibrary.InvalidAddress();
-
-    IcToken token = IcToken(t);
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_tokenHolder == address(0) || _token == address(0)) revert ErrorLibrary.InvalidAddress();
+    IcToken token = IcToken(_token);
     tokenBalance = token.balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t) public override returns (uint256[] memory) {
-    if ((address(_tokenHolder)) == address(0)) revert ErrorLibrary.InvalidAddress();
-    if ((address(t)) == address(0)) revert ErrorLibrary.InvalidAddress();
+  function getUnderlyingBalance(address _tokenHolder, address _token) public override returns (uint256[] memory) {
+    if (_tokenHolder == address(0) || _token == address(0)) revert ErrorLibrary.InvalidAddress();
     uint256[] memory tokenBalance = new uint256[](1);
 
-    IcToken token = IcToken(t);
+    IcToken token = IcToken(_token);
     tokenBalance[0] = token.balanceOfUnderlying(_tokenHolder);
     return tokenBalance;
   }
@@ -190,20 +181,20 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
   }
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

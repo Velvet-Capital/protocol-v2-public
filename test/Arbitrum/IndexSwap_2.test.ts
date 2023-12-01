@@ -507,36 +507,6 @@ describe.only("Tests for MixedIndex", () => {
         );
       });
 
-      it("should not be able to add pid if arrray lengths don't match", async () => {
-        await expect(
-          apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [0, 12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
-      });
-
-      it("should not be able to delete pid if array lengths don't match", async () => {
-        await expect(
-          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [0, 12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
-      });
-
-      it("should add pid", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDCe], [0]);
-      });
-
-      it("should not be able to delete pid if the entry does not match", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [39]);
-
-        await expect(
-          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidPID");
-      });
-
-      it("should delete pid", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [39]);
-
-        expect(await apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [39]));
-      });
-
       it("should fetch the router address of the pancake LP handler", async () => {
         await apeSwapLPHandler.getRouterAddress();
       });

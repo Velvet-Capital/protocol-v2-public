@@ -18,6 +18,8 @@ contract ParaswapHandler is Initializable, ApproveControl, ExternalSlippageContr
   address internal paraswapTransferHelper;
 
   function init(address _swapTarget, address _transferHelper, address _oracle) external initializer {
+    if (_swapTarget == address(0) || _transferHelper == address(0) || _oracle == address(0))
+      revert ErrorLibrary.InvalidAddress();
     swapTarget = _swapTarget;
     paraswapTransferHelper = _transferHelper;
     oracle = IPriceOracle(_oracle);
@@ -29,7 +31,7 @@ contract ParaswapHandler is Initializable, ApproveControl, ExternalSlippageContr
     uint256 sellAmount,
     bytes memory callData,
     address _to
-  ) public payable {
+  ) public {
     uint256 tokenBalance = IERC20Upgradeable(sellTokenAddress).balanceOf(address(this));
 
     if (tokenBalance < sellAmount) {
@@ -55,8 +57,6 @@ contract ParaswapHandler is Initializable, ApproveControl, ExternalSlippageContr
     uint priceBuyToken = oracle.getPriceTokenUSD18Decimals(buyTokenAddress, buyTokenBalance);
 
     validateSwap(priceSellToken, priceBuyToken);
-    TransferHelper.safeTransfer(buyTokenAddress, _to, IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)));
+    TransferHelper.safeTransfer(buyTokenAddress, _to, buyTokenBalance);
   }
-
-  receive() external payable {}
 }

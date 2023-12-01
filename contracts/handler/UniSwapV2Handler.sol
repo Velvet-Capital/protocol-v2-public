@@ -35,6 +35,7 @@ contract UniswapV2Handler is Initializable, Ownable, ExternalSlippageControl {
   constructor() {}
 
   function init(address _router, address _oracle) external initializer {
+    if(_router == address(0) || _oracle == address(0)) revert ErrorLibrary.InvalidAddress();
     uniSwapRouter = IUniswapV2Router02(_router);
     oracle = IPriceOracle(_oracle);
   }

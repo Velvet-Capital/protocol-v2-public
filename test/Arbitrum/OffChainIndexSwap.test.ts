@@ -507,12 +507,6 @@ describe.only("Tests for OffChainIndex", () => {
         ]);
       });
 
-      it("should add pid", async () => {
-        await sushiLpHandler
-          .connect(owner)
-          .pidMap([addresses.SushiSwap_WETH_USDT, addresses.SushiSwap_WETH_ARB], [39, 2]);
-      });
-
       it("Initialize 2nd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(1);
         const index = indexSwap.attach(indexAddress);

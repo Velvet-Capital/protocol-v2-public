@@ -31,9 +31,9 @@ import {FunctionParameters} from "contracts/FunctionParameters.sol";
 import {IReward} from "./Interfaces/IReward.sol";
 
 contract AaveV3Handler is IHandler {
-  address public AAVE_POOL_V3;
-  address public WRAPPED_TOKEN_GATEWAY;
-  address public REWARD_CONTRACT;
+  address public immutable AAVE_POOL_V3;
+  address public immutable WRAPPED_TOKEN_GATEWAY;
+  address public immutable REWARD_CONTRACT;
 
   IPriceOracle internal _oracle;
 
@@ -47,7 +47,6 @@ contract AaveV3Handler is IHandler {
     bool isWETH
   );
 
-
   /**
    * @param _priceOracle address of price oracle
    * @param aave_pool address of aave protocol handler used for deposit and withdraw non-ETH
@@ -55,8 +54,12 @@ contract AaveV3Handler is IHandler {
    * @param _rewardContract address of incentive contract of aave
    */
   constructor(address _priceOracle, address aave_pool, address token_gateway, address _rewardContract) {
-    if (_priceOracle == address(0) || aave_pool == address(0) || token_gateway == address(0))
-      revert ErrorLibrary.InvalidAddress();
+    if (
+      _priceOracle == address(0) ||
+      aave_pool == address(0) ||
+      token_gateway == address(0) ||
+      _rewardContract == address(0)
+    ) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     AAVE_POOL_V3 = aave_pool;
     WRAPPED_TOKEN_GATEWAY = token_gateway;
@@ -139,29 +142,29 @@ contract AaveV3Handler is IHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    IaToken token = IaToken(t);
+    IaToken token = IaToken(_token);
     tokenBalance = token.balanceOf(_tokenHolder);
   }
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     uint256[] memory tokenBalance = new uint256[](1);
-    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(t)[0]);
+    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_token)[0]);
     tokenBalance[0] = underlyingToken.balanceOf(_tokenHolder);
     return tokenBalance;
   }
@@ -169,22 +172,22 @@ contract AaveV3Handler is IHandler {
   /**
    * @notice This function returns the USD value of the asset
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
   }
 
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
+  function getFairLpPrice(address _tokenHolder, address _token) public view returns (uint) {}
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

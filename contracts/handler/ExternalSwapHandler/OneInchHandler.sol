@@ -17,6 +17,7 @@ contract OneInchHandler is Initializable, ApproveControl, ExternalSlippageContro
   address internal swapTarget;
 
   function init(address _swapTarget, address _oracle) external initializer {
+    if (_swapTarget == address(0) || _oracle == address(0)) revert ErrorLibrary.InvalidAddress();
     swapTarget = _swapTarget;
     oracle = IPriceOracle(_oracle);
   }
@@ -27,7 +28,7 @@ contract OneInchHandler is Initializable, ApproveControl, ExternalSlippageContro
     uint256 sellAmount,
     bytes memory callData,
     address _to
-  ) public payable {
+  ) public {
     uint256 tokenBalance = IERC20Upgradeable(sellTokenAddress).balanceOf(address(this));
     if (tokenBalance < sellAmount) {
       revert ErrorLibrary.InsufficientFunds(tokenBalance, sellAmount);
@@ -53,8 +54,6 @@ contract OneInchHandler is Initializable, ApproveControl, ExternalSlippageContro
 
     validateSwap(priceSellToken, priceBuyToken);
 
-    TransferHelper.safeTransfer(buyTokenAddress, _to, IERC20Upgradeable(buyTokenAddress).balanceOf(address(this)));
+    TransferHelper.safeTransfer(buyTokenAddress, _to, buyTokenBalance);
   }
-
-  receive() external payable {}
 }

@@ -40,7 +40,6 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   IPriceOracle internal _oracle;
 
   RouterInterface internal router;
-  uint256 internal constant DIVISOR_INT = 10_000;
 
   event Deposit(address indexed user, address indexed token, uint256[] amounts, address indexed to);
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
@@ -70,6 +69,9 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
+    if (_lpAsset == address(0) || _to == address(0) || user == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
     address[] memory t = getUnderlying(_lpAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]); // wbnb
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]); // token
@@ -81,6 +83,9 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
    * @notice This function remove liquidity from the PancakeSwap protocol
    */
   function redeem(FunctionParameters.RedeemData calldata inputData) public override {
+     if (inputData._yieldAsset == address(0) || inputData._to == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
     address[] memory t = getUnderlying(inputData._yieldAsset);
     uint p1 = _oracle.getPriceForOneTokenInUSD(t[0]);
     uint p2 = _oracle.getPriceForOneTokenInUSD(t[1]);
@@ -100,28 +105,28 @@ contract BiSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
   /**
    * @notice This function returns the protocol token balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token balance of the holder
    */
-  function getTokenBalance(address _tokenHolder, address t) public view override returns (uint256 tokenBalance) {
-    return _getTokenBalance(_tokenHolder, t);
+  function getTokenBalance(address _tokenHolder, address _token) public view override returns (uint256 tokenBalance) {
+    return _getTokenBalance(_tokenHolder, _token);
   }
 
   /**
    * @notice This function returns the USD value of the LP asset using Fair LP Price model
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
-    return _calculatePriceForBalance(t, address(_oracle), _getTokenBalance(_tokenHolder, t));
+    return _calculatePriceForBalance(_token, address(_oracle), _getTokenBalance(_tokenHolder, _token));
   }
 
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {}
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {}
 
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

@@ -40,9 +40,7 @@ contract HopHandler is IHandler {
    * @param _priceOracle address of price oracle
    */
   constructor(address _priceOracle) {
-    if (_priceOracle == address(0)) {
-      revert ErrorLibrary.InvalidAddress();
-    }
+    if (_priceOracle == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
   }
 
@@ -60,7 +58,7 @@ contract HopHandler is IHandler {
     address _to,
     address user
   ) public payable override returns (uint256 _mintedAmount) {
-    if (_hopeLP == address(0) || _to == address(0)) {
+    if (_hopeLP == address(0) || _to == address(0) || user == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(_hopeLP)[0]);
@@ -148,23 +146,22 @@ contract HopHandler is IHandler {
   /**
    * @notice This function returns the underlying asset balance of the passed address
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    * @return tokenBalance t token's underlying asset balance of the holder
    */
-  function getUnderlyingBalance(address _tokenHolder, address t) public view override returns (uint256[] memory) {
-    if (t == address(0) || _tokenHolder == address(0)) {
+  function getUnderlyingBalance(address _tokenHolder, address _token) public view override returns (uint256[] memory) {
+    if (_token == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
 
     uint256[] memory expectedAmount = new uint256[](1);
-    uint256 tokenBalance = getTokenBalance(_tokenHolder, t);
+    uint256 tokenBalance = getTokenBalance(_tokenHolder, _token);
     if (tokenBalance != 0) {
-      expectedAmount[0] = getUnderlyingAmount(_tokenHolder, tokenBalance, t);
+      expectedAmount[0] = getUnderlyingAmount(_tokenHolder, tokenBalance, _token);
     }
 
     return expectedAmount;
   }
-
 
   /**
    * @notice This function returns the underlying asset balance of the passed address
@@ -175,20 +172,19 @@ contract HopHandler is IHandler {
    */
   function getUnderlyingAmount(address _tokenHolder, uint256 _amount, address token) public view returns (uint256) {
     //Here getting underlying token amount in one token
+    if (_tokenHolder == address(0) || token == address(0)) revert ErrorLibrary.InvalidAddress();
     return ISwap(IHOPELP(token).swap()).calculateRemoveLiquidityOneToken(_tokenHolder, _amount, 0);
   }
 
   /**
    * @notice This function returns the USD value of the asset
    * @param _tokenHolder Address whose balance is to be retrieved
-   * @param t Address of the protocol token
+   * @param _token Address of the protocol token
    */
-  function getTokenBalanceUSD(address _tokenHolder, address t) public view override returns (uint256) {
-    if (t == address(0) || _tokenHolder == address(0)) {
-      revert ErrorLibrary.InvalidAddress();
-    }
-    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, t);
-    address[] memory underlyingToken = getUnderlying(t);
+  function getTokenBalanceUSD(address _tokenHolder, address _token) public view override returns (uint256) {
+    if (_token == address(0) || _tokenHolder == address(0)) revert ErrorLibrary.InvalidAddress();
+    uint[] memory underlyingBalance = getUnderlyingBalance(_tokenHolder, _token);
+    address[] memory underlyingToken = getUnderlying(_token);
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance[0]);
     return balanceUSD;
@@ -222,11 +218,9 @@ contract HopHandler is IHandler {
     return expectedAmount - ((expectedAmount * _lpSlippage) / 10000);
   }
 
-  // function getToken() public returns()
+  function getFairLpPrice(address _tokenHolder, address _token) public view returns (uint) {}
 
-  function getFairLpPrice(address _tokenHolder, address t) public view returns (uint) {}
-
-  function encodeData(address t, uint256 _amount) public returns (bytes memory) {}
+  function encodeData(address _token, uint256 _amount) public returns (bytes memory) {}
 
   function getRouterAddress() public view returns (address) {}
 

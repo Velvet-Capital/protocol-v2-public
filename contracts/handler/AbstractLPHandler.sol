@@ -79,9 +79,7 @@ abstract contract UniswapV2LPHandler is SlippageControl, DustHandler {
     uint priceA,
     uint priceB
   ) internal returns (uint256 _mintedAmount) {
-    if (_lpAsset == address(0) || _to == address(0)) {
-      revert ErrorLibrary.InvalidAddress();
-    }
+    if (priceA == 0 || priceB == 0) revert ErrorLibrary.InvalidAmount();
     address[] memory underlying = _getUnderlyingTokens(_lpAsset);
     uint256 amountA;
     uint256 amountB;

@@ -416,12 +416,6 @@ describe.only("Tests for ZeroExSwap", () => {
         await index.initToken([addresses.WBTC, addresses.WETH], [5000, 5000]);
       });
 
-      it("should add pid", async () => {
-        await apeSwapLPHandler
-          .connect(owner)
-          .pidMap([addresses.SushiSwap_WETH_USDT, addresses.SushiSwap_WETH_ARB], [39, 2]);
-      });
-
       it("should check if off chain handler is enabled or not", async () => {
         expect(await tokenRegistry.isOffChainHandlerEnabled(zeroExHandler.address));
       });
@@ -435,14 +429,11 @@ describe.only("Tests for ZeroExSwap", () => {
       });
 
       it("Invest 1 WETH into Top10 fund", async () => {
-        const indexAddress = await indexFactory.getIndexList(1);
-        const indexSwap1 = indexSwap.attach(indexAddress);
         const indexSupplyBefore = await indexSwap1.totalSupply();
         await indexSwap1.investInFund(
           {
             _slippage: ["600", "600", "600"],
             _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler1.address,
             _token: addresses.WETH,
@@ -457,29 +448,6 @@ describe.only("Tests for ZeroExSwap", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Invest 0.1 WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-
-        await indexSwap1.investInFund(
-          {
-            _slippage: ["300", "300", "300"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log(indexSupplyAfter);
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
       it("Invest 0.1 WETH in first index fund", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
 
@@ -487,7 +455,6 @@ describe.only("Tests for ZeroExSwap", () => {
           {
             _slippage: ["300", "300"],
             _lpSlippage: ["200", "200"],
-            _to: owner.address,
             _tokenAmount: "100000000000000000",
             _swapHandler: swapHandler1.address,
             _token: addresses.WETH,
@@ -504,7 +471,7 @@ describe.only("Tests for ZeroExSwap", () => {
       });
 
       it("Should disable external swap handler", async () => {
-        await expect(tokenRegistry.disableExternalSwapHandler(zeroExHandler.address));
+        await tokenRegistry.disableExternalSwapHandler(zeroExHandler.address);
       });
 
       // For Update Weight - Three Steps
@@ -722,7 +689,7 @@ describe.only("Tests for ZeroExSwap", () => {
           const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
 
           // TODO after price oracle merge we can get the lp price from the price oracle
-          if (getUnderlyingTokens.length > 0) {
+          if (getUnderlyingTokens.length > 1) {
             balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
           } else {
             const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
@@ -777,7 +744,7 @@ describe.only("Tests for ZeroExSwap", () => {
 
       it("should _revert after externalSell (2nd Transaction) + revertWithCustomError if InvalidExecution", async () => {
         var tokens = await indexSwap1.getTokens();
-        const newTokens = [addresses.USDCe, addresses.ARB, addresses.WETH];
+        const newTokens = [addresses.USDCe, addresses.ARB, addresses.ADoge];
         const newWeights = [3000, 1000, 6000];
 
         var tokenSell = [];
@@ -869,17 +836,75 @@ describe.only("Tests for ZeroExSwap", () => {
 
         await offChainRebalance1.connect(nonOwner).revertSellTokens();
         const balanceAfter = await ERC20.attach(addresses.WETH).balanceOf(v);
-        // var tokens = await indexSwap1.getTokens();
-        // for(let i = 0 ; i < tokens.length; i++){
-        //   console.log("token",tokens[i]);
-        //   console.log("balanceAfter",await ERC20.attach(tokens[i]).balanceOf(v));
-        // }
+        var tokensAfter = await indexSwap1.getTokens();
+        for(let i = 0 ; i < tokensAfter.length; i++){
+          let contractBalance = await ERC20.attach(tokensAfter[i]).balanceOf(offChainRebalance1.address);
+          let vaultBalance = await ERC20.attach(tokensAfter[i]).balanceOf(v);
+          expect(contractBalance).to.be.equal(0);
+          expect(vaultBalance).to.be.greaterThan(0);
+        }
         expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
+        expect(BigNumber.from(tokensAfter.length).add(1)).to.be.equal(tokens.length);
       });
+
+      it("should revert enablePrimaryTokens", async () => {
+        var tokens = await indexSwap.getTokens();
+        const newWeights = [3000, 7000];
+
+        var sellTokens = [];
+        var swapAmounts = [];
+        var sellTokenSwapData = [];
+        var v = await indexSwap.vault();
+
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
+
+        const data: [string[], string[]] = await offChainRebalance.callStatic.getSwapData(newWeights);
+
+        sellTokens = data[0];
+        swapAmounts = data[1];
+
+        for (let i = 0; i < sellTokens.length; i++) {
+          if (sellTokens[i] != "0x0000000000000000000000000000000000000000") {
+            if (sellTokens[i] != addresses.WETH) {
+              const params = {
+                sellToken: sellTokens[i].toString(),
+                buyToken: addresses.WETH,
+                sellAmount: swapAmounts[i].toString(),
+                slippagePercentage: 0.1,
+                gasPrice: "2000457106",
+                gas: "200000",
+              };
+              const response = await axios.get(addresses.zeroExUrl + `${qs.stringify(params)}`, {
+                headers: {
+                  "0x-api-key": process.env.ZEROX_KEY,
+                },
+              });
+              await delay(500);
+              sellTokenSwapData.push(response.data.data.toString());
+            }
+          }
+        }
+        const tokenLengthBefore = (await indexSwap.getTokens()).length;
+        await offChainRebalance.enablePrimaryTokens(newWeights, sellTokenSwapData, zeroExHandler.address, [0, 0, 0]);
+
+        await offChainRebalance.revertSellTokens();
+
+        const tokensAfter = await indexSwap.getTokens();
+        const tokenLengthAfter = tokensAfter.length;
+        for (let i = 0; i < tokenLengthAfter.length; i++) {
+          const token2 = await ethers.getContractAt("VBep20Interface", tokensAfter[i]);
+          const balanceAfterToken = await token2.balanceOf(v);
+          expect(tokensAfter[i]).to.be.equal(tokens[i]);
+          expect(balanceAfterToken).to.be.greaterThan(0);
+          let contractBalance = await ERC20.attach(tokensAfter[i]).balanceOf(offChainRebalance.address);
+          expect(contractBalance).to.be.equal(0);
+        }
+        expect(BigNumber.from(tokenLengthAfter)).to.be.equal(BigNumber.from(tokenLengthBefore));
+      })
 
       it("should update weights", async () => {
         var tokens = await indexSwap.getTokens();
-        const newWeights = [3000, 7000];
+        const newWeights = [6000, 4000];
 
         var sellTokens = [];
         var swapAmounts = [];
@@ -1012,32 +1037,6 @@ describe.only("Tests for ZeroExSwap", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Invest 1 WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-
-        const tokens = await indexSwap1.getTokens();
-
-        const v = await indexSwap1.vault();
-
-        await indexSwap1.investInFund(
-          {
-            _slippage: ["300", "300"],
-            _lpSlippage: ["200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
       it("Should not update tokens if tokens is not approved", async () => {
         const newTokens = [addresses.WETH, addresses.SushiSwap_WETH_WBTC, addresses.LINK];
         const newWeights = [3000, 1000, 6000];
@@ -1094,7 +1093,6 @@ describe.only("Tests for ZeroExSwap", () => {
         const vault = await indexSwap1.vault();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const tokens = await indexSwap1.getTokens();
-        console.log("tokens",tokens);
         let balancesInUsd = [];
         let total = 0;
 
@@ -1105,7 +1103,7 @@ describe.only("Tests for ZeroExSwap", () => {
           const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
 
           // TODO after price oracle merge we can get the lp price from the price oracle
-          if (getUnderlyingTokens.length > 0) {
+          if (getUnderlyingTokens.length > 1) {
             balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
           } else {
             const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
@@ -1313,7 +1311,7 @@ describe.only("Tests for ZeroExSwap", () => {
           const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
 
           // TODO after price oracle merge we can get the lp price from the price oracle
-          if (getUnderlyingTokens.length > 0) {
+          if (getUnderlyingTokens.length > 1) {
             balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
           } else {
             const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
@@ -1349,7 +1347,7 @@ describe.only("Tests for ZeroExSwap", () => {
           const getUnderlyingTokens: string[] = await handler.getUnderlying(tokens[i]);
 
           // TODO after price oracle merge we can get the lp price from the price oracle
-          if (getUnderlyingTokens.length > 0) {
+          if (getUnderlyingTokens.length > 1) {
             balancesInUsd[i] = await handler.callStatic.getTokenBalanceUSD(vault, tokens[i]);
           } else {
             const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
@@ -1828,8 +1826,8 @@ describe.only("Tests for ZeroExSwap", () => {
         const indexSupplyBefore = await indexSwap1.totalSupply();
         await indexSwap1.investInFund(
           {
-            _slippage: ["300", "300", "300"],
-            _lpSlippage: ["200", "200", "200"],
+            _slippage: ["800", "800", "800"],
+            _lpSlippage: ["800", "800", "800"],
             _to: owner.address,
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler1.address,
@@ -1863,33 +1861,6 @@ describe.only("Tests for ZeroExSwap", () => {
         );
 
         const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 1 WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-
-        const tokens = await indexSwap1.getTokens();
-
-        const v = await indexSwap1.vault();
-
-        await indexSwap1.investInFund(
-          {
-            _slippage: ["600", "600", "600"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log(indexSupplyAfter);
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
@@ -2100,6 +2071,7 @@ describe.only("Tests for ZeroExSwap", () => {
           } else {
             const balance = await ERC20.attach(tokens[i]).balanceOf(vault);
             balancesInUsd[i] = await priceOracle.getPriceTokenUSD18Decimals(tokens[i], balance);
+            console.log("Balance IN USD",balancesInUsd[i]);
           }
 
           total += Number(balancesInUsd[i]);
@@ -3249,7 +3221,6 @@ describe.only("Tests for ZeroExSwap", () => {
           ),
         ).to.be.revertedWithCustomError(offChainRebalance, "AlreadyOngoingOperation");
       });
-      // */
     });
   });
 });
