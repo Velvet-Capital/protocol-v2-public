@@ -16,6 +16,7 @@ contract KyberSwapHandler is Initializable, ApproveControl, ExternalSlippageCont
   IPriceOracle internal oracle;
 
   function init(address _swapTarget, address _oracle) external initializer {
+    if (_swapTarget == address(0) || _oracle == address(0)) revert ErrorLibrary.InvalidAddress();
     swapTarget = _swapTarget;
     oracle = IPriceOracle(_oracle);
   }

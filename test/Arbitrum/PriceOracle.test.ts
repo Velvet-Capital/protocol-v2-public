@@ -30,7 +30,6 @@ describe.only("Tests for priceOracle", () => {
   let addr2: SignerWithAddress;
   let addr1: SignerWithAddress;
   let addrs: SignerWithAddress[];
-  let mockPriceOracle: any;
   //const APPROVE_INFINITE = ethers.BigNumber.from(1157920892373161954235); //115792089237316195423570985008687907853269984665640564039457
   let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
   let token;
@@ -41,40 +40,10 @@ describe.only("Tests for priceOracle", () => {
 
   describe("Tests for priceOracle contract", () => {
     before(async () => {
-      const PriceOracle = await ethers.getContractFactory("MockPriceOracle");
-      mockPriceOracle = await PriceOracle.deploy();
-      await mockPriceOracle.deployed();
 
       const TokenRegistry = await ethers.getContractFactory("TokenRegistry");
       tokenRegistry = await TokenRegistry.deploy();
       await tokenRegistry.deployed();
-
-      const tx = await mockPriceOracle._addFeed(
-        [
-          addresses.WETH,
-          addresses.USDT,
-          "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-          addresses.WBTC,
-          addresses.USDT,
-          addresses.ADoge,
-        ],
-        [
-          "0x0000000000000000000000000000000000000348",
-          "0x0000000000000000000000000000000000000348",
-          "0x0000000000000000000000000000000000000348",
-          "0x0000000000000000000000000000000000000348",
-          addresses.WETH,
-          "0x0000000000000000000000000000000000000348",
-        ],
-        [
-          "0x639fe6ab55c921f74e7fac1ee960c0b6293ba612",
-          "0x3f3f5df88dc9f13eac63df89ec16ef6e7e25dde7",
-          "0x639fe6ab55c921f74e7fac1ee960c0b6293ba612",
-          "0xc5a90A6d7e4Af242dA238FFe279e9f2BA0c64B2e",
-          "0x07C5b924399cc23c24a95c8743DE4006a32b7f2a",
-          "0x9a7fb1b3950837a8d9b40517626e11d4127c098c",
-        ],
-      );
 
       accounts = await ethers.getSigners();
       [owner, investor1, nonOwner, addr1, addr2, treasury, ...addrs] = accounts;
@@ -93,18 +62,18 @@ describe.only("Tests for priceOracle", () => {
 
       swapHandler.init(addresses.SushiSwapRouterAddress, priceOracle.address);
 
-      const wethPrice = await priceOracle.getPrice(addresses.WETH, "0x0000000000000000000000000000000000000348");
-      const usdtPrice = await priceOracle.getPrice(addresses.USDT, "0x0000000000000000000000000000000000000348");
-      const dogePrice = await priceOracle.getPrice(addresses.ADoge, "0x0000000000000000000000000000000000000348");
-      const normalPrice = await priceOracle.getPrice(
-        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "0x0000000000000000000000000000000000000348",
-      );
-      console.log("wethPrice", wethPrice);
-      await mockPriceOracle.setMockData(addresses.WETH, wethPrice);
-      await mockPriceOracle.setMockData(addresses.USDT, usdtPrice);
-      await mockPriceOracle.setMockData(addresses.ADoge, "0");
-      await mockPriceOracle.setMockData("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", normalPrice);
+      // const wethPrice = await priceOracle.getPrice(addresses.WETH, "0x0000000000000000000000000000000000000348");
+      // const usdtPrice = await priceOracle.getPrice(addresses.USDT, "0x0000000000000000000000000000000000000348");
+      // const dogePrice = await priceOracle.getPrice(addresses.ADoge, "0x0000000000000000000000000000000000000348");
+      // const normalPrice = await priceOracle.getPrice(
+      //   "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      //   "0x0000000000000000000000000000000000000348",
+      // );
+      // console.log("wethPrice", wethPrice);
+      // await mockPriceOracle.setMockData(addresses.WETH, wethPrice);
+      // await mockPriceOracle.setMockData(addresses.USDT, usdtPrice);
+      // await mockPriceOracle.setMockData(addresses.ADoge, "0");
+      // await mockPriceOracle.setMockData("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", normalPrice);
     });
 
     describe("priceOracle Contract", function () {

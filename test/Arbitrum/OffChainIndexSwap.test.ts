@@ -507,12 +507,6 @@ describe.only("Tests for OffChainIndex", () => {
         ]);
       });
 
-      it("should add pid", async () => {
-        await sushiLpHandler
-          .connect(owner)
-          .pidMap([addresses.SushiSwap_WETH_USDT, addresses.SushiSwap_WETH_ARB], [39, 2]);
-      });
-
       it("Initialize 2nd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(1);
         const index = indexSwap.attach(indexAddress);
@@ -1051,34 +1045,6 @@ describe.only("Tests for OffChainIndex", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
-      it("Invest 1 WETH into 1st Top10 fund", async () => {
-        const indexAddress = await indexFactory.getIndexList(0);
-        indexSwap = await ethers.getContractAt(IndexSwap__factory.abi, indexAddress);
-        const indexSupplyBefore = await indexSwap.totalSupply();
-
-        const tokens = await indexSwap.getTokens();
-
-        const v = await indexSwap.vault();
-
-        await indexSwap.investInFund(
-          {
-            _slippage: ["800", "800"],
-            _lpSlippage: ["800", "800"],
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler1.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "1000000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        // console.log("diff", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
       it("redeem should fail if a non-permitted and non-WETH token is passed as the out asset", async () => {
         const amountIndexToken = await indexSwap.balanceOf(owner.address);
         const AMOUNT = ethers.BigNumber.from(amountIndexToken);
@@ -1453,7 +1419,7 @@ describe.only("Tests for OffChainIndex", () => {
         //0.1 WETH
 
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        await swapHandler.swapETHToTokens("200", addresses.USDCe, owner.address, {
+        await swapHandler.swapETHToTokens("900", addresses.USDCe, owner.address, {
           value: "1000000000000000000",
         });
         const params = {

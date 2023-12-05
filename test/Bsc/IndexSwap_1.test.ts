@@ -226,7 +226,7 @@ describe.only("Tests for MixedIndex", () => {
           iaddress.daiAddress,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
           addresses.MAIN_LP_DAI,
           addresses.SIDE_LP_BUSD,
           addresses.LP_BNBx,
@@ -286,7 +286,7 @@ describe.only("Tests for MixedIndex", () => {
         iaddress.daiAddress,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
-        addresses.MAIN_LP_BUSD,
+        addresses.MAIN_LP_USDT,
         addresses.MAIN_LP_DAI,
         addresses.SIDE_LP_BUSD,
         addresses.LP_BNBx,
@@ -468,15 +468,6 @@ describe.only("Tests for MixedIndex", () => {
         await expect(
           indexSwap.initToken([iaddress.wbnbAddress, iaddress.busdAddress], ["5000", "5000"]),
         ).to.be.revertedWithCustomError(indexSwap, "AlreadyInitialized");
-      });
-
-      it("should add pid", async () => {
-        await pancakeLpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0]);
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0]);
-      });
-
-      it("should remove pid", async () => {
-        await apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0]);
       });
 
       it("asset manager should not be able to add token which is not approved in registry", async () => {
@@ -692,7 +683,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should return false if both of the token in pool is not bnb", async () => {
-        expect(await exchange.callStatic.isWETH(addresses.MAIN_LP_BUSD, wombatHandler.address)).to.be.false;
+        expect(await exchange.callStatic.isWETH(addresses.MAIN_LP_USDT, wombatHandler.address)).to.be.false;
       });
 
       it("Invest 1BNB into Top10 fund", async () => {
@@ -771,7 +762,7 @@ describe.only("Tests for MixedIndex", () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.MAIN_LP_BUSD, addresses.LP_BNBx, addresses.MAIN_LP_DAI, addresses.Cake_BUSDLP_Address],
+            tokens: [addresses.MAIN_LP_USDT, addresses.LP_BNBx, addresses.MAIN_LP_DAI, addresses.Cake_BUSDLP_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 5000, 1000, 1000],
             _slippageSell: ["200", "200", "200"],
@@ -785,7 +776,7 @@ describe.only("Tests for MixedIndex", () => {
 
           await expect(
             rebalancing.updateTokens({
-              tokens: [addresses.MAIN_LP_BUSD, addresses.LP_BNBx, addresses.MAIN_LP_BUSD, addresses.Cake_BUSDLP_Address],
+              tokens: [addresses.MAIN_LP_USDT, addresses.LP_BNBx, addresses.MAIN_LP_USDT, addresses.Cake_BUSDLP_Address],
               _swapHandler: swapHandler.address,
               denorms: [2000, 5000, 1000, 2000],
               _slippageSell: ["200", "200", "200"],
@@ -798,7 +789,7 @@ describe.only("Tests for MixedIndex", () => {
 
             await expect(
               rebalancing.updateTokens({
-                tokens: [addresses.MAIN_LP_BUSD, addresses.LP_BNBx, addresses.MAIN_LP_BUSD, addresses.Cake_BUSDLP_Address],
+                tokens: [addresses.MAIN_LP_USDT, addresses.LP_BNBx, addresses.MAIN_LP_USDT, addresses.Cake_BUSDLP_Address],
                 _swapHandler: swapHandler.address,
                 denorms: [2000, 5000, 1000, 2000],
                 _slippageSell: ["200", "200", "200"],
@@ -830,7 +821,7 @@ describe.only("Tests for MixedIndex", () => {
 
         await rebalancing.connect(nonOwner).updateTokens({
           tokens: [
-            addresses.MAIN_LP_BUSD,
+            addresses.MAIN_LP_USDT,
             addresses.LP_BNBx,
             addresses.BSwap_WBNB_LINKLP_Address,
             addresses.Cake_BUSDLP_Address,

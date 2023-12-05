@@ -296,4 +296,8 @@ library ErrorLibrary {
   error WrongAssetBeingSupplied();
   /// @notice Throws when wrong asset is being withdrawn from the Compound v3 Protocol
   error WrongAssetBeingWithdrawn();
+  /// @notice Throws when sequencer is down
+  error SequencerIsDown();
+  /// @notice Throws when sequencer threshold is not crossed
+  error SequencerThresholdNotCrossed();
 }

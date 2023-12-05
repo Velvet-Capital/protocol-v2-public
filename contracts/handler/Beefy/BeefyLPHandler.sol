@@ -50,7 +50,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
    * @param _lpHandlerAddress address of lp handler used in beefy protocol
    */
   constructor(address _lpHandlerAddress, address _priceOracle) {
-     if(_priceOracle == address(0) || _lpHandlerAddress == address(0)){
+    if (_priceOracle == address(0) || _lpHandlerAddress == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     lpHandlerAddress = _lpHandlerAddress;

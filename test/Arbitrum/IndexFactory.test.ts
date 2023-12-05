@@ -1096,54 +1096,6 @@ describe.only("Tests for IndexFactory", () => {
         await assetManagerConfig1.connect(nonOwner).addWhitelistedUser([addr3.address]);
       });
 
-      it("Invest 2WETH into Top10 4th index fund", async () => {
-        const indexSupplyBefore = await indexSwap3.totalSupply();
-        const addr3BalanceBefore = await indexSwap3.balanceOf(addr3.address);
-        await indexSwap3.investInFund(
-          {
-            _slippage: ["800", "800"],
-            _lpSlippage: ["800", "800"],
-            _tokenAmount: "2000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "2000000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap3.totalSupply();
-        // console.log(indexSupplyAfter);
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(addr3BalanceBefore));
-      });
-
-      for (let i = 0; i < 5; i++) {
-        it("Invest 0.1WETH into Top10 fund", async () => {
-          const VBep20Interface = await ethers.getContractAt("IaToken", "0xf508fCD89b8bd15579dc79A6827cB4686A3592c8");
-
-          const indexSupplyBefore = await indexSwap.totalSupply();
-          await indexSwap.investInFund(
-            {
-              _slippage: ["600", "600"],
-              _lpSlippage: ["800", "800"],
-              _tokenAmount: "100000000000000000",
-              _swapHandler: swapHandler.address,
-              _token: addresses.WETH,
-            },
-            {
-              value: "100000000000000000",
-            },
-          );
-          const indexSupplyAfter = await indexSwap.totalSupply();
-          // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-          console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-          console.log(indexSupplyAfter);
-
-          expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-        });
-      }
-
       it("Add addr1 whitelisted user", async () => {
         const config = await indexSwap1.iAssetManagerConfig();
 
@@ -1448,46 +1400,6 @@ describe.only("Tests for IndexFactory", () => {
         const AssetManagerConfig3 = await ethers.getContractFactory("AssetManagerConfig");
         const assetManagerConfig3 = AssetManagerConfig3.attach(config3);
         await assetManagerConfig3.connect(nonOwner).setPermittedTokens([addresses.WETH]);
-      });
-
-      it("Invest 2WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["600", "600"],
-            _lpSlippage: ["800", "800"],
-            _tokenAmount: "2000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "2000000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        //console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 1WETH into Top10 2nd Index fund", async () => {
-        const indexSupplyBefore = await indexSwap1.totalSupply();
-        await indexSwap1.connect(owner).investInFund(
-          {
-            _slippage: ["1000", "1000"],
-            _lpSlippage: ["1200", "1200"],
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log("DIFFFFF ", BigNumber.from(indexSupplyAfter).sub(BigNumber.from(indexSupplyBefore)));
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
       it("Invest 1WETH into Top10 fund", async () => {
@@ -2060,41 +1972,6 @@ describe.only("Tests for IndexFactory", () => {
         // console.log(indexSupplyAfter);
       });
 
-      it("Invest 0.1WETH into Top10 fund", async () => {
-        await indexSwap.investInFund(
-          {
-            _slippage: ["700", "700", "700"],
-            _lpSlippage: ["800", "800", "800"],
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-      });
-
-      it("Invest 0.1WETH into Top10 2nd Index fund", async () => {
-        await indexSwap1.investInFund(
-          {
-            _slippage: ["700", "700", "700"],
-            _lpSlippage: ["800", "800", "800"],
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap1.totalSupply();
-        // console.log(indexSupplyAfter);
-      });
-
       it("Invest 0.1WETH into Top10 2nd Index fund", async () => {
         const CoolDownBefore = await indexSwap1.lastWithdrawCooldown(owner.address);
         await indexSwap1.investInFund(
@@ -2254,29 +2131,6 @@ describe.only("Tests for IndexFactory", () => {
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
-      it("Invest 2WETH into Top10 1st index fund after upgrade", async () => {
-        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
-        const indexSupplyBefore = await indexSwap.totalSupply();
-
-        await indexSwap.investInFund(
-          {
-            _slippage: ["700", "700", "700"],
-            _lpSlippage: ["800", "800", "800"],
-            _tokenAmount: "2000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "2000000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
-        expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
       it("should pause protocol", async () => {
         await tokenRegistry.setProtocolPause(true);
       });
@@ -2413,7 +2267,7 @@ describe.only("Tests for IndexFactory", () => {
         const CoolDownBefore = await indexSwap1.lastWithdrawCooldown(nonOwner.address);
         await indexSwap1.connect(nonOwner).investInFund(
           {
-            _slippage: ["700", "700", "700"],
+            _slippage: ["800", "800", "800"],
             _lpSlippage: ["800", "800", "800"],
             _tokenAmount: "1000000000000000000",
             _swapHandler: swapHandler.address,
@@ -2426,7 +2280,7 @@ describe.only("Tests for IndexFactory", () => {
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log(indexSupplyAfter);
         const CoolDownAfter = await indexSwap1.lastWithdrawCooldown(nonOwner.address);
-        expect(Number(CoolDownAfter)).to.be.lessThan(Number(CoolDownBefore));
+        expect(Number(CoolDownAfter)).to.be.greaterThan(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 

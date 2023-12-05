@@ -503,16 +503,6 @@ describe.only("Tests for MixedIndex", () => {
         );
       });
 
-      it("should add pid", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDCe], [0]);
-      });
-
-      it("should remove pid", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [39]);
-
-        expect(await apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [39]));
-      });
-
       it("asset manager should not be able to add token which is not approved in registry", async () => {
         const config = await indexSwap.iAssetManagerConfig();
         const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");

@@ -55,7 +55,7 @@ contract AaveV3Handler is IHandler {
    * @param _rewardContract address of incentive contract of aave
    */
   constructor(address _priceOracle, address aave_pool, address token_gateway, address _rewardContract) {
-    if (_priceOracle == address(0) || aave_pool == address(0) || token_gateway == address(0))
+    if (_priceOracle == address(0) || aave_pool == address(0) || token_gateway == address(0) || _rewardContract == address(0))
       revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     AAVE_POOL_V3 = aave_pool;

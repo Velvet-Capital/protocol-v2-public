@@ -59,8 +59,8 @@ contract ApeSwapLPHandler is IHandler, SlippageControl, UniswapV2LPHandler {
    * @param _priceOracle address of price oracle
    * @param _routerAddress address of apwSwapLp protocol router used for deposit and withdraw non-ETH
    */
-  constructor(address _priceOracle,address _routerAddress) {
-    if(_priceOracle == address(0) || _routerAddress == address(0)){
+  constructor(address _priceOracle, address _routerAddress) {
+    if (_priceOracle == address(0) || _routerAddress == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     router = RouterInterface(_routerAddress);

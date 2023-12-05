@@ -243,7 +243,7 @@ describe.only("Tests for IndexFactory", () => {
           addresses.vDAI_Address,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
           addresses.mooValasBUSD,
           addresses.mooVenusBNB,
           addresses.mooValasBTCB,
@@ -379,7 +379,7 @@ describe.only("Tests for IndexFactory", () => {
         addresses.vDAI_Address,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
-        addresses.MAIN_LP_BUSD,
+        addresses.MAIN_LP_USDT,
         addresses.mooValasBUSD,
         addresses.mooVenusBNB,
         addresses.mooValasBTCB,
@@ -741,6 +741,14 @@ describe.only("Tests for IndexFactory", () => {
           .withArgs("10000");
       });
 
+      it("initialize should revert for token duplicates", async () => {
+        const indexAddress = await indexFactory.getIndexList(0);
+        const index = indexSwap.attach(indexAddress);
+        await expect(
+          index.initToken([iaddress.btcAddress, iaddress.btcAddress], [5000, 5000]),
+        ).to.be.revertedWithCustomError(indexSwap, "TokenAlreadyExist");
+      });
+
       it("initialize should revert if tokens and denorms length is not equal", async () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
@@ -766,7 +774,7 @@ describe.only("Tests for IndexFactory", () => {
       it("Initialize 2nd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(1);
         const index = indexSwap.attach(indexAddress);
-        await index.connect(nonOwner).initToken([iaddress.btcAddress, addresses.MAIN_LP_BUSD], [5000, 5000]);
+        await index.connect(nonOwner).initToken([iaddress.btcAddress, addresses.MAIN_LP_USDT], [5000, 5000]);
       });
 
       it("Initialize 3rd IndexFund Tokens", async () => {
@@ -2408,7 +2416,7 @@ describe.only("Tests for IndexFactory", () => {
           addresses.vDAI_Address,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
           addresses.mooValasBUSD,
           addresses.mooVenusBNB,
           addresses.mooValasBTCB,

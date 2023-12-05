@@ -210,7 +210,7 @@ describe.only("Tests for OffChainIndex", () => {
           addresses.vDAI_Address,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
           addresses.mooValasBUSD,
           addresses.MAIN_LP_DAI,
         ],
@@ -298,7 +298,7 @@ describe.only("Tests for OffChainIndex", () => {
         addresses.vDAI_Address,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
-        addresses.MAIN_LP_BUSD,
+        addresses.MAIN_LP_USDT,
         addresses.mooValasBUSD,
         addresses.MAIN_LP_DAI,
       ];
@@ -498,12 +498,6 @@ describe.only("Tests for OffChainIndex", () => {
           iaddress.ethAddress,
           iaddress.dogeAddress,
         ]);
-      });
-
-      it("should add pid", async () => {
-        await pancakeLpHandler
-          .connect(owner)
-          .pidMap([addresses.Cake_BUSDLP_Address, addresses.Cake_WBNBLP_Address], [39, 0]);
       });
 
       it("Initialize 2nd IndexFund Tokens", async () => {

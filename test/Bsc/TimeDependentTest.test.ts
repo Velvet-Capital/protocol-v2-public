@@ -620,14 +620,14 @@ describe.only("Tests for TimeDependent", () => {
         it("Initialize 1st IndexFund Tokens", async () => {
             const indexAddress = await indexFactory.getIndexList(0);
             const index = indexSwap.attach(indexAddress);
-            await index.initToken([addresses.MAIN_LP_BUSD, addresses.Cake_WBNBLP_Address], [5000, 5000]);
+            await index.initToken([addresses.MAIN_LP_USDT, addresses.Cake_WBNBLP_Address], [5000, 5000]);
           });
     
         it("Initialize 2nd IndexFund Tokens", async () => {
           const indexAddress = await indexFactory.getIndexList(1);
           const index = indexSwap.attach(indexAddress);
           await index.initToken( 
-          [addresses.MAIN_LP_BUSD, addresses.BSwap_BTC_WBNBLP_Address, addresses.mooBTCBUSDLP],
+          [addresses.MAIN_LP_USDT, addresses.BSwap_BTC_WBNBLP_Address, addresses.mooBTCBUSDLP],
           [5000, 2500, 2500]
           ); 
         });
@@ -641,7 +641,7 @@ describe.only("Tests for TimeDependent", () => {
         it("Initialize 4th IndexFund Tokens", async () => {
           const indexAddress = await indexFactory.getIndexList(3);
           const index = indexSwap.attach(indexAddress);
-          await index.initToken([addresses.MAIN_LP_BUSD, addresses.WBNB, addresses.vETH_Address,iaddress.btcAddress],
+          await index.initToken([addresses.MAIN_LP_USDT, addresses.WBNB, addresses.vETH_Address,iaddress.btcAddress],
             [2500, 2500, 2500, 2500]);
         });
         it("Invest 1BNB into Top10 fund", async () => {
@@ -837,7 +837,7 @@ describe.only("Tests for TimeDependent", () => {
         it("should claim tokens", async () => {
           await ethers.provider.send("evm_increaseTime", [3153600]);
   
-          let tokens = [addresses.MAIN_LP_BUSD];
+          let tokens = [addresses.MAIN_LP_USDT];
           await indexSwap1.claimTokens(tokens);
   
           const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
@@ -868,7 +868,7 @@ describe.only("Tests for TimeDependent", () => {
         it("should claim tokens", async () => {
           await ethers.provider.send("evm_increaseTime", [3153600]);
   
-          let tokens = [addresses.MAIN_LP_BUSD];
+          let tokens = [addresses.MAIN_LP_USDT];
           await indexSwap.claimTokens(tokens);
   
           const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
@@ -1023,7 +1023,7 @@ describe.only("Tests for TimeDependent", () => {
         it("should claim tokens", async () => {
           await ethers.provider.send("evm_increaseTime", [3153600]);
   
-          let tokens = [addresses.MAIN_LP_BUSD];
+          let tokens = [addresses.MAIN_LP_USDT];
           await indexSwap3.claimTokens(tokens);
   
           const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");

@@ -214,7 +214,7 @@ describe.only("Tests for ZeroExSwap", () => {
           addresses.vDAI_Address,
           addresses.Cake_BUSDLP_Address,
           addresses.Cake_WBNBLP_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
         ],
         [
           baseHandler.address,
@@ -278,7 +278,7 @@ describe.only("Tests for ZeroExSwap", () => {
         addresses.vDAI_Address,
         addresses.Cake_BUSDLP_Address,
         addresses.Cake_WBNBLP_Address,
-        addresses.MAIN_LP_BUSD,
+        addresses.MAIN_LP_USDT,
       ];
 
       let whitelist = [owner.address];
@@ -397,12 +397,6 @@ describe.only("Tests for ZeroExSwap", () => {
         const indexAddress = await indexFactory.getIndexList(0);
         const index = indexSwap.attach(indexAddress);
         await index.initToken([iaddress.btcAddress, iaddress.ethAddress], [5000, 5000]);
-      });
-
-      it("should add pid", async () => {
-        await pancakeLpHandler
-          .connect(owner)
-          .pidMap([addresses.Cake_BUSDLP_Address, addresses.Cake_WBNBLP_Address], [39, 2]);
       });
 
       it("should check if off chain handler is enabled or not", async () => {

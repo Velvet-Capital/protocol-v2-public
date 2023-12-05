@@ -288,7 +288,7 @@ describe.only("Tests for MetaAggregator", () => {
           addresses.Cake_WBNBLP_Address,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
           addresses.oBNB,
           addresses.vETH_Address,
         ],
@@ -347,7 +347,7 @@ describe.only("Tests for MetaAggregator", () => {
           addresses.Cake_WBNBLP_Address,
           addresses.BSwap_BTC_WBNBLP_Address,
           addresses.ApeSwap_ETH_BTCB_Address,
-          addresses.MAIN_LP_BUSD,
+          addresses.MAIN_LP_USDT,
           addresses.oBNB,
           addresses.vETH_Address,
       ];
@@ -634,7 +634,7 @@ describe.only("Tests for MetaAggregator", () => {
       it("Initialize 3rd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(2);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([iaddress.btcAddress, addresses.MAIN_LP_BUSD], [5000, 5000]);
+        await index.initToken([iaddress.btcAddress, addresses.MAIN_LP_USDT], [5000, 5000]);
       });
 
       it("Initialize 4th IndexFund Tokens", async () => {
@@ -2262,7 +2262,7 @@ describe.only("Tests for MetaAggregator", () => {
         const tokens = await indexSwap6.getTokens();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const sToken = tokens[0];
-        const bToken = addresses.MAIN_LP_BUSD;
+        const bToken = addresses.MAIN_LP_USDT;
         const sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap6.vault());
         const tx = await metaAggregator6.redeem(sAmount, "200", sToken);
 
@@ -3497,7 +3497,7 @@ describe.only("Tests for MetaAggregator", () => {
         const tokens = await indexSwap4.getTokens();
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const sToken = tokens[1];
-        const bToken = addresses.MAIN_LP_BUSD;
+        const bToken = addresses.MAIN_LP_USDT;
 
         const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
         const handlerAddress0 = tokenInfo0[2];
@@ -3610,7 +3610,7 @@ describe.only("Tests for MetaAggregator", () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
 
         var sToken = tokens[0];
-        var bToken = addresses.MAIN_LP_BUSD;
+        var bToken = addresses.MAIN_LP_USDT;
         var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap4.vault());
         var zeroExparams = {};
         var MetaSwapData = {};
