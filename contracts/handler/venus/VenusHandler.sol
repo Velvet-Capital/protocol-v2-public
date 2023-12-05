@@ -44,7 +44,7 @@ contract VenusHandler is IHandler {
    * @param comptroller address of venus protocol router used for deposit and withdraw
    */
   constructor(address _priceOracle, address comptroller) {
-    if(_priceOracle == address(0)){
+    if (_priceOracle == address(0) || comptroller == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     _oracle = IPriceOracle(_priceOracle);

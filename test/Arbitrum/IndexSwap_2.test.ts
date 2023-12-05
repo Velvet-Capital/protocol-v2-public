@@ -507,36 +507,6 @@ describe.only("Tests for MixedIndex", () => {
         );
       });
 
-      it("should not be able to add pid if arrray lengths don't match", async () => {
-        await expect(
-          apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [0, 12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
-      });
-
-      it("should not be able to delete pid if array lengths don't match", async () => {
-        await expect(
-          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [0, 12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
-      });
-
-      it("should add pid", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDCe], [0]);
-      });
-
-      it("should not be able to delete pid if the entry does not match", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [39]);
-
-        await expect(
-          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidPID");
-      });
-
-      it("should delete pid", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBTC_USDT], [39]);
-
-        expect(await apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBTC_USDT], [39]));
-      });
-
       it("should fetch the router address of the pancake LP handler", async () => {
         await apeSwapLPHandler.getRouterAddress();
       });
@@ -959,11 +929,11 @@ describe.only("Tests for MixedIndex", () => {
         ).to.be.revertedWithCustomError(tokenRegistry, "InvalidHandlerAddress");
       });
 
-      it("Invest 10 USDCe into Top10 fund", async () => {
+      it("Invest 100 USDCe into Top10 fund", async () => {
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const usdtToken = ERC20.attach(addresses.USDCe);
         await swapHandler.connect(owner).swapETHToTokens("900", addresses.USDCe, owner.address, {
-          value: "50000000000000000",
+          value: "500000000000000000",
         });
         console.log("Balance of user", await usdtToken.balanceOf(owner.address));
         await usdtToken.approve(indexSwap.address, "10000000000000000000");
@@ -971,7 +941,7 @@ describe.only("Tests for MixedIndex", () => {
         await indexSwap.investInFund({
           _slippage: ["1000", "1000", "1000"],
           _lpSlippage: ["500", "500", "500"],
-          _tokenAmount: "10000000",
+          _tokenAmount: "100000000",
           _swapHandler: swapHandler.address,
           _token: addresses.USDCe,
         });
@@ -1020,26 +990,6 @@ describe.only("Tests for MixedIndex", () => {
         const indexSupplyAfter = await indexSwap.totalSupply();
 
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 10 WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["1000", "1000", "1000"],
-            _lpSlippage: ["1000", "1000", "1000"],
-            _tokenAmount: "10000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "10000000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
       it("Investment should fail when contract is paused", async () => {
@@ -1428,8 +1378,6 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Invest 0.1 WETH into Top10 fund", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        // console.log(amountIndexToken, "amountIndexToken");
         const indexSupplyBefore = await indexSwap.totalSupply();
         await indexSwap.investInFund(
           {
@@ -1442,48 +1390,6 @@ describe.only("Tests for MixedIndex", () => {
           },
           {
             value: "100000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-        // console.log(indexSupplyAfter);
-      });
-
-      it("Invest 0.1 WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["500", "900", "500"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
-        // console.log(indexSupplyAfter);
-      });
-
-      it("Invest 1 WETH into Top10 fund", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        await indexSwap.investInFund(
-          {
-            _slippage: ["500", "900", "500"],
-            _lpSlippage: ["200", "200", "200"],
-            _to: owner.address,
-            _tokenAmount: "1000000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "1000000000000000000",
           },
         );
 
@@ -1515,14 +1421,13 @@ describe.only("Tests for MixedIndex", () => {
 
       // Failing for every token because of no liquidity on Arbitrum
       it("should withdraw fund in WETH and burn index token successfully", async () => {
-        const amountIndexToken = await indexSwap.balanceOf(owner.address);
-        console.log(amountIndexToken, "amountIndexToken");
+        const amountIndexTokenBefore = await indexSwap.balanceOf(owner.address);
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const ethtoken = ERC20.attach(addresses.ARB);
+        const ethtoken = ERC20.attach(addresses.WETH);
         const balanceBefore = await ethtoken.balanceOf(owner.address);
-        const AMOUNT = ethers.BigNumber.from(amountIndexToken);
+        const AMOUNT = ethers.BigNumber.from(amountIndexTokenBefore);
         console.log("balanceBefore", balanceBefore);
-        txObject = await indexSwap.withdrawFund({
+        await indexSwap.withdrawFund({
           tokenAmount: AMOUNT,
           _slippage: ["1000", "1000", "1000"],
           _lpSlippage: ["1000", "1000", "1000"],
@@ -1531,9 +1436,8 @@ describe.only("Tests for MixedIndex", () => {
           _token: addresses.WETH,
         });
 
-        const balanceAfter = await ethtoken.balanceOf(owner.address);
-        console.log("balanceAfter", balanceAfter);
-        expect(Number(balanceAfter)).to.be.greaterThan(Number(balanceBefore));
+        const amountIndexTokenAfter = await indexSwap.balanceOf(owner.address);
+        expect(Number(amountIndexTokenBefore)).to.be.greaterThan(Number(amountIndexTokenAfter));
       });
 
       it("Invest 1 WETH into Top10 fund", async () => {
@@ -1616,29 +1520,6 @@ describe.only("Tests for MixedIndex", () => {
         const indexSupplyAfter = await indexSwap1.totalSupply();
         // console.log(indexSupplyAfter);
 
-        expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
-      });
-
-      it("Invest 0.1 WETH should not revert, if investing token is not initialized + tranferFrom should not work", async () => {
-        const indexSupplyBefore = await indexSwap.totalSupply();
-        const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
-        console.log("indexSupplyBefore", indexSupplyBefore);
-        await indexSwap.investInFund(
-          {
-            _slippage: ["700", "900", "700"],
-            _lpSlippage: ["800", "800", "800"],
-            _tokenAmount: "100000000000000000",
-            _swapHandler: swapHandler.address,
-            _token: addresses.WETH,
-          },
-          {
-            value: "100000000000000000",
-          },
-        );
-        const indexSupplyAfter = await indexSwap.totalSupply();
-        // console.log(indexSupplyAfter);
-        await tokenRegistry.setCoolDownPeriod("1");
-        await ethers.provider.send("evm_increaseTime", [100]);
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
     });

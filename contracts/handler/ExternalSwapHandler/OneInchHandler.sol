@@ -17,6 +17,7 @@ contract OneInchHandler is Initializable, ApproveControl, ExternalSlippageContro
   address internal swapTarget;
 
   function init(address _swapTarget, address _oracle) external initializer {
+    if (_swapTarget == address(0) || _oracle == address(0)) revert ErrorLibrary.InvalidAddress();
     swapTarget = _swapTarget;
     oracle = IPriceOracle(_oracle);
   }

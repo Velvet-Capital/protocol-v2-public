@@ -54,8 +54,8 @@ contract WombatHandler is IHandler, SlippageControl, DustHandler {
    * @param _wombat_optimized_proxy address of wombat router proxy address
    * @param _wombat_router address of wombat protocol router used for deposit and withdraw
    */
-  constructor(address _priceOracle, address _wombat_optimized_proxy,address _wombat_router) {
-    if(_priceOracle == address(0)){
+  constructor(address _priceOracle, address _wombat_optimized_proxy, address _wombat_router) {
+    if (_priceOracle == address(0) || _wombat_optimized_proxy == address(0) || _wombat_router == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     WOMBAT_OPTIMIZED_PROXY = _wombat_optimized_proxy;

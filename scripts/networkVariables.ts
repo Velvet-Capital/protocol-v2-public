@@ -110,6 +110,7 @@ export const BSCMainNet: ChainAddresses = {
   ApeSwap_DOGE_WBNB_Address: "0xfd1ef328a17a8e8eeaf7e4ea1ed8a108e1f2d096",
 
   // Wombat
+  MAIN_LP_USDT: "0x4F95fE57BEA74b7F642cF9c097311959B9b988F7",
   MAIN_LP_BUSD: "0xF319947eCe3823b790dd87b0A509396fE325745a",
   MAIN_LP_DAI: "0x9D0a463D5dcB82008e86bF506eb048708a15dd84",
   SIDE_LP_BUSD: "0xA649Be04619a8F3B3475498E1ac15C90C9661C1A",
@@ -176,6 +177,8 @@ export const Fantom: ChainAddresses = {
 
 export const ArbitrumOne: ChainAddresses = {
   RpcUrl: `https://arbitrum-one.publicnode.com`,
+  SequencerUptimeFeed : "0xFdB631F5EE196F0ed6FAa767959853A9F217697D",
+
   KyberSwapRouter :"0x6131B5fae19EA4f9D964eAc0408E4408b66337b5",
   SushiSwapRouterAddress: "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
   AavePool: "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
@@ -279,7 +282,6 @@ export const ArbitrumOne: ChainAddresses = {
   kyberSwapUrl : "https://aggregator-api.kyberswap.com/arbitrum/api/v1/routes?",
   kyberSwapPostUrl : "https://aggregator-api.kyberswap.com/arbitrum/api/v1/route/build",
   bebopUrl : "https://api.bebop.xyz/arbitrum/v2/quote?"
-  
 };
 
 export const chainIdToAddresses: {

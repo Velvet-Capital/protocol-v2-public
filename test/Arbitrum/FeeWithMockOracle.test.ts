@@ -19,7 +19,7 @@ import {
   IndexFactory,
   UniswapV2Handler,
   VelvetSafeModule,
-  PriceOracle,
+  PriceOracleL2,
   AssetManagerConfig,
   TokenRegistry,
   FeeModule,
@@ -41,7 +41,7 @@ chai.use(require("chai-bignumber")());
 describe.only("Tests for Mock Fee", () => {
   let accounts;
   let mockPriceOracle: MockPriceOracle;
-  let priceOracle: PriceOracle;
+  let priceOracle: PriceOracleL2;
   let indexSwap: any;
   let indexSwapContract: IndexSwap;
   let indexFactory: IndexFactory;
@@ -99,8 +99,8 @@ describe.only("Tests for Mock Fee", () => {
       mockPriceOracle = await PriceOracle.deploy();
       await mockPriceOracle.deployed();
 
-      const PriceOracle2 = await ethers.getContractFactory("PriceOracle");
-      priceOracle = await PriceOracle2.deploy(addresses.WETH);
+      const PriceOracle2 = await ethers.getContractFactory("PriceOracleL2");
+      priceOracle = await PriceOracle2.deploy(addresses.WETH,addresses.SequencerUptimeFeed);
       await priceOracle.deployed();
 
       accounts = await ethers.getSigners();

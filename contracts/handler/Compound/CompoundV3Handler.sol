@@ -47,7 +47,7 @@ contract CompoundV3Handler is IHandler {
    * @param _rewardContract address of compound reward contract
    */
   constructor(address _priceOracle, address _rewardContract) {
-    if (_priceOracle == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (_priceOracle == address(0) || _rewardContract == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     _cometReward = _rewardContract;
   }

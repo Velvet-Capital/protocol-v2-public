@@ -5,7 +5,7 @@ import {
   IERC20Upgradeable,
   IndexSwap,
   IndexSwap__factory,
-  PriceOracle,
+  PriceOracleL2,
   IERC20Upgradeable__factory,
   IndexSwapLibrary,
   BaseHandler,
@@ -74,7 +74,7 @@ export type IAddresses = {
   arbAddress: string;
 };
 
-export async function tokenAddresses(priceOracle: PriceOracle, addFeed: boolean): Promise<IAddresses> {
+export async function tokenAddresses(priceOracle: PriceOracleL2, addFeed: boolean): Promise<IAddresses> {
   let Iaddress: IAddresses;
 
   const daiInstance = new ethers.Contract(addresses.DAI, IERC20Upgradeable__factory.abi, ethers.getDefaultProvider());
@@ -125,8 +125,8 @@ before(async () => {
   accounts = await ethers.getSigners();
   [owner, treasury] = accounts;
 
-  const PriceOracle = await ethers.getContractFactory("PriceOracle");
-  priceOracle = await PriceOracle.deploy(addresses.WETH);
+  const PriceOracle = await ethers.getContractFactory("PriceOracleL2");
+  priceOracle = await PriceOracle.deploy(addresses.WETH,addresses.SequencerUptimeFeed);
   await priceOracle.deployed();
 
   const IndexSwapLibrary = await ethers.getContractFactory("IndexSwapLibrary");
@@ -236,9 +236,9 @@ before(async () => {
       "0x9a7fb1b3950837a8d9b40517626e11d4127c098c",
       "0x50834f3163758fcc1df9973b6e91f0f0f0434ad3",
       "0xe7C53FFd03Eb6ceF7d208bC4C13446c76d1E5884",
-      aggregator.weth_usdt_aggregator.address,
       aggregator.weth_wbtc_aggregator.address,
       aggregator.weth_link_aggregator.address,
+      aggregator.weth_usdt_aggregator.address,
       aggregator.adoge_weth_aggregator.address,
       aggregator.weth_arb_aggregator.address,
       aggregator.weth_usdc_aggregator.address,
@@ -257,7 +257,7 @@ export async function RebalancingDeploy(
   exchangeAddress: string,
   accessController: AccessController,
   ownerAddress: string,
-  priceOracle: PriceOracle,
+  priceOracle: PriceOracleL2,
   assetManagerConfig: AssetManagerConfig,
   feeModule: FeeModule,
 ): Promise<Rebalancing> {

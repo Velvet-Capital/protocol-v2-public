@@ -18,6 +18,7 @@ contract ParaswapHandler is Initializable, ApproveControl, ExternalSlippageContr
   address internal paraswapTransferHelper;
 
   function init(address _swapTarget, address _transferHelper, address _oracle) external initializer {
+    if (_swapTarget == address(0) || _oracle == address(0) || _transferHelper == address(0)) revert ErrorLibrary.InvalidAddress();
     swapTarget = _swapTarget;
     paraswapTransferHelper = _transferHelper;
     oracle = IPriceOracle(_oracle);

@@ -48,10 +48,10 @@ contract ApeSwapLendingHandler is IHandler, Ownable {
   /**
    * @param _priceOracle address of price oracle
    * @param _oBNB address of apeswap bnb token
-   * @param _rain_maker address of apeswap protocol handler used for deposit and withdraw ETH
+   * @param _rain_maker address of apeswap protocol reward contract
    */
   constructor(address _priceOracle, address _oBNB, address _rain_maker) {
-    if(_priceOracle == address(0)){
+    if (_priceOracle == address(0) || _oBNB == address(0) || _rain_maker == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     oBNB = _oBNB;

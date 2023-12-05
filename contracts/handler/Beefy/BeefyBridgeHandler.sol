@@ -46,7 +46,7 @@ contract BeefyBridgeHandler is IHandler {
    * @param _protocol_Handler address of beefy contract used for deposit and withdraw
    */
 
-  constructor(address _priceOracle,address _moo_eth,address _protocol_Handler) {
+  constructor(address _priceOracle, address _moo_eth, address _protocol_Handler) {
     if (_priceOracle == address(0) || _moo_eth == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     MOO_ETH = _moo_eth;
@@ -86,7 +86,7 @@ contract BeefyBridgeHandler is IHandler {
       TransferHelper.safeTransfer(address(underlyingToken), Protocol_Handler, _amount[0]);
     }
 
-    IHandler(Protocol_Handler).deposit{value : msg.value}(underlyingLPToken,_amount,_lpSlippage,address(this),user);
+    IHandler(Protocol_Handler).deposit{value: msg.value}(underlyingLPToken, _amount, _lpSlippage, address(this), user);
     uint256 tokBal = IERC20Upgradeable(underlyingLPToken).balanceOf(address(this));
     TransferHelper.safeApprove(underlyingLPToken, _mooAsset, tokBal);
     asset.deposit(tokBal);
@@ -171,7 +171,7 @@ contract BeefyBridgeHandler is IHandler {
    * @return tokenBalance t token's underlying asset balance of the holder
    */
   function getUnderlyingBalance(address _tokenHolder, address _t) public view override returns (uint256[] memory) {
-    if (_t == address(0) || _tokenHolder == address(0)) {
+    if (_t == address(0) || _tokenHolder == address(0) || _t == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
 
@@ -192,7 +192,7 @@ contract BeefyBridgeHandler is IHandler {
       revert ErrorLibrary.InvalidAddress();
     }
     address[] memory underlyingToken = getUnderlying(t);
-    uint256[] memory lpBalance = getUnderlyingBalance(_tokenHolder,t);
+    uint256[] memory lpBalance = getUnderlyingBalance(_tokenHolder, t);
 
     IVaultBeefy token = IVaultBeefy(t);
     address underlyingLPToken = address(token.want());

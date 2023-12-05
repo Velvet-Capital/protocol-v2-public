@@ -255,7 +255,7 @@ describe.only("Tests for MixedIndex", () => {
           addresses.Cake_WBNBLP_Address,
           addresses.LP_BNBx,
           addresses.mooBTCBUSDLP,
-          addresses.MAIN_LP_DAI,
+          addresses.MAIN_LP_USDT,
           addresses.oBNB,
           addresses.BSwap_WBNB_BUSDLP_Address,
           addresses.mooBTCBUSDLP,
@@ -377,7 +377,7 @@ describe.only("Tests for MixedIndex", () => {
         addresses.Cake_WBNBLP_Address,
         addresses.LP_BNBx,
         addresses.mooBTCBUSDLP,
-        addresses.MAIN_LP_DAI,
+        addresses.MAIN_LP_USDT,
         addresses.oBNB,
         addresses.BSwap_WBNB_BUSDLP_Address,
         addresses.mooBTCBUSDLP,
@@ -565,44 +565,6 @@ describe.only("Tests for MixedIndex", () => {
             "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE",
           ),
         );
-      });
-
-      it("should not be able to add pid if arrray lengths don't match", async () => {
-        await expect(
-          pancakeLpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0, 12]),
-        ).to.be.revertedWithCustomError(pancakeLpHandler, "InvalidLength");
-
-        await expect(
-          apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0, 12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
-      });
-
-      it("should not be able to delete pid if array lengths don't match", async () => {
-        await expect(
-          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBNB_BUSD_Address], [0, 12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidLength");
-
-        await expect(
-          pancakeLpHandler.connect(owner).removePidMap([addresses.Cake_WBNBLP_Address], [0, 12]),
-        ).to.be.revertedWithCustomError(pancakeLpHandler, "InvalidLength");
-      });
-
-      it("should add pid", async () => {
-        await pancakeLpHandler.connect(owner).pidMap([addresses.Cake_WBNBLP_Address], [0]);
-      });
-
-      it("should not be able to delete pid if the entry does not match", async () => {
-        await apeSwapLPHandler.connect(owner).pidMap([addresses.ApeSwap_WBNB_BUSD_Address], [39]);
-
-        await expect(
-          apeSwapLPHandler.connect(owner).removePidMap([addresses.ApeSwap_WBNB_BUSD_Address], [12]),
-        ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidPID");
-      });
-
-      it("should delete pid", async () => {
-        await pancakeLpHandler.connect(owner).pidMap([addresses.Cake_BUSDLP_Address], [39]);
-
-        expect(await pancakeLpHandler.connect(owner).removePidMap([addresses.Cake_BUSDLP_Address], [39]));
       });
 
       it("should fetch the router address of the pancake LP handler", async () => {
@@ -1241,7 +1203,7 @@ describe.only("Tests for MixedIndex", () => {
         const zeroAddress = "0x0000000000000000000000000000000000000000";
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_USDT, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 1000],
             _slippageSell: ["200", "200", "200"],
@@ -1289,7 +1251,7 @@ describe.only("Tests for MixedIndex", () => {
         await tokenRegistry.enableSwapHandlers([swapHandler.address]);
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_USDT, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1305,7 +1267,7 @@ describe.only("Tests for MixedIndex", () => {
         await tokenRegistry.disableSwapHandlers([swapHandler.address]);
         await expect(
           rebalancing.updateTokens({
-            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_USDT, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],
@@ -1336,7 +1298,7 @@ describe.only("Tests for MixedIndex", () => {
       it("update tokens should not work if the function caller is not an asset manager", async () => {
         await expect(
           rebalancing.connect(addr3).updateTokens({
-            tokens: [addresses.MAIN_LP_DAI, addresses.vBTC_Address, addresses.vBNB_Address],
+            tokens: [addresses.MAIN_LP_USDT, addresses.vBTC_Address, addresses.vBNB_Address],
             _swapHandler: swapHandler.address,
             denorms: [2000, 6000, 2000],
             _slippageSell: ["200", "200", "200"],

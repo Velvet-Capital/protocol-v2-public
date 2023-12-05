@@ -40,8 +40,8 @@ contract BeefyYieldHandler is IHandler {
    * @param _priceOracle address of price oracle
    * @param _moo_eth address of moo_eth token of beefy protocol
    */
-  constructor(address _priceOracle,address _moo_eth) {
-    if(_priceOracle == address(0)){
+  constructor(address _priceOracle, address _moo_eth) {
+    if (_priceOracle == address(0) || _moo_eth == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     _oracle = IPriceOracle(_priceOracle);
