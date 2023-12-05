@@ -47,7 +47,7 @@ contract BeefyBridgeHandler is IHandler {
    */
 
   constructor(address _priceOracle, address _moo_eth, address _protocol_Handler) {
-    if (_priceOracle == address(0) || _moo_eth == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (_priceOracle == address(0) || _moo_eth == address(0) || _protocol_Handler == address(0)) revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     MOO_ETH = _moo_eth;
     WETH = _oracle.WETH();

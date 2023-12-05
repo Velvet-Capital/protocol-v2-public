@@ -32,7 +32,7 @@ contract PriceOracleL2 is Ownable {
   constructor(address _WETH, AggregatorV2V3Interface _sequencerUptimeFeed) {
     WETH = _WETH;
     oracleExpirationThreshold = 90000; // 25 hours
-    sequencerThreshold = 7200; //2hours
+    sequencerThreshold = 3600; //1hours
     sequencerUptimeFeed = _sequencerUptimeFeed;
   }
 
@@ -273,11 +273,4 @@ contract PriceOracleL2 is Ownable {
     oracleExpirationThreshold = _newTimeout;
   }
 
-  /**
-   * @notice Updates the oracle timeout threshold
-   * @param _newThreshold New timeout threshold set by owner
-   */
-  function updateSequencerThreshold(uint256 _newThreshold) public onlyOwner {
-    sequencerThreshold = _newThreshold;
-  }
 }
