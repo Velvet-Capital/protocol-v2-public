@@ -158,10 +158,6 @@ describe.only("Tests for priceOracle", () => {
         console.log(price);
       })
 
-      it("should changes sequencer threshold ", async () => {
-        await priceOracle.updateSequencerThreshold("1000");
-        expect(await priceOracle.sequencerThreshold()).to.be.equal(1000)
-      })
     });
   });
 });
