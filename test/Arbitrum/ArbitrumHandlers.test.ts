@@ -90,6 +90,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
     describe.only("Tests for Handler", () => {
       let accounts;
       let owner: SignerWithAddress;
+      let nonOwner : SignerWithAddress;
       let addrs: SignerWithAddress[];
       let approve_amount = ethers.constants.MaxUint256; //(2^256 - 1 )
       let token;
@@ -107,7 +108,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
       describe.only("Initial setup", () => {
         before(async () => {
           accounts = await ethers.getSigners();
-          [owner] = accounts;
+          [owner, nonOwner] = accounts;
           const no_of_inits = handlerJSON[protocolVariable - 1].no_of_inits;
           const HandlerName = handlerJSON[protocolVariable - 1].handlerName;
           const deployHandler = await ethers.getContractFactory(HandlerName);
@@ -125,7 +126,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               handlerJSON[protocolVariable - 1].init_Array[1],
             );
             await handlerVariable.deployed();
-          } else if(no_of_inits == "3"){
+          } else if (no_of_inits == "3") {
             handlerVariable = await deployHandler.deploy(
               priceOracle.address,
               handlerJSON[protocolVariable - 1].init_Array[0],
@@ -133,8 +134,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               handlerJSON[protocolVariable - 1].init_Array[2],
             );
             await handlerVariable.deployed();
-          }
-           else {
+          } else {
             handlerVariable = await deployHandler.deploy(priceOracle.address);
             await handlerVariable.deployed();
           }
@@ -521,7 +521,7 @@ for (let protocolVariable = startLoopValue; protocolVariable <= endLoopValue; pr
               _yieldAsset: dataArray[tokenVariable],
               _amount: handlerBalanceBefore,
               _lpSlippage: "600",
-              _to: owner.address,
+              _to: nonOwner.address,
               isWETH: checker,
             });
             redeem.wait();
