@@ -160,9 +160,9 @@ contract AaveV3Handler is IHandler {
     if (t == address(0) || _tokenHolder == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
+    IERC20Upgradeable aToken = IERC20Upgradeable(t);
     uint256[] memory tokenBalance = new uint256[](1);
-    IERC20Upgradeable underlyingToken = IERC20Upgradeable(getUnderlying(t)[0]);
-    tokenBalance[0] = underlyingToken.balanceOf(_tokenHolder);
+    tokenBalance[0] = aToken.balanceOf(_tokenHolder);
     return tokenBalance;
   }
 
