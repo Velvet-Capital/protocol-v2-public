@@ -451,7 +451,7 @@ describe.only("Tests for Compound", () => {
           _yieldAsset: addresses.cUSDCev3,
           _amount: balanceHandler,
           _lpSlippage: "800",
-          _to: owner.address,
+          _to: nonOwner.address,
           isWETH: false,
         });
         redeem.wait();

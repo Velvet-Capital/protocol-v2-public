@@ -19,7 +19,7 @@ describe.only("Tests for MixedIndex", () => {
 
   const forkChainId: any = process.env.FORK_CHAINID;
   const provider = ethers.provider;
-  const chainId: any = forkChainId ? forkChainId : 56;
+  const chainId: any = forkChainId ? forkChainId : 42161;
   const addresses = chainIdToAddresses[chainId];
 
   describe("Tests for MixedIndex ", () => {

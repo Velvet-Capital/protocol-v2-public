@@ -95,9 +95,6 @@ contract CompoundV3Handler is IHandler {
 
     CometMainInterface cAsset = CometMainInterface(inputData._yieldAsset);
     uint256 assetBalance = IERC20Upgradeable(inputData._yieldAsset).balanceOf(address(this));
-    if (inputData._amount > assetBalance) {
-      revert ErrorLibrary.InsufficientBalance();
-    }
 
     address underlyingToken = getUnderlying(inputData._yieldAsset)[0];
     cAsset.withdraw(underlyingToken, assetBalance);
