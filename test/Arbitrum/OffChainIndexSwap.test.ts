@@ -13,7 +13,6 @@ import {
   accessController,
   sushiLpHandler,
   priceOracle,
-  compoundHandlerv3,
   apeSwapLPHandler,
 } from "./Deployments.test";
 
@@ -191,10 +190,6 @@ describe.only("Tests for OffChainIndex", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-
-          // priceOracle.address,
-          // priceOracle.address,
-          priceOracle.address,
           priceOracle.address,
 
           priceOracle.address,
@@ -218,10 +213,6 @@ describe.only("Tests for OffChainIndex", () => {
           addresses.ADoge,
           addresses.USDCe,
 
-          // addresses.cETH,
-          // addresses.cDAI,
-          addresses.cUSDCv3,
-
           addresses.USDT,
           addresses.MAIN_LP_USDT,
           addresses.MAIN_LP_USDCe,
@@ -241,10 +232,6 @@ describe.only("Tests for OffChainIndex", () => {
           baseHandler.address,
           baseHandler.address,
           baseHandler.address,
-
-          // compoundHandlerv3.address,
-          // compoundHandlerv3.address,
-          compoundHandlerv3.address,
 
           baseHandler.address,
           wombatHandler.address,
@@ -266,10 +253,6 @@ describe.only("Tests for OffChainIndex", () => {
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
 
-          // [addresses.base_RewardToken],
-          // [addresses.base_RewardToken],
-          [addresses.base_RewardToken],
-
           [addresses.base_RewardToken],
           [addresses.wombat_RewardToken],
           [addresses.wombat_RewardToken],
@@ -288,9 +271,6 @@ describe.only("Tests for OffChainIndex", () => {
           true,
           true,
           true,
-          // false,
-          // false,
-          false,
           true,
           false,
           false,
@@ -343,7 +323,6 @@ describe.only("Tests for OffChainIndex", () => {
         iaddress.arbAddress,
         iaddress.btcAddress,
         iaddress.wethAddress,
-        addresses.cUSDCv3,
 
         addresses.USDT,
         addresses.ADoge,
