@@ -24,7 +24,6 @@ import {
   BeefyBridgeHandler,
   SlippageControl,
   RebalanceLibrary,
-  CompoundV3Handler,
   ApeSwapLPHandler,
   AaveV3Handler,
   HopHandler
@@ -38,7 +37,6 @@ let wombatHandler: WombatHandler;
 let beefyLPHandler: BeefyLPHandler;
 let beefyHandler: BeefyBridgeHandler;
 let hopHandler : HopHandler;
-let compoundHandlerv3: CompoundV3Handler;
 let aaveHandlerv3: AaveV3Handler;
 let accessController: AccessController;
 let slippageController: SlippageControl;
@@ -149,10 +147,6 @@ before(async () => {
   beefyHandler = await BeefyHandler.deploy(priceOracle.address,"0xf6a1284Dc2ce247Bca885ac4F36b37E91d3bD032",hopHandler.address);
   await beefyHandler.deployed();
 
-  const CompoundHandlerV3 = await ethers.getContractFactory("CompoundV3Handler");
-  compoundHandlerv3 = await CompoundHandlerV3.deploy(priceOracle.address,"0x88730d254A2f7e6AC8388c3198aFd694bA9f7fae");
-  await compoundHandlerv3.deployed();
-
   const AaveHandlerV3 = await ethers.getContractFactory("AaveV3Handler");
   aaveHandlerv3 = await AaveHandlerV3.deploy(priceOracle.address,"0x794a61358D6845594F94dc1DB02A252b5b4814aD","0xB5Ee21786D28c5Ba61661550879475976B707099","0x929EC64c34a17401F460460D4B9390518E5B473e");
   await aaveHandlerv3.deployed();
@@ -189,7 +183,6 @@ before(async () => {
       addresses.LINK,
       addresses.ADoge,
       addresses.USDC,
-      addresses.compound_RewardToken,
       addresses.SushiSwap_WETH_WBTC,
       addresses.SushiSwap_WETH_LINK,
       addresses.SushiSwap_WETH_USDT,
@@ -222,7 +215,6 @@ before(async () => {
       "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
       "0x0000000000000000000000000000000000000348",
-      "0x0000000000000000000000000000000000000348",
     ],
     [
       "0x639fe6ab55c921f74e7fac1ee960c0b6293ba612",
@@ -235,7 +227,6 @@ before(async () => {
       "0x86e53cf1b870786351da77a57575e79cb55812cb",
       "0x9a7fb1b3950837a8d9b40517626e11d4127c098c",
       "0x50834f3163758fcc1df9973b6e91f0f0f0434ad3",
-      "0xe7C53FFd03Eb6ceF7d208bC4C13446c76d1E5884",
       aggregator.weth_wbtc_aggregator.address,
       aggregator.weth_link_aggregator.address,
       aggregator.weth_usdt_aggregator.address,
@@ -426,7 +417,6 @@ export {
   beefyLPHandler,
   beefyHandler,
   wombatHandler,
-  compoundHandlerv3,
   aaveHandlerv3,
   slippageController,
   rebalanceLibrary,

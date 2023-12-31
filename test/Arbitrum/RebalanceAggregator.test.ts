@@ -14,7 +14,6 @@ import {
   sushiLpHandler,
   priceOracle,
   apeSwapLPHandler,
-  compoundHandlerv3,
   aaveHandlerv3,
 } from "./Deployments.test";
 
@@ -27,7 +26,6 @@ import {
   OffChainRebalance,
   AccessController,
   IndexFactory,
-  CompoundV3Handler,
   UniswapV2Handler,
   VelvetSafeModule,
   ZeroExHandler,
@@ -286,9 +284,6 @@ describe.only("Tests for MetaAggregator", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-
-          priceOracle.address,
-
           priceOracle.address
         ],
         [
@@ -311,8 +306,6 @@ describe.only("Tests for MetaAggregator", () => {
           addresses.SushiSwap_WETH_USDT,
           addresses.SushiSwap_ADoge_WETH,
           addresses.SushiSwap_WETH_ARB,
-
-          addresses.cUSDCv3,
 
           addresses.aArbWBTC
         ],
@@ -337,8 +330,6 @@ describe.only("Tests for MetaAggregator", () => {
           sushiLpHandler.address,
           sushiLpHandler.address,
 
-          compoundHandlerv3.address,
-
           aaveHandlerv3.address
         ],
         [
@@ -360,8 +351,6 @@ describe.only("Tests for MetaAggregator", () => {
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
 
-          [addresses.compound_RewardToken],
-
           [addresses.base_RewardToken]
         ],
         [
@@ -374,7 +363,6 @@ describe.only("Tests for MetaAggregator", () => {
           true,
           true,
           true,
-          false,
           false,
           false,
           false,
@@ -415,7 +403,6 @@ describe.only("Tests for MetaAggregator", () => {
         addresses.SushiSwap_WETH_USDT,
         addresses.SushiSwap_ADoge_WETH,
         addresses.SushiSwap_WETH_ARB,
-        addresses.cUSDCv3,
         addresses.aArbWBTC
       ];
 
@@ -699,7 +686,7 @@ describe.only("Tests for MetaAggregator", () => {
       it("Initialize 3rd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(2);
         const index = indexSwap.attach(indexAddress);
-        await index.initToken([addresses.MAIN_LP_USDCe, addresses.cUSDCv3], [5000, 5000]);
+        await index.initToken([addresses.MAIN_LP_USDCe, addresses.WBTC], [5000, 5000]);
       });
 
       it("Initialize 4th IndexFund Tokens", async () => {

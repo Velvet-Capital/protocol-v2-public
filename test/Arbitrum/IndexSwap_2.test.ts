@@ -9,7 +9,6 @@ import {
   baseHandler,
   wombatHandler,
   beefyHandler,
-  compoundHandlerv3,
   priceOracle,
   apeSwapLPHandler,
   sushiLpHandler,
@@ -609,13 +608,6 @@ describe.only("Tests for MixedIndex", () => {
         );
       });
 
-      it("disable token in registry should fail if token is not enabled at all", async () => {
-        await expect(tokenRegistry.disablePermittedTokens([addresses.cUSDCv3])).to.be.revertedWithCustomError(
-          tokenRegistry,
-          "AddressNotApproved",
-        );
-      });
-
       it("disable token in registry should fail if empty array is passed", async () => {
         await expect(tokenRegistry.disablePermittedTokens([])).to.be.revertedWithCustomError(
           tokenRegistry,
@@ -675,14 +667,6 @@ describe.only("Tests for MixedIndex", () => {
         await expect(
           ApeSwapLPHandler.deploy(zeroAddress, "0x7d13268144adcdbEBDf94F654085CC15502849Ff"),
         ).to.be.revertedWithCustomError(apeSwapLPHandler, "InvalidAddress");
-      });
-
-      it("should revert if a zero address is passed to Compund Handler's constructor", async () => {
-        const CompoundHandler = await ethers.getContractFactory("CompoundV3Handler");
-        await expect(CompoundHandler.deploy(zeroAddress,zeroAddress)).to.be.revertedWithCustomError(
-          compoundHandlerv3,
-          "InvalidAddress",
-        );
       });
 
       it("should not be able to enable swap handlers in registry if an empty array is passed", async () => {

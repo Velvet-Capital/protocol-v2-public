@@ -15,7 +15,6 @@ import {
   sushiLpHandler,
   priceOracle,
   apeSwapLPHandler,
-  compoundHandlerv3,
   aaveHandlerv3,
 } from "./Deployments.test";
 
@@ -136,7 +135,7 @@ describe.only("Tests for IndexFactory", () => {
       tokenRegistry = TokenRegistry.attach(registry.address);
       await tokenRegistry.setCoolDownPeriod("1");
 
-      await tokenRegistry.addRewardToken([addresses.compound_RewardToken], baseHandler.address);
+      await tokenRegistry.addRewardToken([addresses.wombat_RewardToken], baseHandler.address);
 
       const PancakeSwapHandler = await ethers.getContractFactory("UniswapV2Handler");
       swapHandler = await PancakeSwapHandler.deploy();
@@ -224,7 +223,6 @@ describe.only("Tests for IndexFactory", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-          priceOracle.address,
 
           priceOracle.address,
           priceOracle.address,
@@ -232,8 +230,6 @@ describe.only("Tests for IndexFactory", () => {
           priceOracle.address,
           priceOracle.address,
           priceOracle.address,
-          priceOracle.address,
-
           priceOracle.address,
         ],
         [
@@ -241,7 +237,6 @@ describe.only("Tests for IndexFactory", () => {
           iaddress.btcAddress,
           iaddress.wethAddress,
 
-          addresses.cUSDCv3,
           addresses.aArbWETH,
           addresses.aArbWBTC,
           addresses.aArbUSDC,
@@ -253,15 +248,12 @@ describe.only("Tests for IndexFactory", () => {
           addresses.MAIN_LP_USDCe,
           addresses.MAIN_LP_DAI,
           addresses.ApeSwap_WBTC_USDT,
-
-          addresses.cUSDCev3,
         ],
         [
           baseHandler.address,
           baseHandler.address,
           baseHandler.address,
 
-          compoundHandlerv3.address,
           aaveHandlerv3.address,
           aaveHandlerv3.address,
           aaveHandlerv3.address,
@@ -273,15 +265,12 @@ describe.only("Tests for IndexFactory", () => {
           wombatHandler.address,
           wombatHandler.address,
           apeSwapLPHandler.address,
-
-          compoundHandlerv3.address,
         ],
         [
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
 
-          [addresses.compound_RewardToken],
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
           [addresses.base_RewardToken],
@@ -294,9 +283,8 @@ describe.only("Tests for IndexFactory", () => {
           [addresses.wombat_RewardToken],
           [addresses.apeSwap_RewardToken],
 
-          [addresses.compound_RewardToken],
         ],
-        [true, true, true, false, false, false, false, true, true, true, false, false, false, false, false],
+        [true, true, true, false, false, true, true, true, false, false, false, false, false],
       );
       registry1.wait();
       tokenRegistry.enableSwapHandlers([swapHandler.address, swapHandler1.address]);
@@ -364,7 +352,6 @@ describe.only("Tests for IndexFactory", () => {
         addresses.aArbWETH,
         addresses.aArbWBTC,
         addresses.aArbUSDC,
-        addresses.cUSDCv3,
         addresses.USDT,
         addresses.USDCe,
         addresses.DAI,
@@ -372,7 +359,6 @@ describe.only("Tests for IndexFactory", () => {
         addresses.MAIN_LP_USDCe,
         addresses.MAIN_LP_DAI,
         addresses.ApeSwap_WBTC_USDT,
-        addresses.cUSDCev3,
       ];
 
       console.log("indexFactory address:", indexFactory.address);
@@ -817,18 +803,18 @@ describe.only("Tests for IndexFactory", () => {
       it("Initialize 3rd IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(2);
         const index = indexSwap.attach(indexAddress);
-        await index.connect(nonOwner).initToken([addresses.DAI, addresses.WETH], [5000, 5000]);
+        await index.connect(nonOwner).initToken([addresses.MAIN_LP_USDT, addresses.WETH], [5000, 5000]);
       });
       it("Initialize 4th IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(3);
         const index = indexSwap.attach(indexAddress);
-        await index.connect(nonOwner).initToken([addresses.WBTC, addresses.cUSDCv3], [5000, 5000]);
+        await index.connect(nonOwner).initToken([addresses.WBTC, addresses.MAIN_LP_USDCe], [5000, 5000]);
       });
 
       it("Initialize 5th IndexFund Tokens", async () => {
         const indexAddress = await indexFactory.getIndexList(4);
         const index = indexSwap.attach(indexAddress);
-        await index.connect(nonOwner).initToken([addresses.USDCe, addresses.cUSDCev3], [5000, 5000]);
+        await index.connect(nonOwner).initToken([addresses.USDCe, addresses.MAIN_LP_USDCe], [5000, 5000]);
       });
 
       it("Initialize 6th IndexFund Tokens", async () => {
@@ -1862,7 +1848,7 @@ describe.only("Tests for IndexFactory", () => {
         // last withdrawal
         const amountIndexToken = await indexSwap2.balanceOf(addr1.address);
         const AMOUNT = ethers.BigNumber.from(amountIndexToken);
-
+        console.log("withdraw amount",AMOUNT);
         txObject = await indexSwap2.connect(addr1).withdrawFund({
           tokenAmount: AMOUNT,
           _slippage: ["700", "700"],
@@ -2206,7 +2192,6 @@ describe.only("Tests for IndexFactory", () => {
           addresses.ARB,
           addresses.WBTC,
           addresses.WETH,
-          addresses.cUSDCv3,
           addresses.USDT,
           addresses.USDCe,
           addresses.DAI,
@@ -2665,38 +2650,20 @@ describe.only("Tests for IndexFactory", () => {
       it("should claim tokens", async () => {
         await ethers.provider.send("evm_increaseTime", [31536]);
         const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const vaultBalanceBefore3 = await ERC20.attach(addresses.compound_RewardToken).balanceOf(
+        const vaultBalanceBefore3 = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(
           await indexSwap3.vault(),
         );
 
-        let tokens1 = [addresses.cUSDCv3];
+        let tokens1 = [addresses.MAIN_LP_USDCe];
         let tokens2 = [addresses.aArbWBTC];
         await indexSwap3.claimTokens(tokens1);
         await indexSwap5.claimTokens(tokens2);
 
-        let vaultBalanceAfter3 = await ERC20.attach(addresses.compound_RewardToken).balanceOf(await indexSwap3.vault());
+        let vaultBalanceAfter3 = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(await indexSwap3.vault());
         console.log("claimed", vaultBalanceAfter3);
         expect(vaultBalanceAfter3).to.be.greaterThan(vaultBalanceBefore3);
         let balanceForVault5 = await ERC20.attach(addresses.WBTC).balanceOf(await indexSwap5.vault());
         console.log("claim", balanceForVault5);
-      });
-
-      it("should swap reward token", async () => {
-        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-        const vaultBalance = await ERC20.attach(addresses.compound_RewardToken).balanceOf(await indexSwap3.vault());
-        const vaultTokenBalanceBefore = await ERC20.attach(addresses.cUSDCv3).balanceOf(await indexSwap3.vault());
-        await rebalancing3
-          .connect(nonOwner)
-          .swapRewardToken(
-            addresses.compound_RewardToken,
-            swapHandler.address,
-            addresses.cUSDCv3,
-            vaultBalance,
-            "500",
-            "800",
-          );
-        const vaultTokenBalanceAfter = await ERC20.attach(addresses.cUSDCv3).balanceOf(await indexSwap3.vault());
-        expect(vaultTokenBalanceAfter).to.be.greaterThan(vaultTokenBalanceBefore);
       });
     });
   });

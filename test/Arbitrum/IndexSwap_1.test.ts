@@ -13,7 +13,7 @@ import {
   apeSwapLPHandler,
   sushiLpHandler,
   hopHandler,
-  beefyLPHandler,
+  beefyHandler,
 } from "./Deployments.test";
 
 import {
@@ -242,7 +242,7 @@ describe.only("Tests for MixedIndex", () => {
 
           addresses.HOP_USDC_LP,
 
-          addresses.mooSushiWethUsdc,
+          addresses.mooHopUsdc,
         ],
         [
           baseHandler.address,
@@ -266,7 +266,7 @@ describe.only("Tests for MixedIndex", () => {
 
           hopHandler.address,
 
-          beefyLPHandler.address,
+          beefyHandler.address,
         ],
         [
           [addresses.base_RewardToken],
@@ -498,7 +498,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("Initialize IndexFund Tokens", async () => {
         await indexSwap.initToken(
-          [addresses.mooSushiWethUsdc, addresses.HOP_USDC_LP, addresses.WETH],
+          [addresses.mooHopUsdc, addresses.HOP_USDC_LP, addresses.WETH],
           [5000, 2000, 3000],
         );
       });
