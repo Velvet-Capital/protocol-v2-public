@@ -296,7 +296,7 @@ describe.only("Tests for IndexFactory", () => {
       await tokenRegistry.addNonDerivative(wombatHandler.address);
 
       const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-      const assetManagerConfig = await AssetManagerConfig.deploy();
+      assetManagerConfig = await AssetManagerConfig.deploy();
       await assetManagerConfig.deployed();
 
       const FeeLibrary = await ethers.getContractFactory("FeeLibrary");
@@ -2315,99 +2315,185 @@ describe.only("Tests for IndexFactory", () => {
         expect(txObject.confirmations).to.equal(1);
       });
       it("should fail to create an index with management fee greater than max fee", async () => {
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig2 = await AssetManagerConfig.deploy();
-        await assetManagerConfig2.deployed();
-        await expect(
-          assetManagerConfig2.init({
+        // const config2 = await indexSwap2.iAssetManagerConfig();
+        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
+        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
+
+        await expect(indexFactory.connect(nonOwner).createIndexCustodial(
+          {
+            name: "INDEXL",
+            symbol: "IDX",
+            maxIndexInvestmentAmount: "120000000000000000000000",
+            minIndexInvestmentAmount: "3000000000000000000",
             _managementFee: "20000",
-            _performanceFee: "10",
-            _entryFee: "0",
-            _exitFee: "0",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
-            _tokenRegistry: tokenRegistry.address,
-            _accessController: accessController.address,
-            _assetManagerTreasury: treasury.address,
+            _performanceFee: "2500",
+            _entryFee: "100",
+            _exitFee: "100",
+            _assetManagerTreasury: assetManagerTreasury.address,
             _whitelistedTokens: [],
-            _publicPortfolio: true,
+            _public: false,
             _transferable: true,
             _transferableToPublic: true,
             _whitelistTokens: false,
-          }),
-        ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+          },
+          [owner.address, nonOwner.address],
+          2,
+        )).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
+
+
+        // await expect(
+        //   assetManagerConfig2.init({
+        //     _managementFee: "20000",
+        //     _performanceFee: "10",
+        //     _entryFee: "0",
+        //     _exitFee: "0",
+        //     _maxInvestmentAmount: "120000000000000000000000",
+        //     _minInvestmentAmount: "3000000000000000000",
+        //     _tokenRegistry: tokenRegistry.address,
+        //     _accessController: accessController.address,
+        //     _assetManagerTreasury: treasury.address,
+        //     _whitelistedTokens: [],
+        //     _publicPortfolio: true,
+        //     _transferable: true,
+        //     _transferableToPublic: true,
+        //     _whitelistTokens: false,
+        //   }),
+        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
       });
 
       it("should fail to create an index with entry fee greater than max fee", async () => {
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig2 = await AssetManagerConfig.deploy();
-        await assetManagerConfig2.deployed();
-        await expect(
-          assetManagerConfig2.init({
+        // const config2 = await indexSwap2.iAssetManagerConfig();
+        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
+        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
+        // await expect(
+        //   assetManagerConfig2.init({
+        //     _managementFee: "200",
+        //     _performanceFee: "2000",
+        //     _entryFee: "200000",
+        //     _exitFee: "0",
+        //     _maxInvestmentAmount: "120000000000000000000000",
+        //     _minInvestmentAmount: "3000000000000000000",
+        //     _tokenRegistry: tokenRegistry.address,
+        //     _accessController: accessController.address,
+        //     _assetManagerTreasury: treasury.address,
+        //     _whitelistedTokens: [],
+        //     _publicPortfolio: true,
+        //     _transferable: true,
+        //     _transferableToPublic: true,
+        //     _whitelistTokens: false,
+        //   }),
+        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+
+        await expect(indexFactory.connect(nonOwner).createIndexCustodial(
+          {
+            name: "INDEXL",
+            symbol: "IDX",
+            maxIndexInvestmentAmount: "120000000000000000000000",
+            minIndexInvestmentAmount: "3000000000000000000",
             _managementFee: "200",
             _performanceFee: "2000",
             _entryFee: "200000",
-            _exitFee: "0",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
-            _tokenRegistry: tokenRegistry.address,
-            _accessController: accessController.address,
-            _assetManagerTreasury: treasury.address,
+            _exitFee: "100",
+            _assetManagerTreasury: assetManagerTreasury.address,
             _whitelistedTokens: [],
-            _publicPortfolio: true,
+            _public: false,
             _transferable: true,
             _transferableToPublic: true,
             _whitelistTokens: false,
-          }),
-        ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+          },
+          [owner.address, nonOwner.address],
+          2,
+        )).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
       });
 
       it("should fail to create an index with exit fee greater than max fee", async () => {
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig2 = await AssetManagerConfig.deploy();
-        await assetManagerConfig2.deployed();
-        await expect(
-          assetManagerConfig2.init({
+        // const config2 = await indexSwap2.iAssetManagerConfig();
+        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
+        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
+        // await expect(
+        //   assetManagerConfig2.init({
+        //     _managementFee: "200",
+        //     _performanceFee: "2000",
+        //     _entryFee: "0",
+        //     _exitFee: "200000",
+        //     _maxInvestmentAmount: "120000000000000000000000",
+        //     _minInvestmentAmount: "3000000000000000000",
+        //     _tokenRegistry: tokenRegistry.address,
+        //     _accessController: accessController.address,
+        //     _assetManagerTreasury: treasury.address,
+        //     _whitelistedTokens: [],
+        //     _publicPortfolio: true,
+        //     _transferable: true,
+        //     _transferableToPublic: true,
+        //     _whitelistTokens: false,
+        //   }),
+        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+
+        await expect(indexFactory.connect(nonOwner).createIndexCustodial(
+          {
+            name: "INDEXL",
+            symbol: "IDX",
+            maxIndexInvestmentAmount: "120000000000000000000000",
+            minIndexInvestmentAmount: "3000000000000000000",
             _managementFee: "200",
             _performanceFee: "2000",
-            _entryFee: "0",
-            _exitFee: "200000",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
-            _tokenRegistry: tokenRegistry.address,
-            _accessController: accessController.address,
-            _assetManagerTreasury: treasury.address,
+            _entryFee: "100",
+            _exitFee: "8000",
+            _assetManagerTreasury: assetManagerTreasury.address,
             _whitelistedTokens: [],
-            _publicPortfolio: true,
+            _public: false,
             _transferable: true,
             _transferableToPublic: true,
             _whitelistTokens: false,
-          }),
-        ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+          },
+          [owner.address, nonOwner.address],
+          2,
+        )).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
       });
 
-      it("should fail to create an index with management fee greater than max fee", async () => {
-        const AssetManagerConfig = await ethers.getContractFactory("AssetManagerConfig");
-        const assetManagerConfig2 = await AssetManagerConfig.deploy();
-        await assetManagerConfig2.deployed();
-        await expect(
-          assetManagerConfig2.init({
-            _managementFee: "100",
+      it("should fail to create an index with performance fee greater than max fee", async () => {
+        // const config2 = await indexSwap2.iAssetManagerConfig();
+        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
+        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
+        // await expect(
+        //   assetManagerConfig2.init({
+        //     _managementFee: "100",
+        //     _performanceFee: "20000",
+        //     _entryFee: "0",
+        //     _exitFee: "0",
+        //     _maxInvestmentAmount: "120000000000000000000000",
+        //     _minInvestmentAmount: "3000000000000000000",
+        //     _tokenRegistry: tokenRegistry.address,
+        //     _accessController: accessController.address,
+        //     _assetManagerTreasury: treasury.address,
+        //     _whitelistedTokens: [],
+        //     _publicPortfolio: true,
+        //     _transferable: true,
+        //     _transferableToPublic: true,
+        //     _whitelistTokens: false,
+        //   }),
+        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+
+        await expect(indexFactory.connect(nonOwner).createIndexCustodial(
+          {
+            name: "INDEXL",
+            symbol: "IDX",
+            maxIndexInvestmentAmount: "120000000000000000000000",
+            minIndexInvestmentAmount: "3000000000000000000",
+            _managementFee: "200",
             _performanceFee: "20000",
-            _entryFee: "0",
-            _exitFee: "0",
-            _maxInvestmentAmount: "120000000000000000000000",
-            _minInvestmentAmount: "3000000000000000000",
-            _tokenRegistry: tokenRegistry.address,
-            _accessController: accessController.address,
-            _assetManagerTreasury: treasury.address,
+            _entryFee: "100",
+            _exitFee: "100",
+            _assetManagerTreasury: assetManagerTreasury.address,
             _whitelistedTokens: [],
-            _publicPortfolio: true,
+            _public: false,
             _transferable: true,
             _transferableToPublic: true,
             _whitelistTokens: false,
-          }),
-        ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
+          },
+          [owner.address, nonOwner.address],
+          2,
+        )).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
       });
 
       it("Non asset manager should not be able to propose new management fee", async () => {
