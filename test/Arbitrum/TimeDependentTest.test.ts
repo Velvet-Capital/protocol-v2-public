@@ -765,26 +765,6 @@ describe.only("Tests for TimeDependent", () => {
         let balance = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(await indexSwap1.vault());
       });
 
-      // it("should swap reward token using pancakeSwap Handler into derivative token", async () => {
-      //   var tokens = await indexSwap1.getTokens();
-      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-      //   var sToken = addresses.wombat_RewardToken;
-      //   var bToken = tokens[0];
-      //   const vault = await indexSwap1.vault();
-      //   var sAmount = await ERC20.attach(sToken).balanceOf(vault);
-
-      //   const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-      //   const handlerAddress0 = tokenInfo0[2];
-      //   const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-      //   var tokenBalanceBefore = await handler0.getTokenBalance(vault, bToken);
-      //   await rebalancing1.swapRewardToken(sToken, swapHandler.address, bToken, sAmount, "300", "400");
-
-      //   var tokenBalanceAfter = await handler0.getTokenBalance(vault, bToken);
-      //   var amountAfterSwap = await ERC20.attach(sToken).balanceOf(vault);
-      //   expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
-      // });
-
       it("should claim tokens", async () => {
         await ethers.provider.send("evm_increaseTime", [31536000]);
 
@@ -796,127 +776,6 @@ describe.only("Tests for TimeDependent", () => {
         console.log("claim", balance);
       });
 
-      // it("swaps reward token should fail using 0x Protocol if buyToken is not IndexToken", async () => {
-      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-      //   var sToken = addresses.wombat_RewardToken;
-      //   var bToken = addresses.ARB;
-      //   var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap2.vault());
-      //   var zeroExparams = {};
-      //   var MetaSwapData = {};
-
-      //   const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-      //   const handlerAddress0 = tokenInfo0[2];
-      //   const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-      //   const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
-      //   console.log("underlying",getUnderlyingTokens0.toString());
-      //   if (sToken == getUnderlyingTokens0[0]) {
-      //     MetaSwapData = {
-      //       sellTokenAddress: [sToken.toString()],
-      //       buyTokenAddress: [getUnderlyingTokens0[0].toString()],
-      //       swapHandler: zeroExHandler.address,
-      //       sellAmount: [sAmount.toString()],
-      //       portfolioToken: bToken,
-      //       _lpSlippage: "200",
-      //       protocolFee: ["0"],
-      //       callData: ["0x"],
-      //     };
-      //   } else {
-      //     zeroExparams = {
-      //       sellToken: sToken.toString(),
-      //       buyToken: getUnderlyingTokens0[0].toString(),
-      //       sellAmount: sAmount.toString(),
-      //       slippagePercentage: 0.06,
-      //     };
-      //     const zeroExResponse = await axios.get(`https://bsc.api.0x.org/swap/v1/quote?${qs.stringify(zeroExparams)}`, {
-      //       headers: {
-      //         "0x-api-key": process.env.ZEROX_KEY,
-      //       },
-      //     });
-      //     var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-
-      //     MetaSwapData = {
-      //       sellTokenAddress: [sToken.toString()],
-      //       buyTokenAddress: [getUnderlyingTokens0[0].toString()],
-      //       swapHandler: zeroExHandler.address,
-      //       sellAmount: [sAmount.toString()],
-      //       portfolioToken: bToken,
-      //       _lpSlippage: "200",
-      //       protocolFee: [fee.toString()],
-      //       callData: [zeroExResponse.data.data],
-      //     };
-      //   }
-      //   await expect(metaAggregator2.swapRewardToken(MetaSwapData)).to.be.revertedWithCustomError(
-      //     metaAggregator2,
-      //     "TokenNotIndexToken",
-      //   );
-      // });
-
-      // it("swaps reward token using 0x Protocol", async () => {
-      //   var tokens = await indexSwap2.getTokens();
-      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-      //   var sToken = addresses.wombat_RewardToken;
-      //   var bToken = tokens[1];
-      //   var sAmount = await ERC20.attach(sToken).balanceOf(await indexSwap2.vault());
-      //   var zeroExparams = {};
-      //   var MetaSwapData = {};
-
-      //   var tokenBalanceBefore = await ERC20.attach(bToken).balanceOf(await indexSwap2.vault());
-      //   const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-      //   const handlerAddress0 = tokenInfo0[2];
-      //   const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-      //   const getUnderlyingTokens0: string[] = await handler0.getUnderlying(bToken);
-      //   if (sToken == getUnderlyingTokens0[0]) {
-      //     MetaSwapData = {
-      //       sellTokenAddress: [sToken.toString()],
-      //       buyTokenAddress: [getUnderlyingTokens0[0].toString()],
-      //       swapHandler: zeroExHandler.address,
-      //       sellAmount: [sAmount.toString()],
-      //       portfolioToken: bToken,
-      //       _lpSlippage: "200",
-      //       protocolFee: ["0"],
-      //       callData: ["0x"],
-      //     };
-      //   } else {
-      //     zeroExparams = {
-      //       sellToken: sToken.toString(),
-      //       buyToken: getUnderlyingTokens0[0].toString(),
-      //       sellAmount: sAmount.toString(),
-      //       slippagePercentage: 0.06,
-      //     };
-
-      //     console.log("URL",addresses.zeroExUrl + `${qs.stringify(zeroExparams)}`, {
-      //       headers: {
-      //         "0x-api-key": process.env.ZEROX_KEY,
-      //       },
-      //     });
-      //     const zeroExResponse = await axios.get(addresses.zeroExUrl + `${qs.stringify(zeroExparams)}`, {
-      //       headers: {
-      //         "0x-api-key": process.env.ZEROX_KEY,
-      //       },
-      //     });
-
-      //     var fee = zeroExResponse.data.protocolFee ? zeroExResponse.data.protocolFee : 0;
-
-      //     MetaSwapData = {
-      //       sellTokenAddress: [sToken.toString()],
-      //       buyTokenAddress: [getUnderlyingTokens0[0].toString()],
-      //       swapHandler: zeroExHandler.address,
-      //       sellAmount: [sAmount.toString()],
-      //       portfolioToken: bToken,
-      //       _lpSlippage: "200",
-      //       protocolFee: [fee.toString()],
-      //       callData: [zeroExResponse.data.data],
-      //     };
-      //   }
-      //   await metaAggregator2.swapRewardToken(MetaSwapData);
-      //   var tokenBalanceAfter = await ERC20.attach(bToken).balanceOf(await indexSwap2.vault());
-      //   var amountAfterSwap = await ERC20.attach(sToken).balanceOf(await indexSwap2.vault());
-      //   expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
-      //   expect(Number(amountAfterSwap)).to.be.equal(0);
-      // });
-
       it("should claim tokens", async () => {
         await ethers.provider.send("evm_increaseTime", [3153600]);
 
@@ -927,26 +786,6 @@ describe.only("Tests for TimeDependent", () => {
         let balance = await ERC20.attach(addresses.wombat_RewardToken).balanceOf(await indexSwap3.vault());
         console.log("claim", balance);
       });
-
-      // it("should swap reward token using pancakeSwap Handler into base token", async () => {
-      //   var tokens = await indexSwap3.getTokens();
-      //   const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
-
-      //   var sToken = addresses.wombat_RewardToken;
-      //   var bToken = tokens[3];
-      //   const vault = await indexSwap3.vault();
-      //   var sAmount = await ERC20.attach(sToken).balanceOf(vault);
-
-      //   const tokenInfo0: [boolean, boolean, string, string[]] = await tokenRegistry.getTokenInformation(bToken);
-      //   const handlerAddress0 = tokenInfo0[2];
-      //   const handler0 = await ethers.getContractAt("IHandler", handlerAddress0);
-      //   var tokenBalanceBefore = await handler0.getTokenBalance(vault, bToken);
-      //   await rebalancing3.swapRewardToken(sToken, swapHandler.address, bToken, sAmount, "300", "400");
-
-      //   var tokenBalanceAfter = await handler0.getTokenBalance(vault, bToken);
-      //   var amountAfterSwap = await ERC20.attach(sToken).balanceOf(vault);
-      //   expect(Number(tokenBalanceAfter)).to.be.greaterThan(Number(tokenBalanceBefore));
-      // });
     });
   });
 });
