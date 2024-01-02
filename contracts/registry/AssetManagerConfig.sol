@@ -67,6 +67,10 @@ contract AssetManagerConfig is Initializable, OwnableUpgradeable, UUPSUpgradeabl
   event DeleteProposedEntryAndExitFee(uint indexed time);
   event UpdateEntryAndExitFee(uint256 indexed time, uint256 indexed newEntryFee, uint256 indexed newExitFee);
 
+  constructor() {
+    _disableInitializers();
+  }
+
   /**
    * @notice This function is used to init the assetmanager-config data while deployment
    * @param initData Input parameters passed as a struct

@@ -53,6 +53,10 @@ contract FeeModule is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentr
   uint256 public lastChargedManagementFee;
   uint256 public highWatermark;
 
+  constructor() {
+    _disableInitializers();
+  }
+
   modifier onlyIndexManager() {
     if (!(accessController.hasRole(keccak256("INDEX_MANAGER_ROLE"), msg.sender))) {
       revert ErrorLibrary.CallerNotIndexManager();
