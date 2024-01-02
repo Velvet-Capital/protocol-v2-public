@@ -2315,9 +2315,6 @@ describe.only("Tests for IndexFactory", () => {
         expect(txObject.confirmations).to.equal(1);
       });
       it("should fail to create an index with management fee greater than max fee", async () => {
-        // const config2 = await indexSwap2.iAssetManagerConfig();
-        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
-        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
 
         await expect(indexFactory.connect(nonOwner).createIndexCustodial(
           {
@@ -2339,50 +2336,9 @@ describe.only("Tests for IndexFactory", () => {
           [owner.address, nonOwner.address],
           2,
         )).to.be.revertedWithCustomError(assetManagerConfig, "InvalidFee");
-
-
-        // await expect(
-        //   assetManagerConfig2.init({
-        //     _managementFee: "20000",
-        //     _performanceFee: "10",
-        //     _entryFee: "0",
-        //     _exitFee: "0",
-        //     _maxInvestmentAmount: "120000000000000000000000",
-        //     _minInvestmentAmount: "3000000000000000000",
-        //     _tokenRegistry: tokenRegistry.address,
-        //     _accessController: accessController.address,
-        //     _assetManagerTreasury: treasury.address,
-        //     _whitelistedTokens: [],
-        //     _publicPortfolio: true,
-        //     _transferable: true,
-        //     _transferableToPublic: true,
-        //     _whitelistTokens: false,
-        //   }),
-        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
       });
 
       it("should fail to create an index with entry fee greater than max fee", async () => {
-        // const config2 = await indexSwap2.iAssetManagerConfig();
-        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
-        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
-        // await expect(
-        //   assetManagerConfig2.init({
-        //     _managementFee: "200",
-        //     _performanceFee: "2000",
-        //     _entryFee: "200000",
-        //     _exitFee: "0",
-        //     _maxInvestmentAmount: "120000000000000000000000",
-        //     _minInvestmentAmount: "3000000000000000000",
-        //     _tokenRegistry: tokenRegistry.address,
-        //     _accessController: accessController.address,
-        //     _assetManagerTreasury: treasury.address,
-        //     _whitelistedTokens: [],
-        //     _publicPortfolio: true,
-        //     _transferable: true,
-        //     _transferableToPublic: true,
-        //     _whitelistTokens: false,
-        //   }),
-        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
 
         await expect(indexFactory.connect(nonOwner).createIndexCustodial(
           {
@@ -2407,27 +2363,6 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("should fail to create an index with exit fee greater than max fee", async () => {
-        // const config2 = await indexSwap2.iAssetManagerConfig();
-        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
-        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
-        // await expect(
-        //   assetManagerConfig2.init({
-        //     _managementFee: "200",
-        //     _performanceFee: "2000",
-        //     _entryFee: "0",
-        //     _exitFee: "200000",
-        //     _maxInvestmentAmount: "120000000000000000000000",
-        //     _minInvestmentAmount: "3000000000000000000",
-        //     _tokenRegistry: tokenRegistry.address,
-        //     _accessController: accessController.address,
-        //     _assetManagerTreasury: treasury.address,
-        //     _whitelistedTokens: [],
-        //     _publicPortfolio: true,
-        //     _transferable: true,
-        //     _transferableToPublic: true,
-        //     _whitelistTokens: false,
-        //   }),
-        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
 
         await expect(indexFactory.connect(nonOwner).createIndexCustodial(
           {
@@ -2452,28 +2387,6 @@ describe.only("Tests for IndexFactory", () => {
       });
 
       it("should fail to create an index with performance fee greater than max fee", async () => {
-        // const config2 = await indexSwap2.iAssetManagerConfig();
-        // const AssetManagerConfig2 = await ethers.getContractFactory("AssetManagerConfig");
-        // const assetManagerConfig2 = AssetManagerConfig2.attach(config2);
-        // await expect(
-        //   assetManagerConfig2.init({
-        //     _managementFee: "100",
-        //     _performanceFee: "20000",
-        //     _entryFee: "0",
-        //     _exitFee: "0",
-        //     _maxInvestmentAmount: "120000000000000000000000",
-        //     _minInvestmentAmount: "3000000000000000000",
-        //     _tokenRegistry: tokenRegistry.address,
-        //     _accessController: accessController.address,
-        //     _assetManagerTreasury: treasury.address,
-        //     _whitelistedTokens: [],
-        //     _publicPortfolio: true,
-        //     _transferable: true,
-        //     _transferableToPublic: true,
-        //     _whitelistTokens: false,
-        //   }),
-        // ).to.be.revertedWithCustomError(assetManagerConfig2, "InvalidFee");
-
         await expect(indexFactory.connect(nonOwner).createIndexCustodial(
           {
             name: "INDEXL",
