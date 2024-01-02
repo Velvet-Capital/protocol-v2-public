@@ -14,7 +14,6 @@ import {
   sushiLpHandler,
   hopHandler,
   beefyLPHandler,
-  compoundHandlerv3,
   beefyHandler,
 } from "./Deployments.test";
 

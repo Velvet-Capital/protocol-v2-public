@@ -61,19 +61,6 @@ describe.only("Tests for priceOracle", () => {
       await swapHandler.deployed();
 
       swapHandler.init(addresses.SushiSwapRouterAddress, priceOracle.address);
-
-      // const wethPrice = await priceOracle.getPrice(addresses.WETH, "0x0000000000000000000000000000000000000348");
-      // const usdtPrice = await priceOracle.getPrice(addresses.USDT, "0x0000000000000000000000000000000000000348");
-      // const dogePrice = await priceOracle.getPrice(addresses.ADoge, "0x0000000000000000000000000000000000000348");
-      // const normalPrice = await priceOracle.getPrice(
-      //   "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      //   "0x0000000000000000000000000000000000000348",
-      // );
-      // console.log("wethPrice", wethPrice);
-      // await mockPriceOracle.setMockData(addresses.WETH, wethPrice);
-      // await mockPriceOracle.setMockData(addresses.USDT, usdtPrice);
-      // await mockPriceOracle.setMockData(addresses.ADoge, "0");
-      // await mockPriceOracle.setMockData("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", normalPrice);
     });
 
     describe("priceOracle Contract", function () {
