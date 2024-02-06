@@ -27,6 +27,11 @@ contract VelvetSafeModule is Module {
       initializeParams,
       (address, address, address)
     );
+
+    if (_safeAddress == address(0) || _exchange == address(0) || _multiSendLib == address(0)) {
+      revert ErrorLibrary.InvalidAddress();
+    }
+
     multiSendLibrary = _multiSendLib;
     setAvatar(_safeAddress);
     setTarget(_safeAddress);

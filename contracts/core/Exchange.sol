@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
 
-
 /**
  * @title IndexManager for a particular Index
  * @author Velvet.Capital
@@ -110,6 +109,11 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    * @param _tokens The derivative tokens to claim for
    */
   function claimTokens(IIndexSwap _index, address[] calldata _tokens) external onlyIndexManager {
+    uint256 _maxAssetLimit = tokenRegistry.getMaxAssetLimit();
+    if (_tokens.length > _maxAssetLimit) {
+      revert ErrorLibrary.TokenCountOutOfLimit(_maxAssetLimit);
+    }
+
     for (uint256 i = 0; i < _tokens.length; i++) {
       address _token = _tokens[i];
       IHandler handler = IHandler(getTokenInfo(_token).handler);
