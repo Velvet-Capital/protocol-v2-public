@@ -110,11 +110,12 @@ contract Exchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable,
    */
   function claimTokens(IIndexSwap _index, address[] calldata _tokens) external onlyIndexManager {
     uint256 _maxAssetLimit = tokenRegistry.getMaxAssetLimit();
-    if (_tokens.length > _maxAssetLimit) {
+    uint256 _tokensLength = _tokens.length;
+    if (_tokensLength > _maxAssetLimit) {
       revert ErrorLibrary.TokenCountOutOfLimit(_maxAssetLimit);
     }
 
-    for (uint256 i = 0; i < _tokens.length; i++) {
+    for (uint256 i = 0; i < _tokensLength; i++) {
       address _token = _tokens[i];
       IHandler handler = IHandler(getTokenInfo(_token).handler);
 
