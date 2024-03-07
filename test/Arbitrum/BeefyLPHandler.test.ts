@@ -460,6 +460,8 @@ describe.only("Tests for BeefyLP", () => {
         redeem.wait();
 
         const balanceAfter = await mooLPToken.balanceOf(owner.address);
+        const lpBalance = await ERC20.attach(addresses.SushiSwap_WETH_USDC).balanceOf(sushiLpHandler.address);
+        expect(lpBalance).to.be.equal(0);
         expect(Number(balanceBefore)).to.be.greaterThan(Number(balanceAfter));
       });
 
