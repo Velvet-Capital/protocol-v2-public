@@ -475,6 +475,8 @@ describe.only("Tests for Beefy", () => {
         redeem.wait();
 
         const balanceAfter = await mooHopEthToken.balanceOf(owner.address);
+        const lpBalance = await ERC20.attach(addresses.HOP_ETH_LP).balanceOf(hopHandler.address);
+        expect(lpBalance).to.be.equal(0);
         expect(Number(balanceBefore)).to.be.greaterThan(Number(balanceAfter));
       });
 

@@ -22,7 +22,6 @@ import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token
 import {TransferHelper} from "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import {IERC20MetadataUpgradeable} from "@openzeppelin/contracts-upgradeable-4.3.2/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-
 import {IHandler} from "../IHandler.sol";
 import {IVaultBeefy} from "./interfaces/IVaultBeefy.sol";
 import {ErrorLibrary} from "./../../library/ErrorLibrary.sol";
@@ -47,7 +46,8 @@ contract BeefyBridgeHandler is IHandler {
    */
 
   constructor(address _priceOracle, address _moo_eth, address _protocol_Handler) {
-    if (_priceOracle == address(0) || _moo_eth == address(0) || _protocol_Handler == address(0)) revert ErrorLibrary.InvalidAddress();
+    if (_priceOracle == address(0) || _moo_eth == address(0) || _protocol_Handler == address(0))
+      revert ErrorLibrary.InvalidAddress();
     _oracle = IPriceOracle(_priceOracle);
     MOO_ETH = _moo_eth;
     WETH = _oracle.WETH();
@@ -82,7 +82,7 @@ contract BeefyBridgeHandler is IHandler {
       if (msg.value != _amount[0]) {
         revert ErrorLibrary.MintAmountMustBeEqualToValue();
       }
-    }else{
+    } else {
       TransferHelper.safeTransfer(address(underlyingToken), Protocol_Handler, _amount[0]);
     }
 
@@ -115,12 +115,12 @@ contract BeefyBridgeHandler is IHandler {
       revert ErrorLibrary.NotEnoughBalanceInBeefyProtocol();
     }
     asset.withdraw(inputData._amount);
-    uint256 LPTokens = IERC20Upgradeable(underlyingLPToken).balanceOf(address(this));
-    TransferHelper.safeTransfer(underlyingLPToken, Protocol_Handler, LPTokens);
+    uint256 lPTokenAmount = IERC20Upgradeable(underlyingLPToken).balanceOf(address(this));
+    TransferHelper.safeTransfer(underlyingLPToken, Protocol_Handler, lPTokenAmount);
 
     IHandler(Protocol_Handler).redeem(
       FunctionParameters.RedeemData(
-        inputData._amount,
+        lPTokenAmount,
         inputData._lpSlippage,
         inputData._to,
         underlyingLPToken,
@@ -178,7 +178,9 @@ contract BeefyBridgeHandler is IHandler {
     IVaultBeefy asset = IVaultBeefy(_t);
 
     uint256[] memory underlyingBalance = new uint256[](1);
-    underlyingBalance[0] = (getTokenBalance(_tokenHolder, _t) * (asset.getPricePerFullShare()))/10 ** IERC20MetadataUpgradeable(_t).decimals();
+    underlyingBalance[0] =
+      (getTokenBalance(_tokenHolder, _t) * (asset.getPricePerFullShare())) /
+      10 ** IERC20MetadataUpgradeable(_t).decimals();
     return underlyingBalance;
   }
 
@@ -196,7 +198,11 @@ contract BeefyBridgeHandler is IHandler {
 
     IVaultBeefy token = IVaultBeefy(t);
     address underlyingLPToken = address(token.want());
-    uint underlyingBalance = IProtocolMetadata(Protocol_Handler).getUnderlyingAmount(_tokenHolder,lpBalance[0],underlyingLPToken);
+    uint underlyingBalance = IProtocolMetadata(Protocol_Handler).getUnderlyingAmount(
+      _tokenHolder,
+      lpBalance[0],
+      underlyingLPToken
+    );
 
     uint balanceUSD = _oracle.getPriceTokenUSD18Decimals(underlyingToken[0], underlyingBalance);
     return balanceUSD;

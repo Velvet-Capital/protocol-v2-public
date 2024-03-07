@@ -13,6 +13,7 @@ import {
   apeSwapLPHandler,
   sushiLpHandler,
   hopHandler,
+  beefyLPHandler,
   beefyHandler,
 } from "./Deployments.test";
 
@@ -339,7 +340,7 @@ describe.only("Tests for MixedIndex", () => {
         addresses.SushiSwap_ADoge_WETH,
         addresses.SushiSwap_WETH_ARB,
         addresses.HOP_USDC_LP,
-        addresses.mooSushiWethUsdc,
+        addresses.mooHopUsdc,
       ];
 
       await tokenRegistry.enablePermittedTokens(
@@ -497,10 +498,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Initialize IndexFund Tokens", async () => {
-        await indexSwap.initToken(
-          [addresses.mooHopUsdc, addresses.HOP_USDC_LP, addresses.WETH],
-          [5000, 2000, 3000],
-        );
+        await indexSwap.initToken([addresses.mooHopUsdc, addresses.HOP_USDC_LP, addresses.WETH], [5000, 2000, 3000]);
       });
 
       it("asset manager should not be able to add token which is not approved in registry", async () => {
@@ -515,6 +513,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("Invest 0.16 WETH should not revert , if investing token is not initialized", async () => {
         const indexSupplyBefore = await indexSwap.totalSupply();
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         console.log("indexSupplyBefore", indexSupplyBefore);
         await indexSwap.investInFund(
@@ -535,8 +534,11 @@ describe.only("Tests for MixedIndex", () => {
           expect(owner.address).to.be.equal(_to);
           expect(Number(_balance)).to.be.greaterThan(0);
         });
+        let underLying = await beefyHandler.getUnderlying(addresses.mooHopUsdc);
+        let handlerBalance = await ERC20.attach(underLying[0]).balanceOf(beefyHandler.address);
         const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
         const exchangeBalance = await provider.getBalance(exchange.address);
+        expect(handlerBalance).to.be.equal(0);
         expect(Number(exchangeBalance)).to.be.equal(0);
         expect(Number(CoolDownAfter)).to.be.greaterThan(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
@@ -561,24 +563,8 @@ describe.only("Tests for MixedIndex", () => {
         await assetManagerConfig.setPermittedTokens([addresses.ARB, addresses.USDCe]);
       });
 
-      // it("Invest 0.1 WETH into Top10 fund should fail if LP slippage is invalid", async () => {
-      //   await expect(
-      //     indexSwap.investInFund(
-      //       {
-      //         _slippage: ["500", "500", "500"],
-      //         _lpSlippage: ["2800", "2800", "2800"],
-      //         _tokenAmount: "100000000000000000",
-      //         _swapHandler: swapHandler.address,
-      //         _token: addresses.WETH,
-      //       },
-      //       {
-      //         value: "100000000000000000",
-      //       },
-      //     ),
-      //   ).to.be.revertedWithCustomError(swapHandler, "InvalidSlippageLength");
-      // });
-
       it("Invest 0.1 WETH into Top10 fund", async () => {
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const CoolDownBefore = await indexSwap.lastWithdrawCooldown(owner.address);
         const indexSupplyBefore = await indexSwap.totalSupply();
         console.log("owner address", owner.address);
@@ -596,6 +582,9 @@ describe.only("Tests for MixedIndex", () => {
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
         const CoolDownAfter = await indexSwap.lastWithdrawCooldown(owner.address);
+        let underLying = await beefyHandler.getUnderlying(addresses.mooHopUsdc);
+        let handlerBalance = await ERC20.attach(underLying[0]).balanceOf(beefyHandler.address);
+        expect(handlerBalance).to.be.equal(0);
         expect(Number(CoolDownAfter)).to.be.equal(Number(CoolDownBefore));
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
@@ -608,13 +597,11 @@ describe.only("Tests for MixedIndex", () => {
         const ethtoken = ERC20.attach(addresses.WETH);
         const btctoken = ERC20.attach(addresses.WBTC);
         const arbtoken = ERC20.attach(addresses.ARB);
-        // console.log("swap start");
 
         const swapResult = await swapHandler.connect(owner).swapETHToTokens("1000", addresses.USDCe, owner.address, {
           value: "1000000000000000000",
         });
 
-        // console.log("swap done");
         await usdtToken.approve(indexSwap.address, "19826472847483927477");
         const indexSupplyBefore = await indexSwap.totalSupply();
         // console.log("10busd before", indexSupplyBefore);
@@ -634,6 +621,9 @@ describe.only("Tests for MixedIndex", () => {
           expect(owner.address).to.be.equal(_to);
           expect(Number(_balance)).to.be.greaterThan(0);
         });
+        let underLying = await beefyHandler.getUnderlying(addresses.mooHopUsdc);
+        let handlerBalance = await ERC20.attach(underLying[0]).balanceOf(beefyHandler.address);
+        expect(handlerBalance).to.be.equal(0);
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
