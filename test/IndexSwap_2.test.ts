@@ -644,7 +644,7 @@ describe.only("Tests for MixedIndex", () => {
 
       it("should not be able to enable tokens when oracle length is not equal to token length ", async () => {
         await expect(
-          tokenRegistry.enablePermittedTokens([iaddress.wbnbAddress,iaddress.busdAddress], [priceOracle.address]),
+          tokenRegistry.enablePermittedTokens([iaddress.wbnbAddress, iaddress.busdAddress], [priceOracle.address]),
         ).to.be.revertedWithCustomError(tokenRegistry, "InvalidLength");
       });
 
@@ -868,6 +868,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Invest 0.1 BNB should not revert, if investing token is not initialized + tranferFrom should not work", async () => {
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         await tokenRegistry.setCoolDownPeriod("100");
         const indexSupplyBefore = await indexSwap.totalSupply();
         await indexSwap.investInFund(
@@ -882,12 +883,17 @@ describe.only("Tests for MixedIndex", () => {
             value: "100000000000000000",
           },
         );
-        await indexSwap.approve(addr1.address,"1000000000000000");
-        await expect(indexSwap.connect(addr1).transferFrom(owner.address,addr1.address,"10000")).to.be.revertedWithCustomError(indexSwap,"CoolDownPeriodNotPassed");
+        await indexSwap.approve(addr1.address, "1000000000000000");
+        await expect(
+          indexSwap.connect(addr1).transferFrom(owner.address, addr1.address, "10000"),
+        ).to.be.revertedWithCustomError(indexSwap, "CoolDownPeriodNotPassed");
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log(indexSupplyAfter);
+        let underLying = await beefyLPHandler.getUnderlying(addresses.mooBTCBUSDLP);
+        let handlerBalance = await ERC20.attach(underLying[0]).balanceOf(beefyLPHandler.address);
         await tokenRegistry.setCoolDownPeriod("1");
         await ethers.provider.send("evm_increaseTime", [100]);
+        expect(handlerBalance).to.be.equal(0);
         expect(Number(indexSupplyAfter)).to.be.greaterThanOrEqual(Number(indexSupplyBefore));
       });
 
@@ -964,9 +970,10 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("should not be able to get underlying balance of a zero address Wombat lp token holder", async () => {
-        await expect(
-          wombatHandler.getUnderlyingBalance(addresses.LP_BNBx, zeroAddress),
-        ).to.be.revertedWithCustomError(wombatHandler, "InvalidAddress");
+        await expect(wombatHandler.getUnderlyingBalance(addresses.LP_BNBx, zeroAddress)).to.be.revertedWithCustomError(
+          wombatHandler,
+          "InvalidAddress",
+        );
       });
 
       it("should not be able to get underlying token of a zero address Beefy token", async () => {
@@ -1083,9 +1090,12 @@ describe.only("Tests for MixedIndex", () => {
           _swapHandler: swapHandler.address,
           _token: iaddress.busdAddress,
         });
+
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log("10BUSD After", indexSupplyAfter);
-
+        let underLying = await beefyLPHandler.getUnderlying(addresses.mooBTCBUSDLP);
+        let handlerBalance = await ERC20.attach(underLying[0]).balanceOf(beefyLPHandler.address);
+        expect(handlerBalance).to.be.equal(0);
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
@@ -1114,6 +1124,7 @@ describe.only("Tests for MixedIndex", () => {
       });
 
       it("Invest 10BNB into Top10 fund", async () => {
+        const ERC20 = await ethers.getContractFactory("ERC20Upgradeable");
         const indexSupplyBefore = await indexSwap.totalSupply();
         //console.log("0.2bnb before", indexSupplyBefore);
         await indexSwap.investInFund(
@@ -1130,7 +1141,9 @@ describe.only("Tests for MixedIndex", () => {
         );
         const indexSupplyAfter = await indexSwap.totalSupply();
         // console.log(indexSupplyAfter);
-
+        let underLying = await beefyLPHandler.getUnderlying(addresses.mooBTCBUSDLP);
+        let handlerBalance = await ERC20.attach(underLying[0]).balanceOf(beefyLPHandler.address);
+        expect(handlerBalance).to.be.equal(0);
         expect(Number(indexSupplyAfter)).to.be.greaterThan(Number(indexSupplyBefore));
       });
 
