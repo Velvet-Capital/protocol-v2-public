@@ -46,7 +46,7 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
   event Redeem(address indexed user, address indexed token, uint256 amount, address indexed to, bool isWETH);
 
   constructor(address _lpHandlerAddress, address _priceOracle) {
-     if(_priceOracle == address(0) || _lpHandlerAddress == address(0)){
+    if (_priceOracle == address(0) || _lpHandlerAddress == address(0)) {
       revert ErrorLibrary.InvalidAddress();
     }
     lpHandlerAddress = _lpHandlerAddress;
@@ -128,12 +128,12 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
       revert ErrorLibrary.NotEnoughBalanceInBeefy();
     }
     asset.withdraw(inputData._amount);
-    uint256 LPTokens = IERC20Upgradeable(underlyingLpToken).balanceOf(address(this));
-    TransferHelper.safeTransfer(underlyingLpToken, lpHandlerAddress, LPTokens);
+    uint256 lPTokenAmount = IERC20Upgradeable(underlyingLpToken).balanceOf(address(this));
+    TransferHelper.safeTransfer(underlyingLpToken, lpHandlerAddress, lPTokenAmount);
 
     IHandler(lpHandlerAddress).redeem(
       FunctionParameters.RedeemData(
-        inputData._amount,
+        lPTokenAmount,
         inputData._lpSlippage,
         inputData._to,
         underlyingLpToken,
@@ -187,7 +187,8 @@ contract BeefyLPHandler is IHandler, UniswapV2LPHandler {
     IVaultBeefy asset = IVaultBeefy(t);
 
     address underlyingLpToken = address(IStrategy(address(asset.strategy())).want());
-    uint256 underlyingBalance = (getTokenBalance(_tokenHolder, t) * (asset.getPricePerFullShare()))/10 ** IERC20MetadataUpgradeable(t).decimals();
+    uint256 underlyingBalance = (getTokenBalance(_tokenHolder, t) * (asset.getPricePerFullShare())) /
+      10 ** IERC20MetadataUpgradeable(t).decimals();
     return _calculatePriceForBalance(underlyingLpToken, address(_oracle), underlyingBalance);
   }
 
